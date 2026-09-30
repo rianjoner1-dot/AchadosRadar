@@ -1,14 +1,15 @@
 import type { APIRoute } from 'astro';
 import { evaluateAffiliateRedirect } from '../../../modules/outbound/redirect-policy.mjs';
 
+import { getPublicSupabaseConfig } from '../../../modules/shared/config';
+
 export const prerender = false;
 const json = (status: number, message: string) => new Response(JSON.stringify({ message }), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
 export const GET: APIRoute = async ({ params }) => {
-  if (import.meta.env.PUBLIC_CATALOG_DEMO === 'true') return json(503, 'Modo de demonstração: compras estão desativadas.');
+  const { url, key, isDemo } = getPublicSupabaseConfig();
+  if (isDemo) return json(503, 'Modo de demonstração: compras estão desativadas.');
   const id = params.id;
-  const url = import.meta.env.PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
-  const key = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   if (!id || !url || !key) return json(503, 'A loja ainda não está conectada ao catálogo.');
   const headers = { apikey: key, authorization: `Bearer ${key}` };
   const read = async (table: string, query: URLSearchParams) => {

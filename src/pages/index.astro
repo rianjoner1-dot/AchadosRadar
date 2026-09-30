@@ -29,7 +29,7 @@ const demo = demoProducts.map((product) => ({
     <h2 id="catalog-title">Buscar ofertas</h2>
     <form id="catalogFilters" class="catalog-filters">
       <label class="filter-search">Busca
-        <input id="catalogSearch" type="search" name="q" placeholder="Ex.: brimco, air fryer, fone..." autocomplete="off" />
+        <input id="catalogSearch" type="search" name="q" placeholder="Ex.: brinco, air fryer, fone..." autocomplete="off" />
       </label>
       <label>Loja
         <select id="platformFilter" name="loja">
@@ -77,7 +77,7 @@ const demo = demoProducts.map((product) => ({
   const sentinel = document.querySelector<HTMLElement>('#catalogSentinel')!;
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
-  let cursor: { created_at: string; id: string; price?: number | null } | null = null;
+  let cursor: { created_at: string; id: string; price?: number | null; score?: number | null } | null = null;
   let controller: AbortController | null = null;
   let loading = false;
   let requestVersion = 0;
@@ -154,8 +154,10 @@ const demo = demoProducts.map((product) => ({
       if (version !== requestVersion) return;
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
       appendedCount += products.length;
-      if (products.length) cursor = { created_at: products[products.length - 1].created_at, id: products[products.length - 1].id, price: products[products.length - 1].offer?.price ?? null };
-      status.textContent = `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 20 ? ' · role ou carregue mais' : ''}`;
+      if (products.length) cursor = { created_at: products[products.length - 1].created_at, id: products[products.length - 1].id, price: products[products.length - 1].offer?.price ?? null, score: products[products.length - 1].search_score ?? null };
+      status.textContent = products.length === 0 && !reset && appendedCount > 0
+        ? `Fim das ofertas disponíveis. ${appendedCount} produtos carregados.`
+        : `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 20 ? ' · role ou carregue mais' : ''}`;
       empty.hidden = appendedCount > 0;
       loadMore.hidden = products.length < 20;
       if (appendedCount > 80) {

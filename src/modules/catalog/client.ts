@@ -26,13 +26,15 @@ export interface CatalogProduct {
   search_score?: number;
 }
 
+import { getPublicSupabaseConfig } from '../shared/config';
+
+const supabaseConfig = getPublicSupabaseConfig();
 const config = {
-  url: import.meta.env.PUBLIC_SUPABASE_URL?.replace(/\/$/, ''),
-  key: import.meta.env.PUBLIC_SUPABASE_ANON_KEY
+  url: supabaseConfig.url,
+  key: supabaseConfig.key
 };
 
-const localDemoMode = import.meta.env.PUBLIC_CATALOG_DEMO === 'true';
-export const catalogReady = !localDemoMode && Boolean(config.url && config.key);
+export const catalogReady = supabaseConfig.isReady;
 
 function headers(token?: string): HeadersInit {
   return {
@@ -44,7 +46,7 @@ function headers(token?: string): HeadersInit {
 
 export async function searchCatalog(input: {
   q?: string; platform?: string; min?: number; max?: number; sort?: string;
-  cursor?: { created_at: string; id: string; price?: number | null } | null; limit?: number; signal?: AbortSignal;
+  cursor?: { created_at: string; id: string; price?: number | null; score?: number | null } | null; limit?: number; signal?: AbortSignal;
 }): Promise<CatalogProduct[]> {
   if (!catalogReady) throw new Error('Catálogo remoto ainda não configurado.');
   const response = await fetch(`${config.url}/rest/v1/rpc/search_catalog`, {
@@ -53,7 +55,7 @@ export async function searchCatalog(input: {
       search_query: input.q ?? '', target_platform: input.platform && input.platform !== 'all' ? input.platform : null,
       min_price: input.min ?? null, max_price: input.max ?? null, sort_by: input.sort ?? 'recent',
       cursor_created_at: input.cursor?.created_at ?? null, cursor_id: input.cursor?.id ?? null, cursor_price: input.cursor?.price ?? null,
-      page_size: input.limit ?? 20
+      page_size: input.limit ?? 20, cursor_score: input.cursor?.score ?? null
     })
   });
   if (!response.ok) throw new Error(`Falha ao buscar catálogo (${response.status}).`);

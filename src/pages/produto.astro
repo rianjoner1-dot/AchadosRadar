@@ -1,13 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { catalogReady } from '../modules/catalog/client';
+import { getPublicSupabaseConfig } from '../modules/shared/config';
 
 export const prerender = false;
 
 const requestedId = Astro.url.searchParams.get('id')?.trim() ?? '';
-const publicUrl = import.meta.env.PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
-const publicKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
-const localDemoMode = import.meta.env.PUBLIC_CATALOG_DEMO === 'true';
+const { url: publicUrl, key: publicKey, isDemo: localDemoMode } = getPublicSupabaseConfig();
 let socialProduct: { title: string; description: string; image: string | null } | null = null;
 if (!localDemoMode && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId) && publicUrl && publicKey) {
   try {
@@ -129,8 +128,14 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           updateTimer(); window.setInterval(updateTimer, 60_000);
         } else if (link?.refresh_due_at) {
           const reviewAt = Date.parse(link.refresh_due_at);
-          timing.textContent = `Próxima revisão em ${new Date(reviewAt).toLocaleString('pt-BR')}; isso não representa a expiração oficial do link.`;
-        } else timing.textContent = 'Link afiliado aguardando verificação.';
+          if (!Number.isFinite(reviewAt)) timing.textContent = 'Prazo de revisão inválido; link em verificação.';
+          else if (reviewAt <= Date.now()) timing.textContent = `Revisão interna do link pendente desde ${new Date(reviewAt).toLocaleString('pt-BR')}; o item continua salvo.`;
+          else timing.textContent = `Próxima revisão interna em ${new Date(reviewAt).toLocaleString('pt-BR')}; isso não representa a expiração oficial do link.`;
+        } else if (link?.status === 'active' && link.verified_at) {
+          timing.textContent = `Link verificado em ${new Date(link.verified_at).toLocaleString('pt-BR')}; a loja não informou uma data oficial de expiração.`;
+        } else if (link?.status === 'expired') timing.textContent = 'O prazo oficial do link terminou.';
+        else if (link?.status && link.status !== 'active') timing.textContent = 'Link afiliado em revisão; a compra fica temporariamente indisponível.';
+        else timing.textContent = 'Link afiliado aguardando verificação.';
         const buy = document.querySelector<HTMLAnchorElement>('#buyProduct')!;
         const readiness = evaluateOfferReadiness({ link, offer });
         if (readiness.ready) { buy.href = `/api/out/${encodeURIComponent(product.id)}`; buy.textContent = `Continuar na ${store}`; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.removeAttribute('aria-disabled'); }
@@ -147,7 +152,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         status.hidden = true;
         content.hidden = false;
 
-        let cursor: { created_at: string; id: string; price?: number | null } | null = null;
+        let cursor: { created_at: string; id: string; price?: number | null; score?: number | null } | null = null;
         const related = document.querySelector<HTMLElement>('#relatedGrid')!;
         const more = document.querySelector<HTMLButtonElement>('#relatedMore')!;
         let relatedLoading = false;
@@ -170,10 +175,11 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
               if (removedId) relatedSeenIds.delete(removedId);
               oldest.remove();
             }
-            if (items.length) cursor = { created_at: items[items.length - 1].created_at, id: items[items.length - 1].id, price: items[items.length - 1].offer?.price ?? null };
+            if (items.length) cursor = { created_at: items[items.length - 1].created_at, id: items[items.length - 1].id, price: items[items.length - 1].offer?.price ?? null, score: items[items.length - 1].search_score ?? null };
             relatedHasMore = items.length === 12;
             more.hidden = !relatedHasMore;
             more.textContent = 'Ver mais ofertas';
+            if (!relatedHasMore && status) status.textContent = 'Você chegou ao fim das ofertas disponíveis.';
             relatedAutoLoadPaused = false;
           } catch {
             relatedAutoLoadPaused = true;

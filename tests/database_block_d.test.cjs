@@ -380,6 +380,8 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await runMigration(db, '20260930100000_cap_catalog_search_page_size.sql');
     await runMigration(db, '20260930110000_limit_public_offer_columns.sql');
     await runMigration(db, '20260930120000_revoke_public_private_table_grants.sql');
+    await runMigration(db, '20260930150000_deterministic_catalog_search_cursor.sql');
+    await runMigration(db, '20260930160000_search_catalog_relevance_cursor.sql');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.profiles', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to profiles');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to saved carts');
     assert.equal((await db.query("SELECT has_table_privilege('authenticated', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, true, 'Authenticated users retain cart access, filtered by RLS');
@@ -416,6 +418,18 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     const scores = await db.query("SELECT public.normalize_catalog_text('Brinco prata delicado') AS normalized, similarity(public.normalize_catalog_text('Brinco prata delicado'), public.normalize_catalog_text('brimco')) AS score");
     assert.equal(fuzzy.rows.length, 2, `Trigram search should find a nearby spelling: ${JSON.stringify(scores.rows)}`);
     assert.ok(fuzzy.rows.every((row) => row.title.startsWith('Brinco')));
+
+    const relevanceRows = [
+      { id: '11111111-1111-4111-8111-111111111111', title: 'Aurevo Nimbus', createdAt: '2026-01-01T00:00:00Z' },
+      { id: '22222222-2222-4222-8222-222222222222', title: 'Aurevo Nimbus Pro', createdAt: '2026-09-01T00:00:00Z' }
+    ];
+    for (const row of relevanceRows) {
+      await db.query("INSERT INTO public.products (id, platform, external_id, title, status, created_at) VALUES ($1, 'magalu', $2, $3, 'published', $4)", [row.id, row.id.slice(0, 8), row.title, row.createdAt]);
+    }
+    const relevanceFirst = await db.query("SELECT id, title, created_at, search_score FROM public.search_catalog('aurevo nimbus', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 1)");
+    assert.equal(relevanceFirst.rows[0].id, relevanceRows[0].id, 'Exact title relevance ranks before a newer partial match');
+    const relevanceSecond = await db.query("SELECT id, title, search_score FROM public.search_catalog('aurevo nimbus', NULL, NULL, NULL, 'recent', $1, $2, NULL, 1, $3)", [relevanceFirst.rows[0].created_at, relevanceFirst.rows[0].id, relevanceFirst.rows[0].search_score]);
+    assert.equal(relevanceSecond.rows[0]?.id, relevanceRows[1].id, 'Relevance cursor must include newer lower-score matches on the next page');
     for (const query of ['brinco', 'brínco', 'brin-co']) {
       const normalized = await db.query('SELECT public.normalize_catalog_query($1) AS value', [query]);
       assert.equal(normalized.rows[0].value, 'brinco', `Accent and punctuation normalization: ${query}`);

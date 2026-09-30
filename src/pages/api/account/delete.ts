@@ -1,12 +1,12 @@
 import type { APIRoute } from 'astro';
+import { getPublicSupabaseConfig } from '../../../modules/shared/config';
 export const prerender = false;
 const privateResponse = (body: BodyInit | null, status: number) => new Response(body, { status, headers: { 'cache-control': 'no-store' } });
 
 export const POST: APIRoute = async ({ request }) => {
-  if (import.meta.env.PUBLIC_CATALOG_DEMO === 'true') return privateResponse('Modo de demonstração: exclusão remota desativada.', 503);
+  const { url, key: anonKey, isDemo } = getPublicSupabaseConfig();
+  if (isDemo) return privateResponse('Modo de demonstração: exclusão remota desativada.', 503);
   const accessToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  const url = import.meta.env.PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
-  const anonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   const serviceKey = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.SUPABASE_SERVICE_ROLE_KEY;
   if (!accessToken || !url || !anonKey || !serviceKey) return privateResponse('Not configured', 503);
   try {
