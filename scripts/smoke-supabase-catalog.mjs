@@ -25,13 +25,20 @@ async function searchCatalog(params) {
 
 const base = {
   search_query: '', target_platform: null, min_price: null, max_price: null,
-  sort_by: 'recent', cursor_created_at: null, cursor_id: null, cursor_price: null
+  sort_by: 'recent', cursor_created_at: null, cursor_id: null, cursor_price: null, cursor_score: null
 };
 const firstPage = await searchCatalog({ ...base, page_size: 10 });
 const last = firstPage.at(-1);
 const secondPage = last ? await searchCatalog({
-  ...base, page_size: 10, cursor_created_at: last.created_at, cursor_id: last.id
+  ...base, page_size: 10, cursor_created_at: last.created_at, cursor_id: last.id, cursor_score: last.search_score
 }) : [];
+const searchFirstPage = await searchCatalog({ ...base, search_query: 'fone', page_size: 2 });
+const searchLast = searchFirstPage.at(-1);
+const searchSecondPage = searchLast ? await searchCatalog({
+  ...base, search_query: 'fone', page_size: 2,
+  cursor_created_at: searchLast.created_at, cursor_id: searchLast.id, cursor_score: searchLast.search_score
+}) : [];
+const searchOverlap = searchSecondPage.filter((row) => searchFirstPage.some((first) => first.id === row.id)).length;
 const firstIds = new Set(firstPage.map((row) => row.id));
 const overlap = secondPage.filter((row) => firstIds.has(row.id)).length;
 const combined = [...firstPage, ...secondPage];
@@ -50,6 +57,9 @@ console.log(JSON.stringify({
   pageOneCount: firstPage.length,
   pageTwoCount: secondPage.length,
   pageOverlap: overlap,
+  relevancePageOneCount: searchFirstPage.length,
+  relevancePageTwoCount: searchSecondPage.length,
+  relevancePageOverlap: searchOverlap,
   uniqueProducts: new Set(combined.map((row) => row.id)).size,
   publicFieldsSafe,
   imageUrlsHttps,
@@ -60,6 +70,6 @@ console.log(JSON.stringify({
   currentDetailRoute: '/produto/[id]'
 }, null, 2));
 
-if (firstPage.length > 20 || overlap > 0 || !publicFieldsSafe || !imageUrlsHttps || !oneImagePerCard) {
+if (firstPage.length > 20 || overlap > 0 || searchOverlap > 0 || !publicFieldsSafe || !imageUrlsHttps || !oneImagePerCard) {
   process.exitCode = 1;
 }
