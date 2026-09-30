@@ -59,13 +59,13 @@ BEGIN
     END IF;
 END $$;
 
--- 1. Inserção / Configuração do Bucket avatars com limite rígido de 100 KB
+-- 1. Inserção / Configuração do Bucket avatars com limite rígido de 2 MB
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'avatars',
     'avatars',
     true,                                -- Leitura pública para exibição de avatares na interface
-    2097152,                              -- Limite rígido: 100 KB (102.400 bytes)
+    2097152,                              -- Limite rígido: 2 MB (2.097.152 bytes)
     ARRAY['image/webp', 'image/jpeg', 'image/png'] -- Apenas formatos raster otimizados; SVG estritamente proibido
 )
 ON CONFLICT (id) DO UPDATE SET
@@ -102,7 +102,7 @@ CREATE POLICY "public_reads_avatars"
     USING (bucket_id = 'avatars');
 
 -- Usuário autenticado só envia avatar para a sua própria pasta: avatars/{auth_uid}/...
--- com validação estrita de pasta, tamanho (< 100 KB) e formato permitido
+-- com validação estrita de pasta, tamanho (<= 2 MB) e formato permitido
 DROP POLICY IF EXISTS "users_insert_own_avatar" ON storage.objects;
 CREATE POLICY "users_insert_own_avatar"
     ON storage.objects FOR INSERT

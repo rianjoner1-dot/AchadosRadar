@@ -271,6 +271,10 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     // Restaura papel de serviço para rodar migração de Storage
     await setAuthContext(db, { role: 'service_role' });
     await runMigration(db, '20260929180400_storage_avatars_bucket.sql');
+    // Antigravity's follow-up migrations must apply in sequence without changing
+    // the bucket contract or weakening the per-user Storage policies.
+    await runMigration(db, '20260930130000_expand_avatars_bucket_size.sql');
+    await runMigration(db, '20260930140000_expand_avatars_rls_policy.sql');
 
     // Valida configuração do bucket avatars
     const bucketRes = await db.query(`SELECT * FROM storage.buckets WHERE id = 'avatars';`);

@@ -8,6 +8,7 @@ dist/
 coverage/
 data/catalogo_macro.json
 data/catalogo_macro.json.*.tmp
+data/catalogo_import_20.json
 *.log
 npm-debug.log*
 .DS_Store
