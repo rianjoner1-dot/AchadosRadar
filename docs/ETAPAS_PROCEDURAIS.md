@@ -1,6 +1,6 @@
 # Etapas procedurais e validações — site de afiliados
 
-Este roteiro desdobra o [plano principal](../../PLANO_SITE_AFILIADOS.md). Cada linha é uma entrega pequena. Marcar `[x]` somente depois de guardar a evidência em [`VALIDACOES.md`](VALIDACOES.md); se a validação falhar, corrigir antes de passar ao próximo bloco. Estado em 29/09/2026: preparação local. O proprietário já possui Vercel Pro; ainda não há deploy deste site nem projeto Supabase conectado.
+Este roteiro desdobra o [plano principal](../../PLANO_SITE_AFILIADOS.md). Cada linha é uma entrega pequena. Marcar `[x]` somente depois de guardar a evidência em [`VALIDACOES.md`](VALIDACOES.md); se a validação falhar, corrigir antes de passar ao próximo bloco. Estado em 29/09/2026: base local validada; o proprietário confirmou que a Vercel está configurada. O trabalho de Supabase foi delegado ao Antigravity e ficará suspenso neste roteiro até revisão do proprietário.
 
 ## Como executar cada etapa
 
@@ -34,11 +34,11 @@ Cada etapa deve terminar com um resultado reproduzível: alteração local, test
 | [ ] | B1 | Verificar nos painéis Magalu e ML se esta conta pode divulgar links no domínio próprio. | Registrar texto/URL da regra aplicável e o status real da conta; sem presumir elegibilidade por link gerado. |
 | [ ] | B2 | Confirmar uso das fotos originais e condição de atualização automatizada para cada programa. | Decisão por loja: URL direta, cópia autorizada ou bloqueio de publicação; anexar fonte da decisão. |
 | [ ] | B3 | Gerar um link oficial de teste por loja no fluxo autorizado e conferir o destino. | URL pertence ao programa, abre o mesmo produto e mantém o identificador afiliado conforme o painel; registrar horário. |
-| [ ] | B4 | Escolher domínio/nome e vincular `site-afiliados/` à equipe Vercel Pro existente. | Projeto associado à equipe correta no painel; registrar ID/URL de preview; sem publicação pública ainda. |
-| [ ] | B5 | Criar projeto Supabase de desenvolvimento e configurar variáveis localmente. | URL/chave publicável funcionam; chave secreta só em ambiente confiável; nenhum segredo em Git ou bundle. |
-| [ ] | B6 | Definir SMTP para email OTP e domínios de retorno de autenticação. | Email de teste chega e volta apenas para URL permitida; limites de envio observados. |
+| [x] | B4 | Configurar Vercel para o site na equipe Pro existente. | Configuração confirmada pelo proprietário; URL/ID do projeto e preview devem ser registrados na validação H1.9 quando revisados no painel. |
+| [ ] | B5 | Criar projeto Supabase de desenvolvimento e configurar variáveis localmente. | **Suspenso até revisão do trabalho delegado ao Antigravity.** Não configurar ou validar o Supabase neste roteiro antes dessa revisão. |
+| [ ] | B6 | Definir SMTP para email OTP e domínios de retorno de autenticação. | **Suspenso até revisão do trabalho delegado ao Antigravity.** Email e redirecionamento exigem validação depois da integração. |
 
-**Portão B:** se a divulgação no domínio ou as fotos não forem permitidas, ajustar o canal antes de montar a vitrine pública. B4–B6 exigem recibos dos painéis; não inferir sucesso por arquivo `.env`.
+**Portão B:** se a divulgação no domínio ou as fotos não forem permitidas, ajustar o canal antes de montar a vitrine pública. B1–B3 exigem confirmação nos programas de afiliados. Vercel foi confirmada pelo proprietário; Supabase e SMTP ficam aguardando revisão do Antigravity.
 
 ## Bloco C — Aplicação mínima e orçamento
 
@@ -75,8 +75,8 @@ Execute cada microetapa individualmente. O importador local e a migration já es
 | [ ] | E1.2 | Rodar `node scripts/import-catalog.mjs data/catalogo_macro.json --dry-run --summary --platform=magalu --limit=1` e repetir para `mercadolivre`. | Cada amostra avaliada sem rede/escrita; export mostra motivo claro se link/estoque ainda não permitem publicação. |
 | [ ] | E1.3 | Conferir mapeamento das fotos, estoque, parcela, frete, cupom e timestamps. | Comparar JSON de entrada com relatório normalizado; ausência vira `null`, sem inventar valores. |
 | [ ] | E1.4 | Corrigir mapeamentos ausentes da macro e repetir dry-run. | Magalu/ML preservam todas as URLs de imagem permitidas em ordem e os campos financeiros observados. |
-| [ ] | E1.5 | Criar Supabase dev e aplicar migrations em ordem, sem usar produção. | Migration history limpa; tabelas, RLS, RPC e bucket aparecem no projeto dev. |
-| [ ] | E1.6 | Importar somente os dois itens de amostra. | Consulta ao banco mostra IDs externos, UUIDs, imagens ordenadas, oferta e link; nenhum segredo no log. |
+| [ ] | E1.5 | Revisar com o proprietário a configuração e aplicação de migrations feitas pelo Antigravity. | **Suspenso até a revisão.** Depois, conferir histórico, tabelas, RLS, RPC e bucket no projeto de desenvolvimento. |
+| [ ] | E1.6 | Importar somente os dois itens de amostra após a revisão do Supabase. | Consulta ao banco mostra IDs externos, UUIDs, imagens ordenadas, oferta e link; nenhum segredo no log. |
 | [ ] | E1.7 | Reimportar os mesmos itens e depois alterar preço/link de um item. | Não duplica produto; UUID e itens do carrinho persistem; nova observação/oferta fica registrada. |
 | [ ] | E1.8 | Rodar casos de esgotado, link inválido, falha de coleta e estoque desconhecido. | Item permanece no catálogo/carrinho; estado impede redirecionamento e registra motivo/horário. |
 | [ ] | E1.9 | Fazer ciclo de renovação de link com um único produto em sessão real do Chrome. | ID, disponibilidade e destino do link são reconferidos; resultado local e Supabase coincidem. |
@@ -107,6 +107,8 @@ Execute cada microetapa individualmente. O importador local e a migration já es
 
 O método escolhido é email OTP sem senha obrigatória. CPF não será coletado no cadastro inicial; telefone fica opcional. Isso reduz dados sensíveis e atende ao fluxo sem senha solicitado. Recuperação de acesso é novo OTP; senha só entra se houver decisão futura por login híbrido.
 
+As validações G1.1–G1.10 estão suspensas até a revisão do Supabase delegado ao Antigravity; não conectar, alterar ou testar o serviço antes dessa revisão.
+
 | Feito | Passo | Procedimento | Validação / evidência |
 | --- | --- | --- | --- |
 | [ ] | G1.1 | Configurar SMTP e URLs permitidas no Supabase dev. | Email de teste chega; link/código só redireciona às origens cadastradas. |
@@ -120,7 +122,7 @@ O método escolhido é email OTP sem senha obrigatória. CPF não será coletado
 | [ ] | G1.9 | Revogar sessão e testar perfil/carrinho novamente. | Chamadas protegidas negadas; nova autenticação OTP restaura acesso legítimo. |
 | [ ] | G1.10 | Excluir conta de teste e avatar associado. | Conta, avatar e carrinho deixam de ser acessíveis conforme política; registrar resultado sem PII. |
 
-**Portão G:** dois usuários de teste confirmam isolamento por RLS e sessão; OTP, perfil, avatar, sincronização, logout e exclusão verificados no Supabase dev.
+**Portão G:** suspenso até a revisão da integração Supabase delegada ao Antigravity. Depois da revisão, dois usuários de teste devem confirmar isolamento por RLS e sessão; OTP, perfil, avatar, sincronização, logout e exclusão precisam ser verificados no projeto dev.
 
 ## Bloco H — Compra por marketplace, qualidade e publicação
 
@@ -133,12 +135,10 @@ O método escolhido é email OTP sem senha obrigatória. CPF não será coletado
 | [ ] | H1.5 | Revisar aviso de afiliado, termos, privacidade, contato e exclusão de conta. | Rodapé acessível; conteúdo corresponde aos dados e integrações ativas. |
 | [ ] | H1.6 | Fazer auditoria de RLS, endpoints, logs e artefatos client-side. | Acesso cruzado negado; service role/segredos ausentes de bundles, respostas e logs. |
 | [ ] | H1.7 | Testar teclado, foco, leitor de tela e viewport móvel. | Busca, cartões, galeria, perfil e carrinho operáveis sem mouse e com rótulos compreensíveis. |
-| [x] | H1.8 | Rodar `npm run check`, `npm test`, `npm run test:budget` e `npm run build`. | Todos passam; evidência H1.8-privacy-build em VALIDACOES.md: 1 função, 153.104 bytes estimados e build concluído. |
+| [x] | H1.8 | Rodar `npm run check`, `npm test`, `npm run test:budget` e `npm run build`. | Revalidação 29/09/2026: 23/23 testes; 37 arquivos Astro sem diagnósticos; 1 função; 12.860 bytes para 20 cards; 1.280.717 bytes no orçamento estático; build concluído. Evidência `EFGH-LOCAL-6` em VALIDACOES.md. |
 | [ ] | H1.9 | Criar preview privado na equipe Vercel Pro existente. | Guardar URL/ID; validar variáveis de ambiente e logs sem segredos; função total permanece <12. |
 | [ ] | H1.10 | Repetir fluxos de busca, produto, conta, carrinho e saída na URL de preview. | Capturas/resultados comprovam os caminhos; cada saída vai ao item e marketplace corretos. |
 | [ ] | H1.11 | Confirmar domínio, HTTPS e aprovação do programa afiliado antes de publicação pública. | Painéis confirmam domínio autorizado e política de imagens; guardar recibo ou URL de regra. |
 | [ ] | H1.12 | Publicar e acompanhar as primeiras visitas com possibilidade de rollback. | HTTPS, vitrine, OTP, carrinho e links funcionam em produção; registrar erros e versão de rollback. |
 
-**Portão final:** publicação pública somente após aprovações dos programas de afiliado, dados reais de dev, isolamento das contas, compra item a item, auditoria e preview verificado. Vercel Pro já está disponível; B4 limita-se a conferir a equipe/projeto correto.
-
-**Portão final:** publicar só quando A–H estiverem validados. Se um programa restringir domínio, imagens ou coleta, adequar esse canal antes da publicação correspondente. O Pro já foi informado pelo proprietário; no passo B4 basta conferir a equipe correta no painel.
+**Portão final:** publicação pública somente após aprovações dos programas de afiliado, integração de dados revisada, isolamento das contas, compra item a item, auditoria e preview verificado. Vercel já está configurada segundo o proprietário; URL/ID do projeto e preview permanecem para conferência em H1.9. A integração Supabase aguarda revisão do Antigravity.
