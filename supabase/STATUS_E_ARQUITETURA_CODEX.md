@@ -36,7 +36,7 @@ As credenciais estão organizadas em dois locais fora do versionamento Git:
      - `SUPABASE_URL`: Apontando para o projeto `rvepsyvhsqumfpemhbba`
      - `SUPABASE_SERVICE_ROLE_KEY`: Chave de serviço para uploads diretos
      - `SUPABASE_STORAGE_BUCKET`: `produtos` (para fotos fixas)
-     - `SUPABASE_STORAGE_BUCKET_TEMP`: `InstagranTemporario`
+     - `SUPABASE_STORAGE_BUCKET_TEMP`: `InstagramTemporario`
 
 ---
 
@@ -76,11 +76,11 @@ As credenciais estão organizadas em dois locais fora do versionamento Git:
 | :--- | :--- | :--- | :--- | :--- |
 | **`produtos`** | **Público** | 1 MB | `image/jpeg`, `image/png`, `image/webp` | **Fotos fixas do catálogo.** Utilizadas tanto na vitrine web quanto consumidas diretamente pela Meta Graph API para postagens no Instagram. |
 | **`avatars`** | **Público** | 100 KB | `image/webp`, `image/jpeg`, `image/png` | Fotos de perfil dos usuários. Upload restrito por RLS (`auth.uid() = owner_id`). |
-| **`InstagranTemporario`** | **Público** | 10 MB | `image/jpeg`, `image/png`, `image/webp` | Bucket para uploads de mídia transitória (posts avulsos) com exclusão imediata pós-publicação. |
+| **`InstagramTemporario`** | **Público** | 10 MB | `image/jpeg`, `image/png`, `image/webp` | Bucket para uploads de mídia transitória (posts avulsos) com exclusão imediata pós-publicação. |
 
 ### 5.1. Regra das Fotos Fixas vs Temporárias
 - **Para produtos catalogados:** Não é necessário criar arquivos temporários. A Meta Graph API consome diretamente a URL pública permanente do bucket `produtos` (`https://rvepsyvhsqumfpemhbba.supabase.co/storage/v1/object/public/produtos/...`).
-- **Para posts avulsos sem produto:** O pipeline utiliza `InstagranTemporario` com limpeza automática ao final do ciclo.
+- **Para posts avulsos sem produto:** O pipeline utiliza `InstagramTemporario` com limpeza automática ao final do ciclo.
 
 ---
 
