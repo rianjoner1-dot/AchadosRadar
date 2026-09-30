@@ -13,15 +13,22 @@ BEGIN
 END $$;
 
 -- Cria schema e funções auxiliares auth se não existirem (compatibilidade Supabase e testes locais)
-CREATE SCHEMA IF NOT EXISTS auth;
-
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID AS $$
-  SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::UUID;
-$$ LANGUAGE sql STABLE;
-
-CREATE OR REPLACE FUNCTION auth.role() RETURNS TEXT AS $$
-  SELECT coalesce(nullif(current_setting('request.jwt.claim.role', true), ''), 'anon');
-$$ LANGUAGE sql STABLE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+        CREATE SCHEMA auth;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid WHERE pg_namespace.nspname = 'auth' AND pg_proc.proname = 'uid') THEN
+        CREATE FUNCTION auth.uid() RETURNS UUID AS $func$
+          SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::UUID;
+        $func$ LANGUAGE sql STABLE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid WHERE pg_namespace.nspname = 'auth' AND pg_proc.proname = 'role') THEN
+        CREATE FUNCTION auth.role() RETURNS TEXT AS $func$
+          SELECT coalesce(nullif(current_setting('request.jwt.claim.role', true), ''), 'anon');
+        $func$ LANGUAGE sql STABLE;
+    END IF;
+END $$;
 
 -- Função auxiliar segura para verificar se o usuário é importador ou admin
 CREATE OR REPLACE FUNCTION public.is_importer_or_admin() RETURNS BOOLEAN AS $$

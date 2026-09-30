@@ -38,6 +38,7 @@ import { authReady } from '../modules/auth/client';
 </Layout>
 <script>
   import { supabase, syncCartForUser, uploadAvatar } from '../modules/auth/client';
+  import { normalizeBrazilianPhone } from '../modules/auth/phone.mjs';
   const login = document.querySelector<HTMLElement>('#loginPanel')!;
   const profile = document.querySelector<HTMLElement>('#profilePanel')!;
   const requestForm = document.querySelector<HTMLFormElement>('#requestOtpForm')!;
@@ -95,9 +96,9 @@ import { authReady } from '../modules/auth/client';
     profileStatus.textContent = 'Salvando perfil...';
     const name = document.querySelector<HTMLInputElement>('#displayName')!.value.trim();
     const rawPhone = document.querySelector<HTMLInputElement>('#phoneNumber')!.value.trim();
-    const digits = rawPhone.replace(/\D/g, '');
-    if (digits && ![10, 11, 12, 13].includes(digits.length)) { profileStatus.textContent = 'Informe um telefone brasileiro válido ou deixe o campo vazio.'; return; }
-    const phone = digits ? `+${digits.startsWith('55') ? digits : `55${digits}`}` : null;
+    let phone: string | null;
+    try { phone = normalizeBrazilianPhone(rawPhone); }
+    catch (error) { profileStatus.textContent = error instanceof Error ? error.message : 'Informe um telefone brasileiro válido ou deixe o campo vazio.'; return; }
     let avatarUrl: string | undefined;
     const file = document.querySelector<HTMLInputElement>('#avatarFile')!.files?.[0];
     try {

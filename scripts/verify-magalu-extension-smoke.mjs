@@ -73,16 +73,25 @@ try {
   });
 
   const urlLiteral = JSON.stringify(productUrl);
-  const created = await evaluate(`(async()=>{const tab=await chrome.tabs.create({url:${urlLiteral},active:false});return {id:tab.id,url:tab.url}})()`, 10000);
+  const created = await evaluate(`new Promise((resolve,reject)=>chrome.tabs.create({url:${urlLiteral},active:false},tab=>{const error=chrome.runtime.lastError;if(error)reject(new Error(error.message));else resolve({id:tab.id,url:tab.url})}))`, 30000);
   tabId = created?.id;
   if (!Number.isInteger(tabId)) throw new Error('Could not create a temporary product tab.');
   console.log(JSON.stringify({ stage: 'product_tab_opened', tabId }));
 
-  const ping = await evaluate(`(async()=>{await waitForTabComplete(${tabId},20000);await ensureTabScriptReady(${tabId},'magalu');return await chrome.tabs.sendMessage(${tabId},{type:'PING'})})()`, 25000);
+  let page = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    page = await evaluate(`new Promise((resolve,reject)=>chrome.tabs.get(${tabId},t=>{const error=chrome.runtime.lastError;if(error)reject(new Error(error.message));else resolve({status:t.status,url:t.url,title:t.title})}))`, 5000);
+    if (page?.status === 'complete') break;
+    await sleep(1000);
+  }
+  if (page?.status !== 'complete') throw new Error(`Product page did not finish loading (${page?.status || 'unknown'}).`);
+  if (!new URL(page.url).hostname.endsWith('magazinevoce.com.br')) throw new Error(`Product page redirected to ${new URL(page.url).hostname}; no challenge was bypassed.`);
+  await sleep(1000);
+  const ping = await evaluate(`(async()=>{await ensureTabScriptReady(${tabId},'magalu');return await new Promise((resolve,reject)=>chrome.tabs.sendMessage(${tabId},{type:'PING'},response=>{const error=chrome.runtime.lastError;if(error)reject(new Error(error.message));else resolve(response)}))})()`, 20000);
   if (!ping?.ok) throw new Error('The Magalu content script did not answer PING.');
   console.log(JSON.stringify({ stage: 'content_script_ready', platform: ping.platform }));
 
-  const extracted = await evaluate(`(async()=>{const response=await chrome.tabs.sendMessage(${tabId},{type:'CRAWL_MAGALU_PRODUCT',options:await getConfig()});if(!response?.ok||!response.item)throw new Error(response?.error||'No product data returned');await syncWithLocalServer(response.item);return {id:response.item.id,title:response.item.title,price:response.item.price,stockStatus:response.item.stockStatus,stockQuantity:response.item.stockQuantity,installments:response.item.installments,shipping:response.item.shipping,coupon:response.item.coupon,imageCount:Array.isArray(response.item.images)?response.item.images.length:0}})()`, 45000);
+  const extracted = await evaluate(`(async()=>{const options=await getConfig();const response=await new Promise((resolve,reject)=>chrome.tabs.sendMessage(${tabId},{type:'CRAWL_MAGALU_PRODUCT',options},result=>{const error=chrome.runtime.lastError;if(error)reject(new Error(error.message));else resolve(result)}));if(!response?.ok||!response.item)throw new Error(response?.error||'No product data returned');await syncWithLocalServer(response.item);return {id:response.item.id,title:response.item.title,price:response.item.price,stockStatus:response.item.stockStatus,stockQuantity:response.item.stockQuantity,stockEvidence:response.item.stockEvidence,installments:response.item.installments,shipping:response.item.shipping,coupon:response.item.coupon,imageCount:Array.isArray(response.item.images)?response.item.images.length:0}})()`, 45000);
   console.log(JSON.stringify({ stage: 'product_extracted_and_sent_to_local_bridge', ...extracted }));
 } catch (error) {
   console.error(JSON.stringify({ result: 'failed', reason: error.message }));

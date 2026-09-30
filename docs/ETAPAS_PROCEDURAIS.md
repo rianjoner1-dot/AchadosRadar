@@ -133,7 +133,7 @@ O método escolhido é email OTP sem senha obrigatória. CPF não será coletado
 | [ ] | H1.5 | Revisar aviso de afiliado, termos, privacidade, contato e exclusão de conta. | Rodapé acessível; conteúdo corresponde aos dados e integrações ativas. |
 | [ ] | H1.6 | Fazer auditoria de RLS, endpoints, logs e artefatos client-side. | Acesso cruzado negado; service role/segredos ausentes de bundles, respostas e logs. |
 | [ ] | H1.7 | Testar teclado, foco, leitor de tela e viewport móvel. | Busca, cartões, galeria, perfil e carrinho operáveis sem mouse e com rótulos compreensíveis. |
-| [ ] | H1.8 | Rodar `npm run check`, `npm test`, `npm run test:budget` e `npm run build`. | Todos passam; saída registra tamanho transferível e contagem de funções no build final. |
+| [x] | H1.8 | Rodar `npm run check`, `npm test`, `npm run test:budget` e `npm run build`. | Todos passam; evidência H1.8-privacy-build em VALIDACOES.md: 1 função, 153.104 bytes estimados e build concluído. |
 | [ ] | H1.9 | Criar preview privado na equipe Vercel Pro existente. | Guardar URL/ID; validar variáveis de ambiente e logs sem segredos; função total permanece <12. |
 | [ ] | H1.10 | Repetir fluxos de busca, produto, conta, carrinho e saída na URL de preview. | Capturas/resultados comprovam os caminhos; cada saída vai ao item e marketplace corretos. |
 | [ ] | H1.11 | Confirmar domínio, HTTPS e aprovação do programa afiliado antes de publicação pública. | Painéis confirmam domínio autorizado e política de imagens; guardar recibo ou URL de regra. |

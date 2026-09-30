@@ -9,49 +9,55 @@ BEGIN
     END IF;
 END $$;
 
--- Criação do schema storage caso não exista (compatibilidade para ambientes de teste)
-CREATE SCHEMA IF NOT EXISTS storage;
-
--- Tabela de buckets do Supabase Storage
-CREATE TABLE IF NOT EXISTS storage.buckets (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    owner UUID,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    public BOOLEAN DEFAULT false,
-    avif_autodetection BOOLEAN DEFAULT false,
-    file_size_limit BIGINT,
-    allowed_mime_types TEXT[]
-);
-
--- Tabela de objetos do Supabase Storage
-CREATE TABLE IF NOT EXISTS storage.objects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    bucket_id TEXT REFERENCES storage.buckets(id),
-    name TEXT NOT NULL,
-    owner UUID,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    last_accessed_at TIMESTAMPTZ DEFAULT now(),
-    metadata JSONB DEFAULT '{}'::jsonb,
-    path_tokens TEXT[] GENERATED ALWAYS AS (string_to_array(name, '/')) STORED
-);
-
--- Funções auxiliares de caminho do storage (padrão Supabase)
-CREATE OR REPLACE FUNCTION storage.foldername(name TEXT)
-RETURNS TEXT[] AS $$
+-- Criação do schema storage e tabelas auxiliares caso não existam (compatibilidade para ambientes de teste locais)
+DO $$
 BEGIN
-    RETURN string_to_array(name, '/');
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION storage.extension(name TEXT)
-RETURNS TEXT AS $$
-BEGIN
-    RETURN split_part(name, '.', -1);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+    IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storage') THEN
+        CREATE SCHEMA storage;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'buckets') THEN
+        CREATE TABLE storage.buckets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            owner UUID,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            public BOOLEAN DEFAULT false,
+            avif_autodetection BOOLEAN DEFAULT false,
+            file_size_limit BIGINT,
+            allowed_mime_types TEXT[]
+        );
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'objects') THEN
+        CREATE TABLE storage.objects (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            bucket_id TEXT REFERENCES storage.buckets(id),
+            name TEXT NOT NULL,
+            owner UUID,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            last_accessed_at TIMESTAMPTZ DEFAULT now(),
+            metadata JSONB DEFAULT '{}'::jsonb,
+            path_tokens TEXT[] GENERATED ALWAYS AS (string_to_array(name, '/')) STORED
+        );
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid WHERE pg_namespace.nspname = 'storage' AND pg_proc.proname = 'foldername') THEN
+        CREATE FUNCTION storage.foldername(name TEXT)
+        RETURNS TEXT[] AS $func$
+        BEGIN
+            RETURN string_to_array(name, '/');
+        END;
+        $func$ LANGUAGE plpgsql IMMUTABLE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_proc JOIN pg_namespace ON pg_proc.pronamespace = pg_namespace.oid WHERE pg_namespace.nspname = 'storage' AND pg_proc.proname = 'extension') THEN
+        CREATE FUNCTION storage.extension(name TEXT)
+        RETURNS TEXT AS $func$
+        BEGIN
+            RETURN split_part(name, '.', -1);
+        END;
+        $func$ LANGUAGE plpgsql IMMUTABLE;
+    END IF;
+END $$;
 
 -- 1. Inserção / Configuração do Bucket avatars com limite rígido de 100 KB
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -67,14 +73,24 @@ ON CONFLICT (id) DO UPDATE SET
     file_size_limit = EXCLUDED.file_size_limit,
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 
--- 2. Habilitação de RLS em storage.objects
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE storage.objects FORCE ROW LEVEL SECURITY;
-
--- Grants para que o RLS avalie as políticas dos papéis
-GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;
-GRANT SELECT ON storage.buckets TO anon, authenticated, service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated, service_role;
+-- 2. Habilitação de RLS em storage.objects e grants defensivos
+DO $$
+BEGIN
+    BEGIN
+        ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+    BEGIN
+        ALTER TABLE storage.objects FORCE ROW LEVEL SECURITY;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+    BEGIN
+        GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;
+        GRANT SELECT ON storage.buckets TO anon, authenticated, service_role;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated, service_role;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+END $$;
 
 -- 3. Políticas de Acesso ao Storage de Avatares
 
