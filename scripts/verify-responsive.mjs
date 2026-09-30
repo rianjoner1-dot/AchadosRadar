@@ -172,11 +172,9 @@ try {
   }
   const tempRoot = path.resolve(os.tmpdir());
   if (path.dirname(path.resolve(profilePath)) === tempRoot) {
-    let removed = false;
     for (let attempt = 0; attempt < 15; attempt += 1) {
       try {
         await rm(profilePath, { recursive: true, force: true });
-        removed = true;
         break;
       } catch (error) {
         if (!['EBUSY', 'EPERM'].includes(error.code) || attempt === 14) {

@@ -275,7 +275,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     // Valida configuração do bucket avatars
     const bucketRes = await db.query(`SELECT * FROM storage.buckets WHERE id = 'avatars';`);
     assert.equal(bucketRes.rows.length, 1);
-    assert.equal(Number(bucketRes.rows[0].file_size_limit), 102400, 'Limite deve ser 100 KB (102.400 bytes)');
+    assert.equal(Number(bucketRes.rows[0].file_size_limit), 2097152, 'Limite deve ser 2 MB (2.097.152 bytes)');
     assert.deepEqual(
       bucketRes.rows[0].allowed_mime_types,
       ['image/webp', 'image/jpeg', 'image/png'],
@@ -285,7 +285,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     const userA = 'a0000000-0000-0000-0000-000000000001';
     const userB = 'b0000000-0000-0000-0000-000000000002';
 
-    // 1. Usuário A faz upload válido no seu caminho avatars/<userA>/avatar.webp (< 100 KB, MIME image/webp)
+    // 1. Usuário A faz upload válido no seu caminho avatars/<userA>/avatar.webp (< 2 MB, MIME image/webp)
     await setAuthContext(db, { role: 'authenticated', sub: userA });
 
     const uploadOk = await db.query(`
@@ -314,7 +314,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
       'RLS deve negar tentativa de upload na pasta de outro usuário'
     );
 
-    // 3. NEGAÇÃO: Usuário A tenta enviar arquivo acima de 100 KB (ex: 150 KB) -> DEVE FALHAR
+    // 3. NEGAÇÃO: Usuário A tenta enviar arquivo acima de 2 MB (ex: 2.5 MB) -> DEVE FALHAR
     await assert.rejects(
       async () => {
         await db.query(`
@@ -322,12 +322,12 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
           VALUES (
             'avatars',
             '${userA}/giant.webp',
-            '{"mimetype": "image/webp", "size": 153600}'::jsonb
+            '{"mimetype": "image/webp", "size": 2500000}'::jsonb
           );
         `);
       },
       /new row violates row-level security policy/,
-      'RLS deve negar arquivos acima do limite de 100 KB'
+      'RLS deve negar arquivos acima do limite de 2 MB'
     );
 
     // 4. NEGAÇÃO: Usuário A tenta enviar arquivo SVG -> DEVE FALHAR

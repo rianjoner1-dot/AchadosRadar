@@ -65,7 +65,7 @@ VALUES (
     'avatars',
     'avatars',
     true,                                -- Leitura pública para exibição de avatares na interface
-    102400,                              -- Limite rígido: 100 KB (102.400 bytes)
+    2097152,                              -- Limite rígido: 100 KB (102.400 bytes)
     ARRAY['image/webp', 'image/jpeg', 'image/png'] -- Apenas formatos raster otimizados; SVG estritamente proibido
 )
 ON CONFLICT (id) DO UPDATE SET
@@ -114,7 +114,7 @@ CREATE POLICY "users_insert_own_avatar"
             metadata->>'mimetype' = ANY(ARRAY['image/webp', 'image/jpeg', 'image/png'])
         )
         AND (
-            (metadata->>'size')::bigint <= 102400
+            (metadata->>'size')::bigint <= 2097152
         )
     );
 
@@ -134,7 +134,7 @@ CREATE POLICY "users_update_own_avatar"
             metadata->>'mimetype' = ANY(ARRAY['image/webp', 'image/jpeg', 'image/png'])
         )
         AND (
-            (metadata->>'size')::bigint <= 102400
+            (metadata->>'size')::bigint <= 2097152
         )
     );
 

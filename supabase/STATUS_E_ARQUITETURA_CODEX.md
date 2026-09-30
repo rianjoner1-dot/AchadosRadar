@@ -75,7 +75,7 @@ As credenciais estão organizadas em dois locais fora do versionamento Git:
 | Bucket | Visibilidade | Limite de Tamanho | Tipos Permitidos | Finalidade |
 | :--- | :--- | :--- | :--- | :--- |
 | **`produtos`** | **Público** | 1 MB | `image/jpeg`, `image/png`, `image/webp` | **Fotos fixas do catálogo.** Utilizadas tanto na vitrine web quanto consumidas diretamente pela Meta Graph API para postagens no Instagram. |
-| **`avatars`** | **Público** | 100 KB | `image/webp`, `image/jpeg`, `image/png` | Fotos de perfil dos usuários. Upload restrito por RLS (`auth.uid() = owner_id`). |
+| **`avatars`** | **Público** | 2 MB | `image/webp`, `image/jpeg`, `image/png` | Fotos de perfil dos usuários. Upload restrito por RLS (`auth.uid() = owner_id`) com compressão no cliente para ~15-25 KB. |
 | **`InstagramTemporario`** | **Público** | 10 MB | `image/jpeg`, `image/png`, `image/webp` | Bucket para uploads de mídia transitória (posts avulsos) com exclusão imediata pós-publicação. |
 
 ### 5.1. Regra das Fotos Fixas vs Temporárias
