@@ -1,0 +1,304 @@
+---
+// src/pages/produto/[id].astro
+import Layout from '../../layouts/Layout.astro';
+import sampleProducts from '../../../tests/fixtures/sample_20_cards.json';
+
+export const prerender = true;
+
+export function getStaticPaths() {
+  return sampleProducts.map((p) => ({
+    params: { id: p.id },
+    props: { product: p }
+  }));
+}
+
+const { product } = Astro.props;
+const isML = product.platform === 'mercadolivre';
+const storeName = isML ? 'Mercado Livre' : 'Magalu';
+const title = `${product.title} — Achados Radar`;
+const description = `Exemplo de produto no Achados Radar: ${product.title}. A amostra local não possui link de compra verificado.`;
+---
+
+<Layout title={title} description={description}>
+  <div class="container product-detail-page">
+    <nav class="breadcrumb-nav" aria-label="Navegação estrutural">
+      <a href="/">Início</a>
+      <span aria-hidden="true">&gt;</span>
+      <a href={`/?loja=${product.platform}`}>{storeName}</a>
+      <span aria-hidden="true">&gt;</span>
+      <span aria-current="page" class="breadcrumb-current">{product.title}</span>
+    </nav>
+
+    <div class="product-layout-grid">
+      <!-- Coluna da Galeria -->
+      <div class="gallery-column">
+        <div class="main-image-frame">
+          <img
+            src={product.image}
+            alt={product.title}
+            width="600"
+            height="600"
+            class="detail-main-img"
+            loading="eager"
+            decoding="async"
+          />
+        </div>
+      </div>
+
+      <!-- Coluna de Informações e Compra -->
+      <div class="info-column">
+        <div class="badges-row">
+          <span class={`badge-platform ${isML ? 'badge-mercadolivre' : 'badge-magalu'}`}>
+            {storeName}
+          </span>
+          <span class="badge-seller">
+            Vendido por: <strong>{product.sellerName || 'Loja Parceira'}</strong>
+          </span>
+        </div>
+
+        <h1 class="product-heading">{product.title}</h1>
+
+        <div class="price-box">
+          {product.oldPriceFormatted && (
+            <span class="old-price">{product.oldPriceFormatted}</span>
+          )}
+          <div class="price-main-row">
+            <span class="price-value">{product.priceFormatted}</span>
+            {product.discountPercent && (
+              <span class="badge-discount">{product.discountPercent}</span>
+            )}
+          </div>
+          {product.installments && (
+            <span class="installments-note">{product.installments}</span>
+          )}
+        </div>
+
+        {product.shipping && (
+          <div class="detail-shipping-card">
+            <span aria-hidden="true">🚚</span>
+            <span>{product.shipping}</span>
+          </div>
+        )}
+
+        {product.coupon && (
+          <div class="detail-coupon-card">
+            <span aria-hidden="true">🏷️</span>
+            <span>Cupom disponível: <strong>{product.coupon}</strong></span>
+          </div>
+        )}
+
+        <div class="stock-indicator">
+          <span class="status-dot-green" aria-hidden="true"></span>
+          <span>{product.stockStatus === 'in_stock' ? 'Produto em estoque verificado' : 'Disponibilidade sob consulta'}</span>
+        </div>
+
+        <!-- Botões de Ação -->
+        <div class="action-buttons-stack">
+          <button type="button" class="btn-primary buy-now-btn" disabled aria-disabled="true">Link de compra indisponível na amostra</button>
+
+          <button
+            type="button"
+            class="btn-secondary add-to-list-btn"
+            data-action="save-item"
+            data-item={JSON.stringify(product)}
+            aria-label="Salvar produto na minha lista de interesses"
+          >
+            <span aria-hidden="true">📌</span>
+            <span>Salvar na Minha Lista</span>
+          </button>
+        </div>
+
+        <div class="disclaimer-mini-card">
+          <p>
+            ℹ️ <strong>Importante:</strong> Você será redirecionado para o site oficial do <strong>{storeName}</strong> através do nosso link de afiliado oficial. O pagamento, garantia e entrega são processados inteiramente pelo marketplace.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .product-detail-page {
+    padding: 32px 16px 64px;
+    max-width: 1120px;
+  }
+
+  .breadcrumb-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 4px;
+  }
+
+  .breadcrumb-nav a {
+    color: var(--text-secondary);
+  }
+
+  .breadcrumb-nav a:hover {
+    color: var(--accent-cyan);
+  }
+
+  .breadcrumb-current {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .product-layout-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  @media (min-width: 768px) {
+    .product-layout-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+    }
+  }
+
+  .main-image-frame {
+    background: #fff;
+    border: 1px solid #dedede;
+    border-radius: var(--radius-lg);
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: hidden;
+  }
+
+  .detail-main-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .info-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .badges-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .product-heading {
+    font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+    line-height: 1.25;
+  }
+
+  .price-box {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  .old-price {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-decoration: line-through;
+  }
+
+  .price-main-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .price-value {
+    font-size: 2rem;
+    font-weight: 800;
+    font-family: var(--font-heading);
+    color: #222;
+  }
+
+  .badge-discount {
+    background: #eee;
+    color: #333;
+    font-weight: 800;
+    font-size: 0.8rem;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .installments-note {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+  }
+
+  .detail-shipping-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent-emerald);
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .detail-coupon-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px dashed rgba(245, 158, 11, 0.4);
+    color: var(--accent-amber);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    font-size: 0.88rem;
+  }
+
+  .stock-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+
+  .status-dot-green {
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent-emerald);
+    border-radius: 50%;
+  }
+
+  .action-buttons-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .buy-now-btn {
+    min-height: 52px;
+    font-size: 1.05rem;
+  }
+
+  .add-to-list-btn {
+    min-height: 48px;
+  }
+
+  .disclaimer-mini-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+</style>

@@ -1,0 +1,121 @@
+---
+// src/pages/termos.astro
+import Layout from '../layouts/Layout.astro';
+
+const title = "Termos de Uso e Aviso de Afiliados — Achados Radar";
+const description = "Termos de uso, condições do serviço e esclarecimentos sobre a atuação como afiliado oficial do Achados Radar.";
+---
+
+<Layout title={title} description={description}>
+  <div class="container static-content-page">
+    <div class="content-header">
+      <h1 class="page-title">Termos de Uso e Transparência de Afiliados</h1>
+      <p class="page-meta">Última atualização: Setembro de 2026</p>
+    </div>
+
+    <div class="legal-body">
+      <section class="legal-section">
+        <h2>1. Natureza do Serviço</h2>
+        <p>
+          O <strong>Achados Radar</strong> é uma plataforma independente de curadoria, comparação e divulgação de ofertas e promoções disponíveis em grandes plataformas de comércio eletrônico, especificamente Mercado Livre e Magazine Luiza.
+        </p>
+        <p>
+          <strong>Importante:</strong> O Achados Radar <em>não é uma loja virtual própria</em>, não mantém estoque físico de produtos, não processa transações financeiras, não cobra valores dos visitantes e não emite pedidos nem notas fiscais.
+        </p>
+      </section>
+
+      <section class="legal-section">
+        <h2>2. Participação em Programas de Afiliados</h2>
+        <p>
+          O site está preparado para exibir ofertas de Mercado Livre e Magalu. A elegibilidade da conta, a divulgação em domínio próprio e o uso de imagens precisam estar confirmados com cada programa antes da publicação. Só ofertas com link de afiliado validado devem habilitar a saída para a loja; as amostras locais não têm links ativos.
+        </p>
+        <p>
+          Quando a atribuição de afiliado for válida, poderemos receber comissão sem custo adicional para você. Cupons e descontos só serão anunciados quando observados; preço final, frete, condições e estoque são os apresentados pela loja no momento da compra.
+        </p>
+      </section>
+
+      <section class="legal-section">
+        <h2>3. Preços e Disponibilidade</h2>
+        <p>
+          Os preços, condições de pagamento, frete e disponibilidade em estoque exibidos no Achados Radar refletem os dados observados no momento da última sincronização com as lojas parceiras.
+        </p>
+        <p>
+          Como os marketplaces atualizam suas ofertas de forma contínua e dinâmica, o preço válido e vinculativo é sempre aquele exibido no checkout final da loja oficial de destino. Recomendamos sempre conferir as informações antes de concluir sua compra.
+        </p>
+      </section>
+
+      <section class="legal-section">
+        <h2>4. Lista de Interesses / Carrinho Local</h2>
+        <p>
+          A funcionalidade "Minha Lista" serve para organização pessoal. Visitantes podem mantê-la no navegador e usuários autenticados podem sincronizá-la com a conta. Ela não reserva estoque, não calcula um total de compra e não cria pedido ou obrigação de compra. Cada item é aberto individualmente na loja parceira.
+        </p>
+      </section>
+
+      <section class="legal-section">
+        <h2>5. Atendimento e Garantia</h2>
+        <p>
+          Quaisquer dúvidas sobre entrega, rastreamento, cancelamento, garantia ou devolução de produtos devem ser tratadas diretamente com o marketplace e com o vendedor onde a compra foi efetuada, conforme os canais oficiais de suporte do Mercado Livre e Magazine Luiza.
+        </p>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .static-content-page {
+    padding: 48px 16px 80px;
+    max-width: 800px;
+  }
+
+  .content-header {
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+
+  .page-title {
+    font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+
+  .page-meta {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+
+  .legal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  .legal-section h2 {
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    font-family: var(--font-heading);
+  }
+
+  .legal-section p {
+    margin-bottom: 12px;
+  }
+
+  .legal-section strong {
+    color: var(--text-primary);
+  }
+
+  .legal-section em {
+    color: var(--accent-cyan);
+    font-style: normal;
+  }
+
+  .legal-section code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85em;
+  }
+</style>

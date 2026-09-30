@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.astro/
+.vercel/
+coverage/
+data/catalogo_macro.json
+data/catalogo_macro.json.*.tmp
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.tempmediaStorage/
+.agents/
+

@@ -1,0 +1,139 @@
+---
+// src/layouts/Layout.astro
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+import '../styles/neutral-theme.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  canonicalUrl?: string;
+  ogImage?: string;
+  ogType?: 'website' | 'product';
+}
+
+const {
+  title = "Achados Radar — As Melhores Promoções em Mercado Livre e Magalu",
+  description = "Vitrine independente de promoções e achados verificados com preços atualizados no Mercado Livre e Magazine Luiza.",
+  canonicalUrl,
+  ogImage,
+  ogType = 'website'
+} = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    
+    <!-- Open Graph / Redes Sociais -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content="Achados Radar" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:locale" content="pt_BR" />
+    {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+    {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    
+    <title>{title}</title>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-link">Pular para o conteúdo principal</a>
+
+    <Header />
+
+    <main id="main-content" tabindex="-1" class="main-wrapper">
+      <slot />
+    </main>
+
+    <Footer />
+
+    <!-- Notificação Flutuante / Toast Acessível -->
+    <div id="toastNotification" class="toast-notification" role="status" aria-live="polite"></div>
+
+    <script>
+      import { readLocalCart, saveCartItem, removeCartItem, updateCartBadge } from '../modules/cart/store';
+
+      function syncButtons() {
+        const ids = new Set(readLocalCart().map((item) => item.id));
+        document.querySelectorAll<HTMLButtonElement>('[data-action="save-item"]').forEach((button) => {
+          const data = button.dataset.item;
+          if (!data) return;
+          try {
+            const saved = ids.has(JSON.parse(data).id);
+            button.classList.toggle('saved', saved);
+            const detailed = button.classList.contains('add-to-list-btn');
+            button.innerHTML = detailed ? (saved ? '<span aria-hidden="true">✓</span><span>Salvo na sua lista</span>' : '<span aria-hidden="true">+</span><span>Salvar na minha lista</span>') : (saved ? '<span aria-hidden="true">✓</span>' : '<span aria-hidden="true">+</span>');
+          } catch { /* Ignore invalid catalog metadata. */ }
+        });
+      }
+      document.addEventListener('click', (event) => {
+        const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-action="save-item"]');
+        if (!button?.dataset.item) return;
+        try {
+          const product = JSON.parse(button.dataset.item);
+          const alreadySaved = readLocalCart().some((item) => item.id === product.id);
+          const toast = document.getElementById('toastNotification');
+          if (alreadySaved) removeCartItem(product.id);
+          else saveCartItem(product);
+          if (toast) { toast.textContent = alreadySaved ? 'Removido da sua lista.' : 'Salvo na sua lista.'; toast.classList.add('visible'); window.setTimeout(() => toast.classList.remove('visible'), 2200); }
+          updateCartBadge(); syncButtons();
+        } catch { /* Ignore invalid product data. */ }
+      });
+      document.addEventListener('cart:changed', () => { updateCartBadge(); syncButtons(); });
+      updateCartBadge(); syncButtons();
+    </script>
+  </body>
+</html>
+
+<style>
+  .main-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    outline: none;
+  }
+
+  .toast-notification {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #333;
+    border: 1px solid #222;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: 0.88rem;
+    font-weight: 600;
+    z-index: 1000;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+    pointer-events: none;
+  }
+
+  .toast-notification.visible {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  @media (max-width: 640px) {
+    .toast-notification {
+      bottom: 16px;
+      right: 16px;
+      left: 16px;
+      text-align: center;
+    }
+  }
+</style>

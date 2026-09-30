@@ -1,0 +1,148 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { authReady } from '../modules/auth/client';
+---
+<Layout title="Minha conta | Achados Radar" description="Entre por código enviado ao seu email e edite seu perfil.">
+  <main class="container account-page">
+    <h1>Minha conta</h1>
+    <p class="account-intro">Acesse sua lista e mantenha seus dados atualizados. O acesso é por email, sem senha obrigatória.</p>
+    {!authReady && <p class="account-notice" role="status">O acesso ficará disponível quando o Supabase for configurado.</p>}
+    <section id="loginPanel" class="account-panel">
+      <h2>Entrar ou criar conta</h2>
+      <form id="requestOtpForm">
+        <label for="emailInput">Email</label><input id="emailInput" type="email" autocomplete="email" required maxlength="254" disabled={!authReady} />
+        <button type="submit" class="btn-primary" disabled={!authReady}>Enviar código de acesso</button>
+      </form>
+      <form id="verifyOtpForm" hidden>
+        <label for="otpInput">Código recebido por email</label><input id="otpInput" inputmode="numeric" autocomplete="one-time-code" required minlength="6" maxlength="8" disabled={!authReady} />
+        <button type="submit" class="btn-primary" disabled={!authReady}>Confirmar e entrar</button>
+        <button id="resendOtp" type="button" class="text-button" disabled={!authReady}>Enviar outro código</button>
+      </form>
+      <p id="authStatus" role="status" aria-live="polite"></p>
+    </section>
+    <section id="profilePanel" class="account-panel" hidden>
+      <h2>Perfil</h2>
+      <p id="accountEmail" class="profile-email"></p>
+      <img id="avatarPreview" class="avatar-preview" alt="Foto do perfil" width="96" height="96" hidden />
+      <form id="profileForm">
+        <label for="displayName">Nome</label><input id="displayName" type="text" maxlength="80" autocomplete="name" />
+        <label for="phoneNumber">Telefone (opcional)</label><input id="phoneNumber" type="tel" maxlength="20" autocomplete="tel" placeholder="(00) 00000-0000" />
+        <label for="avatarFile">Foto do perfil (JPEG, PNG ou WebP)</label><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp" />
+        <button type="submit" class="btn-primary">Salvar alterações</button>
+      </form>
+      <div class="profile-actions"><a href="/carrinho" class="btn-secondary">Minha lista</a><button id="signOutButton" type="button" class="btn-secondary">Sair da conta</button></div>
+      <details class="delete-account"><summary>Excluir conta</summary><p>A exclusão remove o perfil, a lista sincronizada e a foto de perfil. Esta ação não pode ser desfeita.</p><button id="deleteAccountButton" type="button" class="btn-danger">Excluir minha conta</button></details>
+      <p id="profileStatus" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</Layout>
+<script>
+  import { supabase, syncCartForUser, uploadAvatar } from '../modules/auth/client';
+  const login = document.querySelector<HTMLElement>('#loginPanel')!;
+  const profile = document.querySelector<HTMLElement>('#profilePanel')!;
+  const requestForm = document.querySelector<HTMLFormElement>('#requestOtpForm')!;
+  const verifyForm = document.querySelector<HTMLFormElement>('#verifyOtpForm')!;
+  const status = document.querySelector<HTMLElement>('#authStatus')!;
+  const profileStatus = document.querySelector<HTMLElement>('#profileStatus')!;
+  const emailInput = document.querySelector<HTMLInputElement>('#emailInput')!;
+  let lastEmail = '';
+
+  async function renderSession() {
+    if (!supabase) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { login.hidden = false; profile.hidden = true; return; }
+    login.hidden = true; profile.hidden = false;
+    document.querySelector('#accountEmail')!.textContent = user.email ?? '';
+    await syncCartForUser(user.id);
+    const { data } = await supabase.from('profiles').select('full_name,phone_e164,avatar_url').eq('id', user.id).maybeSingle();
+    (document.querySelector<HTMLInputElement>('#displayName')!).value = data?.full_name ?? '';
+    (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = data?.phone_e164 ?? '';
+    const avatar = document.querySelector<HTMLImageElement>('#avatarPreview')!;
+    avatar.hidden = !data?.avatar_url;
+    if (data?.avatar_url) avatar.src = data.avatar_url;
+  }
+  if (supabase) {
+    void renderSession();
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) window.setTimeout(() => void renderSession(), 0);
+      else { localStorage.removeItem('achados_radar_cart_owner'); void renderSession(); }
+    });
+  }
+
+  requestForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!supabase) { status.textContent = 'O acesso ainda não está configurado.'; return; }
+    lastEmail = emailInput.value.trim().toLowerCase();
+    status.textContent = 'Enviando código...';
+    const { error } = await supabase.auth.signInWithOtp({ email: lastEmail, options: { shouldCreateUser: true, emailRedirectTo: `${location.origin}/conta` } });
+    status.textContent = error ? 'Não foi possível enviar agora. Confira o email e tente novamente.' : 'Código enviado. Confira sua caixa de entrada e o spam.';
+    verifyForm.hidden = Boolean(error);
+  });
+  document.querySelector<HTMLButtonElement>('#resendOtp')!.addEventListener('click', () => requestForm.requestSubmit());
+  verifyForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const token = document.querySelector<HTMLInputElement>('#otpInput')!.value.trim();
+    const { error } = await supabase.auth.verifyOtp({ email: lastEmail || emailInput.value.trim().toLowerCase(), token, type: 'email' });
+    status.textContent = error ? 'Código inválido ou expirado. Solicite outro e tente novamente.' : 'Acesso confirmado.';
+    if (!error) await renderSession();
+  });
+  document.querySelector<HTMLFormElement>('#profileForm')!.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    profileStatus.textContent = 'Salvando perfil...';
+    const name = document.querySelector<HTMLInputElement>('#displayName')!.value.trim();
+    const rawPhone = document.querySelector<HTMLInputElement>('#phoneNumber')!.value.trim();
+    const digits = rawPhone.replace(/\D/g, '');
+    if (digits && ![10, 11, 12, 13].includes(digits.length)) { profileStatus.textContent = 'Informe um telefone brasileiro válido ou deixe o campo vazio.'; return; }
+    const phone = digits ? `+${digits.startsWith('55') ? digits : `55${digits}`}` : null;
+    let avatarUrl: string | undefined;
+    const file = document.querySelector<HTMLInputElement>('#avatarFile')!.files?.[0];
+    try {
+      if (file) avatarUrl = await uploadAvatar(user, file);
+      const patch: Record<string, string | null> = { full_name: name || null, phone_e164: phone };
+      if (avatarUrl) patch.avatar_url = avatarUrl;
+      const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
+      if (error) throw error;
+      if (avatarUrl) { const preview = document.querySelector<HTMLImageElement>('#avatarPreview')!; preview.src = avatarUrl; preview.hidden = false; }
+      profileStatus.textContent = 'Perfil atualizado.';
+    } catch (error) { profileStatus.textContent = error instanceof Error ? error.message : 'Não foi possível salvar o perfil.'; }
+  });
+  document.querySelector<HTMLButtonElement>('#signOutButton')!.addEventListener('click', async () => {
+    if (supabase) await supabase.auth.signOut({ scope: 'local' });
+    localStorage.removeItem('achados_radar_cart_owner');
+    status.textContent = 'Você saiu da conta.';
+  });
+  document.querySelector<HTMLButtonElement>('#deleteAccountButton')!.addEventListener('click', async () => {
+    if (!supabase || !confirm('Excluir permanentemente sua conta e os dados associados?')) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const response = await fetch('/api/account/delete', { method: 'POST', headers: { authorization: `Bearer ${session.access_token}` } });
+    if (!response.ok) { profileStatus.textContent = 'A exclusão não foi concluída. Entre em contato pelo canal indicado na política de privacidade.'; return; }
+    await supabase.auth.signOut({ scope: 'local' });
+    localStorage.removeItem('achados_radar_cart_owner');
+    status.textContent = 'Conta excluída.';
+    await renderSession();
+  });
+</script>
+<style>
+  .account-page { max-width:760px; padding-top:40px; padding-bottom:60px; }
+  .account-page h1 { color:#222; font-size:2rem; }
+  .account-intro { color:#666; margin:8px 0 22px; }
+  .account-panel { background:#fff; border:1px solid #ddd; border-radius:8px; padding:22px; margin:18px 0; }
+  .account-panel h2 { color:#222; font-size:1.25rem; margin-bottom:16px; }
+  .account-panel form { display:grid; gap:9px; }
+  .account-panel label { color:#444; font-size:.85rem; font-weight:600; margin-top:8px; }
+  .account-panel input { min-height:42px; border:1px solid #bbb; border-radius:5px; padding:8px 10px; font:inherit; }
+  .account-panel .btn-primary { margin-top:10px; }
+  .account-notice { padding:12px; background:#fff8e5; margin-top:18px; }
+  .profile-email { color:#555; margin-bottom:12px; }
+  .avatar-preview { width:96px;height:96px;object-fit:cover;border-radius:50%;border:1px solid #ddd;margin:0 0 12px; }
+  .profile-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
+  .text-button { color:#444; text-decoration:underline; padding:8px; }
+  .delete-account { margin-top:26px; border-top:1px solid #ddd; padding-top:18px; color:#555; font-size:.88rem; }
+  .delete-account p { margin:8px 0 12px; }
+  .btn-danger { border:1px solid #a33; color:#8d2525; background:white; border-radius:5px; padding:10px 14px; min-height:42px; }
+</style>

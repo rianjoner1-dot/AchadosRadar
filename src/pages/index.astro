@@ -1,0 +1,239 @@
+---
+import Layout from '../layouts/Layout.astro';
+import demoProducts from '../../tests/fixtures/sample_20_cards.json';
+import { catalogReady } from '../modules/catalog/client';
+
+const title = 'Achados Radar | Ofertas para comparar';
+const description = 'Compare ofertas observadas no Mercado Livre e Magalu. A compra é concluída na loja parceira.';
+const demo = demoProducts.map((product) => ({
+  ...product,
+  demo: true,
+  image: product.image,
+  detailUrl: `/produto/${encodeURIComponent(product.id)}`
+}));
+---
+
+<Layout title={title} description={description}>
+  <section class="home-intro">
+    <div class="container intro-inner">
+      <p class="eyebrow">ACHADOS RADAR</p>
+      <h1>Encontre sua próxima boa compra</h1>
+      <p>Ofertas observadas em lojas parceiras. Compare as informações e finalize diretamente no marketplace.</p>
+      {!catalogReady && <p class="demo-notice" role="status">Modo de demonstração: os produtos de exemplo não têm links de compra ativos.</p>}
+    </div>
+  </section>
+
+  <section class="container catalog-section" aria-labelledby="catalog-title">
+    <h2 id="catalog-title">Buscar ofertas</h2>
+    <form id="catalogFilters" class="catalog-filters">
+      <label class="filter-search">Busca
+        <input id="catalogSearch" type="search" name="q" placeholder="Ex.: brimco, air fryer, fone..." autocomplete="off" />
+      </label>
+      <label>Loja
+        <select id="platformFilter" name="loja">
+          <option value="all">Todas as lojas</option><option value="mercadolivre">Mercado Livre</option><option value="magalu">Magalu</option>
+        </select>
+      </label>
+      <label>Preço mínimo <input id="minPrice" type="number" name="min" min="0" step="0.01" inputmode="decimal" placeholder="R$ 0" /></label>
+      <label>Preço máximo <input id="maxPrice" type="number" name="max" min="0" step="0.01" inputmode="decimal" placeholder="Sem limite" /></label>
+      <label>Ordenar
+        <select id="sortFilter" name="ordem"><option value="recent">Mais recentes</option><option value="price_asc">Menor preço</option><option value="price_desc">Maior preço</option></select>
+      </label>
+      <button class="btn-primary" type="submit">Aplicar</button>
+    </form>
+
+    <div class="results-heading"><h2 id="resultsTitle">Ofertas</h2><span id="catalogStatus" aria-live="polite">Carregando...</span></div>
+    <div id="catalogGrid" class="catalog-grid" aria-live="polite">
+      {!catalogReady && demo.map((product) => (
+        <article class="catalog-card" data-demo-card data-platform={product.platform} data-search-title={product.title} data-search-seller={product.sellerName || ''} data-price={product.price}>
+          <a class="catalog-image" href={product.detailUrl} aria-label={`Ver ${product.title}`}><img src={product.image} alt={product.title} width="320" height="260" loading="lazy" decoding="async" /></a>
+          <div class="catalog-card-body">
+            <span class="store-label">{product.storeName || (product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre')}</span>
+            <h3><a href={product.detailUrl}>{product.title}</a></h3>
+            <p class="seller-label">Vendido por {product.sellerName || 'loja parceira'}</p>
+            <p class="catalog-price">{product.priceFormatted}</p>
+            <a class="btn-secondary card-detail-link" href={product.detailUrl}>Ver detalhes</a>
+          </div>
+        </article>
+      ))}
+    </div>
+    <p id="catalogEmpty" class="catalog-empty" hidden>Nenhuma oferta corresponde a esses filtros. Altere a busca e tente novamente.</p>
+    <button type="button" id="loadMore" class="btn-secondary load-more" hidden>Carregar mais ofertas</button>
+    <div id="catalogSentinel" aria-hidden="true"></div>
+  </section>
+</Layout>
+
+<script>
+  import { catalogReady, escapeHtml, formatPrice, normalizeSearch, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
+
+  const form = document.querySelector<HTMLFormElement>('#catalogFilters')!;
+  const grid = document.querySelector<HTMLElement>('#catalogGrid')!;
+  const status = document.querySelector<HTMLElement>('#catalogStatus')!;
+  const empty = document.querySelector<HTMLElement>('#catalogEmpty')!;
+  const loadMore = document.querySelector<HTMLButtonElement>('#loadMore')!;
+  const sentinel = document.querySelector<HTMLElement>('#catalogSentinel')!;
+  const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
+  const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
+  let cursor: { created_at: string; id: string; price?: number | null } | null = null;
+  let controller: AbortController | null = null;
+  let loading = false;
+  let requestVersion = 0;
+  let appendedCount = 0;
+
+  const safeImage = (product: CatalogProduct) => product.images?.[0]?.url ?? '';
+  function renderCard(product: CatalogProduct) {
+    const id = encodeURIComponent(product.id);
+    const store = product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
+    const offer = product.offer;
+    const price = formatPrice(offer?.price);
+    const observedAt = offer?.observed_at ? new Date(offer.observed_at).toLocaleString('pt-BR') : '';
+    const image = safeImage(product);
+    return `<article class="catalog-card">
+      <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">` : '<span class="image-placeholder">Imagem indisponível</span>'}</a>
+      <div class="catalog-card-body"><span class="store-label">${store}</span><h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
+      <p class="seller-label">Vendido por ${escapeHtml(offer?.seller_name || store)}</p><p class="catalog-price">${price}</p>
+      ${offer?.installments_text ? `<p class="catalog-meta">${escapeHtml(offer.installments_text)}</p>` : ''}
+      ${offer?.shipping_text ? `<p class="catalog-meta">${escapeHtml(offer.shipping_text)}</p>` : ''}
+      ${offer?.coupon_code ? `<p class="coupon-label">Cupom: ${escapeHtml(offer.coupon_code)}</p>` : ''}
+      <p class="catalog-meta">${offer?.stock_status === 'out_of_stock' ? 'Sem estoque na última consulta' : offer?.stock_status === 'in_stock' ? 'Disponível na última consulta' : 'Estoque não confirmado'}${observedAt ? ` · consultado ${escapeHtml(observedAt)}` : ''}</p>
+      <a class="btn-secondary card-detail-link" href="/produto?id=${id}">Ver detalhes</a></div></article>`;
+  }
+
+  function currentFilters() {
+    const params = new FormData(form);
+    return { q: String(params.get('q') || ''), platform: String(params.get('loja') || 'all'), min: Number(params.get('min')) || undefined, max: Number(params.get('max')) || undefined, sort: String(params.get('ordem') || 'recent') };
+  }
+
+  function filterDemo() {
+    const filters = currentFilters();
+    const query = normalizeSearch(filters.q);
+    let visible = 0;
+    const cards = [...grid.querySelectorAll<HTMLElement>('[data-demo-card]')];
+    for (const card of cards) {
+      const matches = (!query || normalizeSearch(`${card.dataset.searchTitle} ${card.dataset.searchSeller}`).includes(query))
+        && (filters.platform === 'all' || card.dataset.platform === filters.platform)
+        && (filters.min === undefined || Number(card.dataset.price) >= filters.min)
+        && (filters.max === undefined || Number(card.dataset.price) <= filters.max);
+      card.hidden = !matches;
+      if (matches) visible++;
+    }
+    if (filters.sort !== 'recent') {
+      cards.sort((a, b) => (Number(a.dataset.price) - Number(b.dataset.price)) * (filters.sort === 'price_desc' ? -1 : 1));
+      cards.forEach((card) => grid.append(card));
+    }
+    status.textContent = `${visible} exemplo${visible === 1 ? '' : 's'} locais · sem links de compra`;
+    empty.hidden = visible > 0;
+  }
+
+  function syncUrl() {
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(form).entries()) if (String(value).trim() && !(key === 'loja' && value === 'all') && !(key === 'ordem' && value === 'recent')) params.set(key, String(value));
+    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+  }
+
+  async function load(reset: boolean) {
+    if (reset) {
+      requestVersion++;
+      loading = false;
+      controller?.abort();
+      controller = new AbortController();
+      cursor = null;
+      appendedCount = 0;
+      grid.replaceChildren();
+    }
+    if (!catalogReady || loading) return;
+    loading = true;
+    loadMore.disabled = true;
+    status.textContent = 'Buscando ofertas...';
+    const version = requestVersion;
+    try {
+      const products = await searchCatalog({ ...currentFilters(), cursor, limit: 20, signal: controller?.signal });
+      if (version !== requestVersion) return;
+      grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
+      appendedCount += products.length;
+      if (products.length) cursor = { created_at: products[products.length - 1].created_at, id: products[products.length - 1].id, price: products[products.length - 1].offer?.price ?? null };
+      status.textContent = `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 20 ? ' · role ou carregue mais' : ''}`;
+      empty.hidden = appendedCount > 0;
+      loadMore.hidden = products.length < 20;
+      if (appendedCount > 80) {
+        const removable = grid.querySelectorAll('.catalog-card');
+        for (let i = 0; i < removable.length - 80; i++) removable[i].remove();
+      }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') status.textContent = 'Não foi possível carregar. Verifique a conexão e tente novamente.';
+    } finally {
+      if (version === requestVersion) { loading = false; loadMore.disabled = false; }
+    }
+  }
+
+  const query = new URLSearchParams(location.search);
+  queryInput.value = query.get('q') ?? '';
+  if (globalSearch) globalSearch.value = queryInput.value;
+  (document.querySelector('#platformFilter') as HTMLSelectElement).value = query.get('loja') ?? 'all';
+  (document.querySelector('#minPrice') as HTMLInputElement).value = query.get('min') ?? '';
+  (document.querySelector('#maxPrice') as HTMLInputElement).value = query.get('max') ?? '';
+  (document.querySelector('#sortFilter') as HTMLSelectElement).value = query.get('ordem') ?? 'recent';
+
+  if (catalogReady) {
+    grid.replaceChildren();
+    status.textContent = 'Carregando ofertas atualizadas do catálogo...';
+    void load(true);
+  } else {
+    filterDemo();
+  }
+
+  let debounce: number;
+  queryInput.addEventListener('input', () => {
+    if (globalSearch) globalSearch.value = queryInput.value;
+    window.clearTimeout(debounce);
+    debounce = window.setTimeout(() => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); }, 250);
+  });
+  globalSearch?.addEventListener('input', () => {
+    queryInput.value = globalSearch.value;
+    window.clearTimeout(debounce);
+    debounce = window.setTimeout(() => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); }, 250);
+  });
+  globalSearch?.form?.addEventListener('submit', (event) => { event.preventDefault(); queryInput.value = globalSearch.value; syncUrl(); void load(true); });
+  form.addEventListener('change', () => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
+  form.addEventListener('submit', (event) => { event.preventDefault(); syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
+  loadMore.addEventListener('click', () => void load(false));
+  if ('IntersectionObserver' in window) new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting) && !loadMore.hidden) void load(false);
+  }, { rootMargin: '600px' }).observe(sentinel);
+</script>
+
+<style>
+  .home-intro { background: #f5f5f5; border-bottom: 1px solid #e5e5e5; padding: 42px 0; }
+  .intro-inner { max-width: 1240px; }
+  .eyebrow { color: #555; font-size: .78rem; font-weight: 700; letter-spacing: .09em; margin-bottom: 8px; }
+  .intro-inner h1 { color: #222; font-size: clamp(1.8rem, 4vw, 2.65rem); letter-spacing: -.03em; }
+  .intro-inner > p:not(.eyebrow) { color: #555; margin-top: 10px; max-width: 700px; }
+  .demo-notice { background: #fff8e5; border-left: 3px solid #d69e00; padding: 9px 12px; margin-top: 16px !important; font-size: .88rem; }
+  .catalog-section { padding-top: 32px; padding-bottom: 56px; }
+  .catalog-section > h2, .results-heading h2 { color: #222; font-size: 1.2rem; }
+  .catalog-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(120px, 1fr)) auto; gap: 12px; padding: 18px; margin: 14px 0 30px; background: #fff; border: 1px solid #dedede; border-radius: 8px; }
+  .catalog-filters label { display: grid; gap: 6px; color: #444; font-size: .8rem; font-weight: 600; }
+  .catalog-filters input, .catalog-filters select { min-width: 0; width: 100%; min-height: 42px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 8px 10px; color: #222; background: #fff; font: inherit; }
+  .catalog-filters .btn-primary { align-self: end; }
+  .results-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .results-heading span { color: #666; font-size: .84rem; }
+  .catalog-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .catalog-card { min-width: 0; overflow: hidden; display: flex; flex-direction: column; background: white; border: 1px solid #e0e0e0; border-radius: 8px; transition: box-shadow .18s ease, transform .18s ease; }
+  .catalog-card:hover { box-shadow: 0 5px 18px rgba(0,0,0,.1); transform: translateY(-2px); }
+  .catalog-image { min-height: 200px; height: 220px; display: grid; place-items: center; padding: 14px; background: #fff; border-bottom: 1px solid #eee; }
+  .catalog-image img { width: 100%; height: 100%; object-fit: contain; }
+  .image-placeholder { color: #777; font-size: .85rem; }
+  .catalog-card-body { padding: 14px; display: flex; flex: 1; flex-direction: column; align-items: flex-start; }
+  .store-label { color: #666; text-transform: uppercase; font-size: .68rem; letter-spacing: .05em; font-weight: 700; }
+  .catalog-card h3 { margin: 6px 0; font: 500 .94rem/1.4 var(--font-body); color: #222; }
+  .catalog-card h3 a:hover { text-decoration: underline; }
+  .seller-label, .catalog-meta { color: #777; font-size: .76rem; margin-top: 5px; }
+  .catalog-price { color: #222; font-size: 1.22rem; font-weight: 700; margin-top: 10px; }
+  .coupon-label { margin-top: 5px; color: #35633e; font-size: .78rem; }
+  .card-detail-link { margin-top: auto; width: 100%; }
+  .catalog-empty { padding: 36px; text-align: center; color: #555; }
+  .load-more { display: flex; margin: 24px auto 0; }
+  #catalogSentinel { height: 1px; }
+  @media (max-width: 980px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .catalog-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .home-intro { padding: 30px 0; } .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .catalog-card-body { padding: 10px; } .catalog-image { height: 170px; min-height: 150px; padding: 10px; } .catalog-card h3 { font-size: .84rem; } .catalog-price { font-size: 1.08rem; } .catalog-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 9px; } .catalog-filters .filter-search { grid-column: 1 / -1; } .catalog-filters .btn-primary { min-height: 40px; } }
+</style>

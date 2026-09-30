@@ -1,0 +1,25 @@
+{
+  "name": "achados-radar-site",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Achados Radar - Vitrine de Afiliados de Alta Performance",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "bridge": "node scripts/local-catalog-bridge.mjs",
+    "build": "astro build",
+    "check": "astro check",
+    "test:budget": "node scripts/verify-functions.cjs && node scripts/verify-payload.cjs",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "dependencies": {
+    "@astrojs/vercel": "^9.0.5",
+    "@supabase/supabase-js": "^2.117.2",
+    "astro": "^5.0.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@electric-sql/pglite": "^0.5.8",
+    "typescript": "^5.7.0"
+  }
+}

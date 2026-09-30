@@ -1,0 +1,266 @@
+---
+// src/components/ProductCard.astro
+interface Props {
+  product: {
+    id: string;
+    platform: string;
+    title: string;
+    price: number;
+    priceFormatted: string;
+    oldPriceFormatted?: string;
+    discountPercent?: string;
+    sellerName?: string;
+    sellerId?: string;
+    storeName?: string;
+    image: string;
+    shipping?: string;
+    installments?: string;
+    coupon?: string;
+    stockStatus?: string;
+    url?: string;
+  };
+}
+
+const { product } = Astro.props;
+const isML = product.platform === 'mercadolivre';
+---
+
+<article class="product-card" data-product-id={product.id}>
+  <div class="card-media">
+    <img
+      src={product.image}
+      alt={product.title}
+      loading="lazy"
+      decoding="async"
+      width="280"
+      height="280"
+      class="card-img"
+    />
+    <div class="card-badges">
+      <span class={`badge-platform ${isML ? 'badge-mercadolivre' : 'badge-magalu'}`}>
+        {isML ? 'Mercado Livre' : 'Magalu'}
+      </span>
+      {product.discountPercent && (
+        <span class="badge-discount">{product.discountPercent}</span>
+      )}
+    </div>
+  </div>
+
+  <div class="card-content">
+    <div class="card-seller-row">
+      <span class="badge-seller" title={`Vendido por ${product.sellerName || 'Loja Parceira'}`}>
+        Vendido por: <strong>{product.sellerName || 'Loja Parceira'}</strong>
+      </span>
+    </div>
+
+    <h3 class="card-title">
+      <a href={`/produto/${product.id}`} title={product.title}>
+        {product.title}
+      </a>
+    </h3>
+
+    <div class="card-price-block">
+      {product.oldPriceFormatted && (
+        <span class="old-price">{product.oldPriceFormatted}</span>
+      )}
+      <span class="current-price">{product.priceFormatted}</span>
+      {product.installments && (
+        <span class="installments-text">{product.installments}</span>
+      )}
+    </div>
+
+    {product.shipping && (
+      <div class="shipping-info">
+        <span class="shipping-icon" aria-hidden="true">🚚</span>
+        <span>{product.shipping}</span>
+      </div>
+    )}
+
+    {product.coupon && (
+      <div class="coupon-tag">
+        <span aria-hidden="true">🏷️</span> Cupom: <strong>{product.coupon}</strong>
+      </div>
+    )}
+
+    <div class="card-actions">
+      <a
+        href={product.url || `/produto/${product.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-primary card-outbound-btn"
+        aria-label={`Ver oferta de ${product.title} no ${product.storeName || 'Marketplace'}`}
+      >
+        <span>Ver na Loja</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="10" y1="14" x2="21" y2="3"></line>
+        </svg>
+      </a>
+
+      <button
+        type="button"
+        class="btn-secondary save-item-btn"
+        data-action="save-item"
+        data-item={JSON.stringify(product)}
+        aria-label={`Salvar ${product.title} na lista de interesses`}
+        title="Salvar na Minha Lista"
+      >
+        <span aria-hidden="true">📌</span>
+      </button>
+    </div>
+  </div>
+</article>
+
+<style>
+  .product-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .product-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-active);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .card-media {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 12px;
+    transition: transform 0.3s ease;
+  }
+
+  .product-card:hover .card-img {
+    transform: scale(1.04);
+  }
+
+  .card-badges {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 2;
+  }
+
+  .badge-discount {
+    background: var(--accent-rose);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    width: fit-content;
+  }
+
+  .card-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .card-seller-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .card-title {
+    font-size: 0.96rem;
+    font-weight: 600;
+    line-height: 1.35;
+    height: 2.7em;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .card-title a {
+    color: var(--text-primary);
+  }
+
+  .card-title a:hover {
+    color: var(--accent-cyan);
+  }
+
+  .card-price-block {
+    display: flex;
+    flex-direction: column;
+    margin-top: 4px;
+  }
+
+  .old-price {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-decoration: line-through;
+  }
+
+  .current-price {
+    font-size: 1.4rem;
+    font-weight: 800;
+    font-family: var(--font-heading);
+    color: #fff;
+  }
+
+  .installments-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+
+  .shipping-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--accent-emerald);
+    font-weight: 500;
+  }
+
+  .coupon-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--accent-amber);
+    border: 1px dashed rgba(245, 158, 11, 0.3);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+  }
+
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .card-outbound-btn {
+    flex: 1;
+    font-size: 0.9rem;
+  }
+
+  .save-item-btn {
+    padding: 0 12px;
+  }
+</style>

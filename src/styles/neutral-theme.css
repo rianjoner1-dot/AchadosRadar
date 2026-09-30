@@ -1,0 +1,33 @@
+/* Shared finishes for a calm, familiar marketplace storefront. */
+html, body { background: var(--bg-canvas); color: var(--text-primary); }
+.site-header { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); box-shadow: var(--shadow-sm); }
+.brand-logo, .nav-btn, .search-input { color: var(--text-primary); }
+.brand-accent { color: var(--text-primary); }
+.radar-dot, .live-dot { background: var(--action); box-shadow: none; animation: none; }
+.search-form { border: 1px solid #bdbdbd; border-radius: var(--radius-sm); background: #fff; box-shadow: none; }
+.search-form:focus-within { border-color: #777; box-shadow: 0 0 0 2px rgba(35, 89, 168, .16); }
+.search-btn, .cart-count-badge { background: #333; color: #fff; box-shadow: none; }
+.search-btn:hover { background: #111; color: #fff; }
+.nav-btn { border: 1px solid #ccc; background: #fff; }
+.nav-btn:hover { border-color: #999; background: #f7f7f7; }
+.site-footer { border-top: 1px solid var(--border-subtle); background: #eee; color: var(--text-secondary); }
+.site-footer h1, .site-footer h2, .site-footer h3, .site-footer .brand-title, .group-title { color: var(--text-primary); }
+.site-footer .footer-disclaimer { border: 1px solid #dedede; border-radius: var(--radius-md); background: #f8f8f8; color: var(--text-secondary); }
+.footer-links a:hover { color: #111; }
+.toast-notification { border: 1px solid #222; background: #333; color: #fff; box-shadow: var(--shadow-lg); }
+.product-card { border: 1px solid #dedede; background: #fff; box-shadow: none; }
+.product-card:hover { border-color: #aaa; box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.card-media, .main-image-frame { background: #fff; }
+.gradient-text { background: none; color: #222; -webkit-text-fill-color: currentColor; }
+.hero-section { background: #f0f0f0; }
+.hero-badge { border-color: #ddd; background: #f2f2f2; color: #444; }
+.filter-btn, .active-filter-strip, .cart-info-banner, .detail-coupon-card { border-color: #ddd; background: #f6f6f6; box-shadow: none; }
+.filter-btn.active { border-color: #555; color: #222; }
+.active-filter-msg, .breadcrumb-nav a:hover { color: #333; }
+.price-value, .current-price { color: #222; }
+.badge-discount { background: #eee; color: #333; }
+.stock-indicator, .detail-shipping-card { color: #47734e; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

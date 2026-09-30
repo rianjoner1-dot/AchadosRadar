@@ -1,0 +1,8 @@
+# robots.txt para Achados Radar
+User-agent: *
+Allow: /
+
+# Carrinho e listas locais não necessitam de indexação
+Disallow: /carrinho
+
+Sitemap: https://achadosradar.com.br/sitemap.xml
