@@ -375,6 +375,10 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await runMigration(db, '20260929180700_public_link_readiness.sql');
     await runMigration(db, '20260930100000_cap_catalog_search_page_size.sql');
     await runMigration(db, '20260930110000_limit_public_offer_columns.sql');
+    await runMigration(db, '20260930120000_revoke_public_private_table_grants.sql');
+    assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.profiles', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to profiles');
+    assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to saved carts');
+    assert.equal((await db.query("SELECT has_table_privilege('authenticated', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, true, 'Authenticated users retain cart access, filtered by RLS');
     const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     await db.query('INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ($1, $2, $3)', [userId, 'otp@example.test', JSON.stringify({ full_name: 'Pessoa Teste' })]);
     const profile = await db.query('SELECT id, email, full_name FROM public.profiles WHERE id = $1', [userId]);

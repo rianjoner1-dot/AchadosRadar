@@ -3,12 +3,12 @@ SELECT
   current_database() AS database_name,
   current_setting('server_version') AS server_version,
   (
-    SELECT count(*) = 10
+    SELECT count(*) = 11
     FROM supabase_migrations.schema_migrations
     WHERE version IN (
       '20260929180000', '20260929180100', '20260929180200', '20260929180300',
       '20260929180400', '20260929180500', '20260929180600', '20260929180700',
-      '20260930100000', '20260930110000'
+      '20260930100000', '20260930110000', '20260930120000'
     )
   ) AS all_site_migrations_applied,
   to_regclass('public.products') IS NOT NULL AS products_table_exists,
@@ -29,6 +29,19 @@ SELECT
   has_column_privilege('anon', 'public.offers', 'price', 'SELECT') AS anon_can_read_offer_price,
   NOT has_column_privilege('anon', 'public.offers', 'seller_id', 'SELECT') AS anon_cannot_read_seller_id,
   NOT has_table_privilege('anon', 'public.cart_items', 'SELECT') AS anon_cannot_read_cart,
+  NOT has_table_privilege('anon', 'public.profiles', 'SELECT') AS anon_cannot_read_profiles,
+  (
+    SELECT count(*)
+    FROM information_schema.role_table_grants
+    WHERE table_schema = 'public' AND table_name = 'cart_items' AND grantee = 'anon' AND privilege_type = 'SELECT'
+  ) AS explicit_anon_cart_select_grants,
+  (
+    SELECT count(*)
+    FROM pg_auth_members m
+    JOIN pg_roles granted ON granted.oid = m.roleid
+    JOIN pg_roles member ON member.oid = m.member
+    WHERE member.rolname = 'anon' AND granted.rolname = 'authenticated'
+  ) AS anon_inherits_authenticated_role,
   has_function_privilege('anon', 'public.get_public_link_state(uuid)', 'EXECUTE') AS anon_can_read_safe_link_state,
   (SELECT count(*) FROM public.profiles) AS profile_row_count,
   (SELECT count(*) FROM public.cart_items) AS cart_row_count;
