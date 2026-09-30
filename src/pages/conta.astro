@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { authReady } from '../modules/auth/client';
 ---
 <Layout title="Minha conta | Achados Radar" description="Entre por código enviado ao seu email e edite seu perfil.">
-  <main class="container account-page">
+  <div class="container account-page">
     <h1>Minha conta</h1>
     <p class="account-intro">Acesse sua lista e mantenha seus dados atualizados. O acesso é por email, sem senha obrigatória.</p>
     {!authReady && <p class="account-notice" role="status">O acesso ficará disponível quando o Supabase for configurado.</p>}
@@ -34,7 +34,7 @@ import { authReady } from '../modules/auth/client';
       <details class="delete-account"><summary>Excluir conta</summary><p>A exclusão remove o perfil, a lista sincronizada e a foto de perfil. Esta ação não pode ser desfeita.</p><button id="deleteAccountButton" type="button" class="btn-danger">Excluir minha conta</button></details>
       <p id="profileStatus" role="status" aria-live="polite"></p>
     </section>
-  </main>
+  </div>
 </Layout>
 <script>
   import { supabase, syncCartForUser, uploadAvatar } from '../modules/auth/client';

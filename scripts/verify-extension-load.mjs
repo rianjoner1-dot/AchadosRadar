@@ -1,17 +1,21 @@
-import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveChromeExecutable } from './chrome-executable.mjs';
 
 const extensionDir = path.resolve(process.argv[2] ?? '../robo-afiliados-autonomo');
-const browserExe = process.argv[3] ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const browserExe = resolveChromeExecutable(process.argv[3]);
 const debugPort = 9225;
-const profileDir = await mkdtemp(path.join(os.tmpdir(), 'codex-affiliate-edge-'));
+const profileDir = await mkdtemp(path.join(os.tmpdir(), 'codex-affiliate-chrome-'));
+const browserLogFile = path.join(profileDir, 'chrome.log');
 
 const child = spawn(browserExe, [
   '--no-first-run',
   '--no-default-browser-check',
   '--disable-background-mode',
+  '--enable-logging',
+  `--log-file=${browserLogFile}`,
   `--remote-debugging-port=${debugPort}`,
   `--user-data-dir=${profileDir}`,
   `--disable-extensions-except=${extensionDir}`,
@@ -41,7 +45,14 @@ try {
     await sleep(500);
   }
 
-  if (!worker) throw new Error('No project service worker appeared in Edge DevTools targets.');
+  if (!worker) {
+    const browserLog = await readFile(browserLogFile, 'utf8').catch(() => 'Chrome did not create a diagnostic log.');
+    if (browserLog.includes('--disable-extensions-except is not allowed in Google Chrome')) {
+      throw new Error('Google Chrome blocks command-line loading of local extensions. Reload the unpacked extension in chrome://extensions; this isolated test did not load it.');
+    }
+    console.error(browserLog.split(/\r?\n/).slice(-60).join('\n'));
+    throw new Error('No project service worker appeared in Chrome DevTools targets.');
+  }
   socket = new WebSocket(worker.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
     socket.addEventListener('open', resolve, { once: true });
@@ -71,7 +82,7 @@ try {
 } finally {
   socket?.close();
   if (child.exitCode === null && child.signalCode === null) {
-    child.kill();
+    try { execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch {}
     await Promise.race([
       new Promise((resolve) => child.once('exit', resolve)),
       sleep(5000),

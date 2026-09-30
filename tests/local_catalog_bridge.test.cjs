@@ -35,7 +35,7 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`;
     const first = await fetch(`${baseUrl}/api/save_product`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
-      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo', price: 19.9, stockStatus: 'unknown', images: ['https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg'], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10' })
+      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo', price: 19.9, stockStatus: 'unknown', stockEvidence: 'Quantidade não exibida', images: ['https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg'], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10' })
     });
     assert.equal(first.status, 201);
     assert.equal(first.headers.get('access-control-allow-origin'), extensionOrigin);
@@ -50,6 +50,19 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     assert.equal(catalog.products[0].title, 'Produto exemplo atualizado');
     assert.deepEqual(catalog.products[0].images, ['https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg']);
     assert.equal(catalog.products[0].coupon, 'CUPOM10');
+    assert.equal(catalog.products[0].stockEvidence, 'Quantidade não exibida');
+
+    const statusResponse = await fetch(`${baseUrl}/api/status`);
+    assert.equal(statusResponse.status, 200);
+    const status = await statusResponse.json();
+    assert.equal(status.total_products_stored, 1, 'old extension dashboards receive the expected status field');
+    assert.equal(status.status, 'online');
+
+    const healthResponse = await fetch(`${baseUrl}/api/health`);
+    assert.equal(healthResponse.status, 200);
+    const health = await healthResponse.json();
+    assert.equal(health.products, 1, 'existing health clients keep their product count');
+    assert.equal(health.ok, true);
 
     const blockedOrigin = await fetch(`${baseUrl}/api/save_product`, {
       method: 'POST', headers: { origin: 'https://example.invalid', 'content-type': 'application/json' },

@@ -1,6 +1,6 @@
 # Plano de implantação — Achados Radar (vitrine de afiliados)
 
-Atualizado em 29/09/2026. Estado: estrutura e implementação local em andamento. A conta Vercel Pro já está disponível; este site ainda não foi vinculado a um projeto Vercel nem a um projeto Supabase.
+Atualizado em 30/09/2026. Estado: implementação local em andamento. O proprietário confirmou que a Vercel Pro está configurada para o projeto; preview e deploy ainda precisam de evidência. A integração Supabase está sob revisão do Antigravity e permanece fora das ações do Codex até o proprietário conferir o trabalho. Ainda não há loja publicada.
 
 Execução em tarefas pequenas com validação: [etapas procedurais](site-afiliados/docs/ETAPAS_PROCEDURAIS.md).
 
@@ -83,6 +83,6 @@ Até haver prova em sessão real de cada portal, o estado `ready` exige link ger
 ## 8. Pendências externas para publicação
 
 - Confirmar se as contas Magalu e Mercado Livre permitem divulgação em domínio próprio, uso das imagens e renovação automatizada; validar os links na conta efetivamente usada. Não presumir adesão ou comissão pelo formato de URL.
-- Definir domínio e nome final; vincular este repositório à equipe Vercel Pro existente e conferir cotas no painel; configurar projeto Supabase e SMTP.
+- Definir domínio e nome final; registrar URL/ID do preview da Vercel já configurada e conferir cotas/variáveis no painel; configurar projeto Supabase e SMTP após a revisão do Antigravity.
 - Política de privacidade/LGPD, termos do site, aviso de links de afiliado, canal de contato e processo de exclusão de dados. Revisão jurídica antes da abertura pública.
 - Definir frequência de coleta por loja com base na permissão e no custo, e amostras reais de produtos para calibrar os seletores da extensão.

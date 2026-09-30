@@ -27,6 +27,12 @@ test('E1: importer accepts macro fields, preserves image order and only publishe
   assert.deepEqual(report.platformSummary.mercadolivre, { total: 1, valid: 1, publishable: 0 });
   assert.equal(report.rejected[0].errors[0], 'foto_https_ausente');
 
+  const lookalikePath = path.join(tempDir, 'lookalike.json');
+  fs.writeFileSync(lookalikePath, JSON.stringify([{ platform: 'mercadolivre', id: 'MLB124', title: 'Link curto suspeito', price: 100, stockStatus: 'in_stock', images: ['https://http2.mlstatic.com/img/1.jpg'], originalUrl: 'https://produto.mercadolivre.com.br/MLB-124', affiliateUrl: 'https://sub.meli.la/abc', isOfficialShortLink: true, linkStatus: 'ready', lastCheckedAt: now }]));
+  const lookalike = spawnSync(process.execPath, [script, lookalikePath, '--dry-run', '--summary'], { encoding: 'utf8' });
+  assert.equal(lookalike.status, 1, lookalike.stderr);
+  assert.equal(JSON.parse(lookalike.stdout).valid, 0, 'a subdomain of the official shortener is not accepted as the exact official host');
+
   const bounded = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--platform=mercadolivre', '--limit=1'], { encoding: 'utf8' });
   assert.equal(bounded.status, 0, bounded.stderr);
   const boundedReport = JSON.parse(bounded.stdout);
@@ -42,5 +48,18 @@ test('E1: importer accepts macro fields, preserves image order and only publishe
   assert.equal(normalized.shipping, 'Frete grátis');
   assert.equal(normalized.coupon, 'CUPOM10');
   assert.equal(normalized.stockQuantity, null, 'quantidade não observada permanece nula');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('E1a: importer preserves stock evidence and downgrades contradictory in-stock zero quantity', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-stock-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'stock-1', title: 'Produto', price: 10, stockStatus: 'in_stock', stockQuantity: 0, stockEvidence: '0 unidades', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/produto/stock-1', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/stock-1', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString() }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const normalized = JSON.parse(result.stdout).details[0];
+  assert.equal(normalized.stockQuantity, 0);
+  assert.equal(normalized.stockStatus, 'unknown');
+  assert.equal(normalized.stockEvidence, '0 unidades');
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

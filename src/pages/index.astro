@@ -3,6 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import demoProducts from '../../tests/fixtures/sample_20_cards.json';
 import { catalogReady } from '../modules/catalog/client';
 
+export const prerender = true;
+
 const title = 'Achados Radar | Ofertas para comparar';
 const description = 'Compare ofertas observadas no Mercado Livre e Magalu. A compra é concluída na loja parceira.';
 const demo = demoProducts.map((product) => ({
@@ -64,7 +66,8 @@ const demo = demoProducts.map((product) => ({
 </Layout>
 
 <script>
-  import { catalogReady, escapeHtml, formatPrice, normalizeSearch, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
+  import { catalogReady, escapeHtml, formatPrice, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
+  import { matchesDemoProduct } from '../modules/catalog/search-utils.js';
 
   const form = document.querySelector<HTMLFormElement>('#catalogFilters')!;
   const grid = document.querySelector<HTMLElement>('#catalogGrid')!;
@@ -106,11 +109,11 @@ const demo = demoProducts.map((product) => ({
 
   function filterDemo() {
     const filters = currentFilters();
-    const query = normalizeSearch(filters.q);
+    const query = filters.q;
     let visible = 0;
     const cards = [...grid.querySelectorAll<HTMLElement>('[data-demo-card]')];
     for (const card of cards) {
-      const matches = (!query || normalizeSearch(`${card.dataset.searchTitle} ${card.dataset.searchSeller}`).includes(query))
+      const matches = matchesDemoProduct(query, card.dataset.searchTitle || '', card.dataset.searchSeller || '')
         && (filters.platform === 'all' || card.dataset.platform === filters.platform)
         && (filters.min === undefined || Number(card.dataset.price) >= filters.min)
         && (filters.max === undefined || Number(card.dataset.price) <= filters.max);

@@ -4,7 +4,8 @@ import { cartStorageKey, readLocalCart } from '../cart/store';
 
 const url = import.meta.env.PUBLIC_SUPABASE_URL;
 const key = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
-export const authReady = Boolean(url && key);
+const localDemoMode = import.meta.env.PUBLIC_CATALOG_DEMO === 'true';
+export const authReady = !localDemoMode && Boolean(url && key);
 
 export const supabase = authReady ? createClient(url!, key!, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' }

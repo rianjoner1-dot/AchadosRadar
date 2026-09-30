@@ -21,6 +21,7 @@ const fieldAliases = {
   coupon: ['coupon', 'couponText', 'cupom'],
   stockQuantity: ['stockQuantity', 'stock_quantity'],
   stockStatus: ['stockStatus', 'stock_status'],
+  stockEvidence: ['stockEvidence', 'stock_evidence'],
   sellerName: ['sellerName', 'seller_name', 'seller'],
   sellerId: ['sellerId', 'seller_id'],
   storeName: ['storeName', 'store_name'],
@@ -113,8 +114,14 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   const route = new URL(req.url || '/', `http://${req.headers.host}`).pathname;
-  if (req.method === 'GET' && route === '/api/health') {
-    try { const catalog = await readCatalog(); return respond(res, 200, { ok: true, products: catalog.products.length, updatedAt: catalog.updatedAt }); }
+  if (req.method === 'GET' && (route === '/api/health' || route === '/api/status')) {
+    try {
+      const catalog = await readCatalog();
+      return respond(res, 200, {
+        ok: true, status: 'online', products: catalog.products.length,
+        total_products_stored: catalog.products.length, updatedAt: catalog.updatedAt
+      });
+    }
     catch { return respond(res, 500, { ok: false, error: 'Não foi possível ler o catálogo local.' }); }
   }
   if (req.method !== 'POST' || route !== '/api/save_product') return respond(res, 404, { ok: false, error: 'Rota não encontrada.' });

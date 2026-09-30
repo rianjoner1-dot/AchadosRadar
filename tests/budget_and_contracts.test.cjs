@@ -76,22 +76,58 @@ function collectFiles(dir) {
 }
 
 test('C1: Vercel artifact must contain static product pages, dynamic runtime and no secrets', () => {
+  const homePagePath = path.join(staticOutputPath, 'index.html');
+  assert.ok(fs.existsSync(homePagePath), 'Home catalog shell must be prerendered');
+  const homePage = fs.readFileSync(homePagePath, 'utf8');
+  assert.match(homePage, /Buscar ofertas/);
+  assert.match(homePage, /catalogGrid/);
+  assert.match(homePage, /loadMore/);
   assert.ok(fs.existsSync(staticOutputPath), 'Artefato estático da Vercel deve existir após build');
   assert.ok(fs.existsSync(path.join(staticOutputPath, 'produto/MLB3299039091/index.html')), 'Página estática de demonstração deve existir');
+  const demoProduct = fs.readFileSync(path.join(staticOutputPath, 'produto/MLB3299039091/index.html'), 'utf8');
+  assert.match(demoProduct, /Amostra de demonstração/);
+  assert.match(demoProduct, /Disponibilidade não verificada nesta demonstração/);
+  assert.match(demoProduct, /Compra indisponível nesta demonstração/);
+  assert.doesNotMatch(demoProduct, /Produto em estoque verificado/);
+  assert.doesNotMatch(demoProduct, /através do nosso link de afiliado oficial/);
+  assert.match(demoProduct, /Mais ofertas para comparar/);
+  assert.match(demoProduct, /property="og:image"/);
+  assert.doesNotMatch(demoProduct, /localhost:4321\/produto\/MLB3299039091\//, 'Static build must not publish localhost as the canonical origin');
+  assert.match(demoProduct, /Compartilhar produto/);
+  assert.match(demoProduct, /shareDemoProduct/);
+  assert.ok(fs.existsSync(path.join(staticOutputPath, 'product-placeholder.svg')), 'Fallback de imagem deve estar no artefato estático');
+  const layoutBundleName = fs.readdirSync(path.join(staticOutputPath, '_astro')).find((name) => name.startsWith('Layout.astro_astro_type_script'));
+  assert.ok(layoutBundleName, 'Bundle do layout deve existir');
+  assert.match(fs.readFileSync(path.join(staticOutputPath, '_astro', layoutBundleName), 'utf8'), /product-placeholder\.svg/);
+  assert.match(demoProduct, /demoRelatedMore/);
+  assert.equal((demoProduct.match(/class="demo-related-card"/g) ?? []).length, 19, 'related feed includes every other sample product without duplicating the current item');
+  assert.match(demoProduct, /Carregar mais ofertas/);
   assert.ok(fs.existsSync(path.join(staticOutputPath, 'robots.txt')), 'robots.txt deve existir no artefato');
   assert.ok(fs.existsSync(vercelFunctionsPath), 'Runtime SSR da Vercel deve existir');
 
   // Varredura de segredos em arquivos gerados
+  const publicTextFile = /\.(html|js|css|map|json|txt|xml|svg|webmanifest)$/i;
+  const secretPatterns = [
+    /\bservice_role\b/i,
+    /\bSUPABASE_SECRET_KEY\b/i,
+    /\bSUPABASE_SERVICE_ROLE_KEY\b/i,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
+    /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s"'<>]+/i
+  ];
   function scanForSecrets(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
+      assert.doesNotMatch(entry.name, /^\.env(?:\.|$)/i, 'Environment files must never be copied to the public artifact');
       if (entry.isDirectory()) {
         scanForSecrets(fullPath);
-      } else if (entry.isFile() && /\.(html|js|css)$/i.test(entry.name)) {
+      } else if (entry.isFile() && publicTextFile.test(entry.name)) {
         const content = fs.readFileSync(fullPath, 'utf8');
         assert.ok(!content.includes('service_role'), `Arquivo ${entry.name} não pode conter service_role`);
         assert.ok(!content.includes('SUPABASE_SECRET_KEY'), `Arquivo ${entry.name} não pode conter SUPABASE_SECRET_KEY`);
+        for (const pattern of secretPatterns) {
+          assert.doesNotMatch(content, pattern, `Public artifact file ${entry.name} must not contain ${pattern}`);
+        }
       }
     }
   }

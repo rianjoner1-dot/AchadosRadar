@@ -1,7 +1,8 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveChromeExecutable } from './chrome-executable.mjs';
 
 const extensionDir = path.resolve(process.argv[2] ?? '../robo-afiliados-autonomo');
 const productUrl = process.argv[3];
@@ -9,13 +10,16 @@ if (!productUrl || new URL(productUrl).hostname !== 'www.magazinevoce.com.br') {
   throw new Error('Pass a public Magalu product URL on www.magazinevoce.com.br.');
 }
 
-const browserExe = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const browserExe = resolveChromeExecutable(process.argv[4]);
 const port = 9226;
-const profileDir = await mkdtemp(path.join(os.tmpdir(), 'codex-magalu-smoke-'));
+const profileDir = await mkdtemp(path.join(os.tmpdir(), 'codex-magalu-chrome-smoke-'));
+const browserLogFile = path.join(profileDir, 'chrome.log');
 const child = spawn(browserExe, [
   '--no-first-run',
   '--no-default-browser-check',
   '--disable-background-mode',
+  '--enable-logging',
+  `--log-file=${browserLogFile}`,
   `--remote-debugging-port=${port}`,
   `--user-data-dir=${profileDir}`,
   `--disable-extensions-except=${extensionDir}`,
@@ -32,7 +36,7 @@ let tabId;
 
 try {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (child.exitCode !== null) throw new Error(`Edge exited with code ${child.exitCode}`);
+    if (child.exitCode !== null) throw new Error(`Chrome exited with code ${child.exitCode}`);
     try {
       const targets = await (await fetch(`${base}/json/list`)).json();
       worker = targets.find((target) => target.type === 'service_worker' && target.url.endsWith('/background/service_worker.js'));
@@ -40,7 +44,13 @@ try {
     } catch {}
     await sleep(500);
   }
-  if (!worker?.webSocketDebuggerUrl) throw new Error('Project service worker did not load in the isolated Edge profile.');
+  if (!worker?.webSocketDebuggerUrl) {
+    const browserLog = await readFile(browserLogFile, 'utf8').catch(() => 'Chrome did not create a diagnostic log.');
+    if (browserLog.includes('--disable-extensions-except is not allowed in Google Chrome')) {
+      throw new Error('Google Chrome blocks command-line loading of local extensions. Reload the unpacked extension in chrome://extensions before running this smoke test.');
+    }
+    throw new Error('Project service worker did not load in the isolated Chrome profile.');
+  }
 
   socket = new WebSocket(worker.webSocketDebuggerUrl);
   const pending = new Map();

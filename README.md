@@ -4,7 +4,8 @@ Vitrine de ofertas do Mercado Livre e da Magalu. O usuário pode salvar produtos
 
 ## Arquitetura
 
-- Astro 5 com adaptador Vercel: rotas de catálogo e saída dinâmicas, com páginas de demonstração pré-renderizadas.
+- Astro 7.3.5 com adaptador Vercel 11: rotas de catálogo e saída dinâmicas, com páginas de demonstração pré-renderizadas.
+- Runtime mínimo Node.js 22.12.0; a configuração `engines.node` seleciona uma versão compatível no build e nas funções Vercel.
 - Supabase Postgres, RLS, Auth por email OTP e Storage para avatar. A chave service role fica somente no importador executado em ambiente local confiável.
 - Busca, filtros, paginação e feed relacionados usam `fetch`/AJAX. A primeira consulta é limitada a 20 itens e as imagens vêm das URLs de origem permitidas.
 - Meta de até 4 funções serverless; limite rígido do projeto abaixo de 12. O artefato local atual contém uma função.
@@ -52,6 +53,6 @@ A importação real requer `PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` e
 - Base, migrations, RLS e testes locais estão implementados.
 - Importador validado com export existente: 175 registros analisados; 64 registros Magalu/Mercado Livre aceitos pelo contrato, nenhum publicável até confirmar link e estoque.
 - Vitrine, produto, carrinho, OTP e saída têm implementação local. Auth real, sincronização com Supabase, preview/deploy e autorização de uso de links/imagens ainda precisam de validação nos serviços e portais reais.
-- Vercel Pro já está disponível; ainda falta vincular o projeto à equipe. Supabase, SMTP e URLs autorizadas de autenticação ainda não foram conectados.
+- Vercel configurada conforme confirmação do proprietário; URL/ID do preview e validação dos fluxos hospedados ainda precisam ser registrados. Supabase, SMTP e URLs autorizadas de autenticação aguardam a revisão do Antigravity.
 
 Use o [roteiro procedural](docs/ETAPAS_PROCEDURAIS.md) e registre cada resultado em [VALIDACOES.md](docs/VALIDACOES.md). Não marque um portão como concluído apenas porque o código compila.

@@ -1,3 +1,5 @@
+export { normalizeSearch } from './search-utils.js';
+
 export interface CatalogOffer {
   price: number;
   old_price?: number | null;
@@ -29,7 +31,8 @@ const config = {
   key: import.meta.env.PUBLIC_SUPABASE_ANON_KEY
 };
 
-export const catalogReady = Boolean(config.url && config.key);
+const localDemoMode = import.meta.env.PUBLIC_CATALOG_DEMO === 'true';
+export const catalogReady = !localDemoMode && Boolean(config.url && config.key);
 
 function headers(token?: string): HeadersInit {
   return {
@@ -81,8 +84,4 @@ export function formatPrice(value?: number | null): string {
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
-}
-
-export function normalizeSearch(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]/g, '');
 }

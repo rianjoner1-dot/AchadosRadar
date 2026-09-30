@@ -2,6 +2,7 @@
 // src/layouts/Layout.astro
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import SpeedInsights from '@vercel/speed-insights/astro';
 import '../styles/global.css';
 import '../styles/neutral-theme.css';
 
@@ -15,7 +16,7 @@ interface Props {
 
 const {
   title = "Achados Radar — As Melhores Promoções em Mercado Livre e Magalu",
-  description = "Vitrine independente de promoções e achados verificados com preços atualizados no Mercado Livre e Magazine Luiza.",
+  description = "Compare ofertas observadas no Mercado Livre e Magazine Luiza. Confira preço, estoque e condições na loja antes de comprar.",
   canonicalUrl,
   ogImage,
   ogType = 'website'
@@ -91,8 +92,23 @@ const {
         } catch { /* Ignore invalid product data. */ }
       });
       document.addEventListener('cart:changed', () => { updateCartBadge(); syncButtons(); });
+
+      const useImageFallback = (image: HTMLImageElement) => {
+        if (image.dataset.imageFallback === 'true') return;
+        image.dataset.imageFallback = 'true';
+        image.src = '/product-placeholder.svg';
+        image.alt = image.alt || 'Imagem indisponível';
+      };
+      document.addEventListener('error', (event) => {
+        if (event.target instanceof HTMLImageElement) useImageFallback(event.target);
+      }, true);
+      document.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
+        if (image.complete && image.naturalWidth === 0) useImageFallback(image);
+      });
+
       updateCartBadge(); syncButtons();
     </script>
+    <SpeedInsights />
   </body>
 </html>
 
@@ -102,6 +118,8 @@ const {
     display: flex;
     flex-direction: column;
     outline: none;
+    min-width: 0;
+    width: 100%;
   }
 
   .toast-notification {

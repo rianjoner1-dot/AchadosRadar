@@ -21,8 +21,8 @@ A ponte escuta somente em `127.0.0.1`, valida origem `chrome-extension://`, limi
 
 ## Aplicação e hospedagem
 
-- Astro 5 e adaptador oficial da Vercel. Rotas dinâmicas usam SSR; 20 páginas de amostra são pré-renderizadas sem links de compra ativos.
-- Vercel Pro já está disponível para o proprietário. Este projeto ainda não foi associado a uma equipe/projeto Vercel.
+- Astro 7.3.5 e adaptador oficial da Vercel. Rotas dinâmicas usam SSR; 20 páginas de amostra são pré-renderizadas sem links de compra ativos.
+- O proprietário confirmou que a Vercel Pro e o projeto estão configurados. A URL de preview, variáveis de ambiente e respostas no runtime hospedado ainda precisam ser verificadas em H1.9/H1.10.
 - O build local atual emite uma função de runtime. Meta operacional: até 4; limite rígido: menos de 12.
 - Busca, filtros, cursor, compartilhamento e ofertas relacionadas são carregados no cliente via `fetch`/AJAX.
 - Os cards pedem a primeira imagem; galeria do produto mantém as URLs em ordem e imagens secundárias carregam sob demanda.

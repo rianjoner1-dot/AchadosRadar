@@ -7,8 +7,9 @@ export const prerender = false;
 const requestedId = Astro.url.searchParams.get('id')?.trim() ?? '';
 const publicUrl = import.meta.env.PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
 const publicKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+const localDemoMode = import.meta.env.PUBLIC_CATALOG_DEMO === 'true';
 let socialProduct: { title: string; description: string; image: string | null } | null = null;
-if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId) && publicUrl && publicKey) {
+if (!localDemoMode && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId) && publicUrl && publicKey) {
   try {
     const productQuery = new URLSearchParams({ select: 'title,description', id: `eq.${requestedId}`, status: 'eq.published', limit: '1' });
     const headers = { apikey: publicKey, authorization: `Bearer ${publicKey}` };
@@ -31,14 +32,15 @@ const pageDescription = socialProduct?.description ?? 'Informações da oferta, 
 const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(requestedId)}`, Astro.url.origin).href : undefined;
 ---
 <Layout title={pageTitle} description={pageDescription} canonicalUrl={canonicalUrl} ogImage={socialProduct?.image ?? undefined} ogType={socialProduct ? 'product' : 'website'}>
-  <main class="container product-page" data-catalog-ready={catalogReady}>
+  <div class="container product-page" data-catalog-ready={catalogReady}>
     <nav class="product-breadcrumb" aria-label="Navegação estrutural"><a href="/">Início</a><span aria-hidden="true">›</span><span id="breadcrumbProduct">Produto</span></nav>
     <p id="productStatus" role="status">Carregando detalhes do produto...</p>
     <article id="productContent" hidden>
       <div class="product-overview">
         <section class="product-gallery" aria-label="Fotos do produto">
           <div id="productMainImage" class="product-main-image"></div>
-          <div id="productThumbnails" class="product-thumbnails" role="list"></div>
+          <div id="productThumbnails" class="product-thumbnails" role="group" aria-label="Fotos do produto"></div>
+          <p id="galleryAnnouncement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
         <section class="product-info">
           <p id="productStore" class="product-store"></p>
@@ -50,6 +52,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           <a id="buyProduct" class="btn-primary product-buy" aria-disabled="true">Link sendo verificado</a>
           <button id="saveProduct" class="btn-secondary" type="button">Salvar na minha lista</button>
           <button id="shareProduct" class="share-button" type="button">Compartilhar produto</button>
+          <p id="shareProductStatus" class="share-status" role="status" aria-live="polite"></p>
           <p class="product-disclaimer">Preço, frete e estoque são informações observadas e podem mudar. A compra, entrega e pagamento são concluídos na loja parceira. Podemos receber comissão por links de afiliados.</p>
         </section>
       </div>
@@ -61,10 +64,12 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
       </section>
     </article>
     <section id="productError" class="product-error" hidden><h1>Produto indisponível</h1><p>Não encontramos esse produto no catálogo atual.</p><a href="/" class="btn-secondary">Voltar às ofertas</a></section>
-  </main>
+  </div>
 </Layout>
 
 <script>
+  import { initProductGallery } from '../modules/catalog/gallery-utils.js';
+  import { shareProductLink } from '../modules/catalog/share.js';
   import { catalogReady, escapeHtml, formatPrice, getCatalogProduct, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
   import { saveCartItem } from '../modules/cart/store';
   import { evaluateOfferReadiness } from '../modules/outbound/readiness.mjs';
@@ -104,10 +109,12 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         document.querySelector('#productPrice')!.innerHTML = `<span class="price-observed">Preço observado</span><strong>${formatPrice(offer?.price)}</strong>${offer?.old_price ? `<del>${formatPrice(offer.old_price)}</del>` : ''}${offer?.installments_text ? `<span>${escapeHtml(offer.installments_text)}</span>` : ''}`;
         document.querySelector('#productFacts')!.innerHTML = [fact('Frete', offer?.shipping_text), fact('Cupom', offer?.coupon_code), fact('Quantidade em estoque', offer?.stock_quantity), fact('Disponibilidade', offer?.stock_status === 'in_stock' ? 'Disponível na última consulta' : offer?.stock_status === 'out_of_stock' ? 'Sem estoque na última consulta' : 'Não confirmada'), fact('Consultado em', offer?.observed_at ? new Date(offer.observed_at).toLocaleString('pt-BR') : null)].join('');
         const imageHost = document.querySelector('#productMainImage')!;
-        const firstImage = product.images?.[0];
-        imageHost.innerHTML = firstImage ? `<img src="${escapeHtml(firstImage.url)}" alt="${escapeHtml(product.title)}" width="640" height="640" fetchpriority="high">` : '<span>Foto indisponível</span>';
-        document.querySelector('#productThumbnails')!.innerHTML = (product.images ?? []).map((image, index) => `<button type="button" class="gallery-thumb" role="listitem" aria-label="Mostrar foto ${index + 1}" data-image="${escapeHtml(image.url)}"><img src="${escapeHtml(image.url)}" alt="" width="72" height="72" loading="lazy"></button>`).join('');
-        document.querySelectorAll<HTMLButtonElement>('.gallery-thumb').forEach((button) => button.addEventListener('click', () => { imageHost.innerHTML = `<img src="${escapeHtml(button.dataset.image)}" alt="${escapeHtml(product.title)}" width="640" height="640">`; }));
+        const productImages = product.images ?? [];
+        imageHost.replaceChildren();
+        if (!productImages.length) imageHost.textContent = 'Foto indisponível';
+        document.querySelector('#productThumbnails')!.innerHTML = productImages.map((image, index) => `<button type="button" class="gallery-thumb" aria-label="Mostrar foto ${index + 1} de ${productImages.length}" aria-pressed="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-image="${escapeHtml(image.url)}"><img src="${escapeHtml(image.url)}" alt="" width="72" height="72" loading="lazy" decoding="async"></button>`).join('');
+        const thumbnails = [...document.querySelectorAll<HTMLButtonElement>('.gallery-thumb')];
+        initProductGallery(imageHost, thumbnails, product.title, document.querySelector<HTMLElement>('#galleryAnnouncement'));
 
         const timing = document.querySelector<HTMLElement>('#linkTiming')!;
         const link = product.affiliate_link;
@@ -130,9 +137,12 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         else { buy.textContent = readiness.reason; buy.setAttribute('aria-disabled', 'true'); buy.addEventListener('click', (event) => event.preventDefault()); }
         const saveButton = document.querySelector<HTMLButtonElement>('#saveProduct')!;
         saveButton.addEventListener('click', () => { saveButton.textContent = saveProduct(product) ? 'Salvo na minha lista' : 'Já está na minha lista'; });
+        const shareStatus = document.querySelector<HTMLElement>('#shareProductStatus')!;
         document.querySelector<HTMLButtonElement>('#shareProduct')!.addEventListener('click', async () => {
-          try { if (navigator.share) await navigator.share({ title: product.title, url: location.href }); else { await navigator.clipboard.writeText(location.href); status.textContent = 'Link do produto copiado.'; } }
-          catch { /* cancelamento do compartilhamento */ }
+          const result = await shareProductLink({ title: product.title, url: location.href, navigatorApi: navigator, documentApi: document });
+          if (result === 'shared') shareStatus.textContent = 'Compartilhamento concluído.';
+          else if (result === 'copied') shareStatus.textContent = 'Link do produto copiado.';
+          else if (result === 'manual') shareStatus.textContent = `Copie o link do produto: ${location.href}`;
         });
         status.hidden = true;
         content.hidden = false;
@@ -149,7 +159,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           relatedLoading = true;
           more.disabled = true;
           try {
-            const items = await searchCatalog({ platform: product.platform, cursor, limit: 12 });
+            const items = await searchCatalog({ cursor, limit: 12 });
             const filtered = items.filter((item) => !relatedSeenIds.has(item.id));
             filtered.forEach((item) => relatedSeenIds.add(item.id));
             related.insertAdjacentHTML('beforeend', filtered.map(renderRelated).join(''));
@@ -173,8 +183,10 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           finally { relatedLoading = false; more.disabled = false; }
         };
         more.addEventListener('click', () => { relatedAutoLoadPaused = false; void addRelated(); });
-        const observer = new IntersectionObserver((entries) => { if (!relatedAutoLoadPaused && entries.some((entry) => entry.isIntersecting)) void addRelated(); }, { rootMargin: '500px' });
-        observer.observe(more);
+        if ('IntersectionObserver' in window) {
+          const observer = new IntersectionObserver((entries) => { if (!relatedAutoLoadPaused && entries.some((entry) => entry.isIntersecting)) void addRelated(); }, { rootMargin: '500px' });
+          observer.observe(more);
+        }
         await addRelated();
       } catch {
         status.textContent = 'Não foi possível carregar o produto. Tente novamente.';
@@ -192,6 +204,8 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-main-image img { width:100%; height:100%; object-fit:contain; }
   .product-thumbnails { display:flex; gap:8px; overflow:auto; padding:10px 0; }
   .gallery-thumb { width:72px; height:72px; border:1px solid #ddd; border-radius:5px; padding:4px; flex:0 0 auto; background:white; }
+  .gallery-thumb[aria-pressed="true"] { border-color:#333; }
+  .gallery-thumb:focus-visible { outline:3px solid #333; outline-offset:2px; }
   .gallery-thumb img { width:100%; height:100%; object-fit:contain; }
   .product-info { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
   .product-store { color:#555; text-transform:uppercase; font-size:.75rem; letter-spacing:.05em; font-weight:700; }
@@ -207,6 +221,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-facts li strong { color:#222; text-align:right; }
   .link-timing { color:#666; font-size:.78rem; }
   .product-buy, #saveProduct { width:100%; }
+  .share-status { min-height:1.2em; color:#555; font-size:.85rem; overflow-wrap:anywhere; }
   #buyProduct[aria-disabled="true"] { opacity:.6; pointer-events:auto; }
   .share-button { color:#444; text-decoration:underline; padding:5px; }
   .product-disclaimer { padding:12px; background:#f7f7f7; color:#555; font-size:.78rem; line-height:1.5; border-radius:6px; }

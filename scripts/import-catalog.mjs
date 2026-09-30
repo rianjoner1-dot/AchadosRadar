@@ -17,6 +17,7 @@ const imageHosts = {
   mercadolivre: ['mlstatic.com', 'mlstatic.com.br'],
   magalu: ['mlcdn.com.br', 'magazineluiza.com.br']
 };
+const exactAffiliateHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
 const get = (o, ...keys) => keys.map((key) => o?.[key]).find((value) => value !== undefined && value !== null);
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const toPrice = (value) => typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
@@ -31,7 +32,11 @@ function normalize(item) {
     if (!candidate) return null;
     try {
       const parsed = new URL(candidate);
-      return parsed.protocol === 'https:' && allowedHosts[platform]?.some((host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)) ? parsed.href : null;
+      const hostname = parsed.hostname.toLowerCase();
+      const allowed = allowedHosts[platform]?.some((host) =>
+        (exactAffiliateHosts[platform] ?? []).includes(host) ? hostname === host : hostname === host || hostname.endsWith(`.${host}`)
+      );
+      return parsed.protocol === 'https:' && !parsed.username && !parsed.password && allowed ? parsed.href : null;
     } catch { return null; }
   };
   const errors = [];
@@ -49,6 +54,11 @@ function normalize(item) {
   }).map((url, index) => ({ url, display_order: index, is_primary: index === 0 }));
   if (!images.length) errors.push('foto_https_ausente');
   const macroStatus = get(item, 'linkStatus', 'link_status');
+  const rawStockQuantity = get(item, 'stockQuantity', 'stock_quantity');
+  const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
+  const rawStockStatus = get(item, 'stockStatus', 'stock_status');
+  const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'unknown';
+  const consistentStockStatus = stockStatus === 'in_stock' && stockQuantity === 0 ? 'unknown' : stockStatus;
   const macroVerifiedAt = get(item, 'lastCheckedAt', 'linkVerifiedAt', 'verified_at');
   const officialFlag = get(item, 'isOfficialShortLink', 'linkReady', 'affiliateLinkVerified') === true;
   const magaluOfficialUrl = platform === 'magalu' && Boolean(get(item, 'storeAffiliateId', 'store_affiliate_id')) && Boolean(affiliate) && new URL(affiliate).hostname.endsWith('magazinevoce.com.br');
@@ -62,8 +72,9 @@ function normalize(item) {
     installments_text: text(get(item, 'installments', 'installmentsText', 'parcelamento')),
     shipping_text: text(get(item, 'shipping', 'shippingText', 'frete')),
     coupon_code: text(get(item, 'coupon', 'couponText', 'cupom')),
-    stock_quantity: Number.isInteger(get(item, 'stockQuantity', 'stock_quantity')) ? get(item, 'stockQuantity', 'stock_quantity') : null,
-    stock_status: ['in_stock', 'out_of_stock', 'unknown'].includes(get(item, 'stockStatus', 'stock_status')) ? get(item, 'stockStatus', 'stock_status') : 'unknown',
+    stock_quantity: stockQuantity,
+    stock_status: consistentStockStatus,
+    stock_evidence: text(get(item, 'stockEvidence', 'stock_evidence')) ?? '',
     seller_name: text(get(item, 'sellerName', 'seller_name', 'seller')) ?? 'Loja Parceira',
     seller_id: text(get(item, 'sellerId', 'seller_id')) ?? '', store_name: text(get(item, 'storeName', 'store_name')) ?? (platform === 'magalu' ? 'Magalu' : 'Mercado Livre'),
     store_affiliate_id: text(get(item, 'storeAffiliateId', 'store_affiliate_id')) ?? '', original_url: original,
@@ -107,7 +118,7 @@ if (dryRun) {
   if (process.argv.includes('--verbose')) {
     output.details = selectedProducts.map((item, index) => {
       const { row } = normalize(item);
-      return { index, id: row.external_id, platform: row.platform, valid: report[index].valid, publishable: report[index].publishable, imageUrls: row.images.map((image) => image.url), installments: row.installments_text, shipping: row.shipping_text, coupon: row.coupon_code, stockQuantity: row.stock_quantity, stockStatus: row.stock_status, linkStatus: row.link_status, expiresAt: row.expires_at, refreshDueAt: row.refresh_due_at };
+      return { index, id: row.external_id, platform: row.platform, valid: report[index].valid, publishable: report[index].publishable, imageUrls: row.images.map((image) => image.url), installments: row.installments_text, shipping: row.shipping_text, coupon: row.coupon_code, stockQuantity: row.stock_quantity, stockStatus: row.stock_status, stockEvidence: row.stock_evidence, linkStatus: row.link_status, expiresAt: row.expires_at, refreshDueAt: row.refresh_due_at };
     });
   }
   if (!summaryOnly) output.rejected = report.filter((item) => !item.valid);

@@ -2,19 +2,17 @@
 import Layout from '../layouts/Layout.astro';
 ---
 <Layout title="Minha lista | Achados Radar" description="Produtos salvos para consultar e comprar individualmente na loja parceira.">
-  <main class="container cart-page">
+  <div class="container cart-page">
     <header class="cart-heading"><p class="cart-eyebrow">ACHADOS RADAR</p><h1>Minha lista</h1><p>Guarde produtos para consultar depois. Cada compra é concluída separadamente no marketplace.</p></header>
     <aside class="cart-notice"><strong>Como funciona:</strong> sua lista não reserva estoque e não cobra pagamentos. Preços e disponibilidade podem mudar na loja.</aside>
     <section id="cartEmpty" class="cart-empty" hidden><h2>Sua lista está vazia</h2><p>Explore as ofertas e salve os produtos que interessam.</p><a href="/" class="btn-primary">Ver ofertas</a></section>
     <section id="cartContent" hidden><div class="cart-topline"><span id="cartCount" aria-live="polite"></span><button type="button" id="clearCart" class="text-button">Limpar lista</button></div><div id="cartItems" class="cart-items"></div></section>
     <p id="cartStatus" role="status" aria-live="polite"></p>
-  </main>
+  </div>
 </Layout>
 <script>
-  import { getCatalogProduct, catalogReady, escapeHtml } from '../modules/catalog/client';
+  import { escapeHtml } from '../modules/catalog/client';
   import { readLocalCart, removeCartItem, clearLocalCart, updateCartBadge } from '../modules/cart/store';
-  import { currentUser, syncCartForUser, removeRemoteCartItem, clearRemoteCart } from '../modules/auth/client';
-  import { evaluateOfferReadiness } from '../modules/outbound/readiness.mjs';
   import type { CartItem } from '../modules/catalog/types';
 
   const empty = document.querySelector<HTMLElement>('#cartEmpty')!;
@@ -25,18 +23,12 @@ import Layout from '../layouts/Layout.astro';
   const storeName = (platform: string) => platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
   let renderVersion = 0;
 
-  async function render() {
-    const version = ++renderVersion;
-    const user = await currentUser();
-    if (user) {
-      try { await syncCartForUser(user.id); } catch { status.textContent = 'A sincronização não está disponível agora. Os itens salvos neste navegador continuam visíveis.'; }
-    }
-    if (version !== renderVersion) return;
+  function renderLocalCart(): CartItem[] {
     const items = readLocalCart();
     updateCartBadge();
     empty.hidden = items.length > 0;
     content.hidden = items.length === 0;
-    if (!items.length) { list.replaceChildren(); return; }
+    if (!items.length) { list.replaceChildren(); return items; }
     document.querySelector('#cartCount')!.textContent = `${items.length} produto${items.length === 1 ? '' : 's'} salvo${items.length === 1 ? '' : 's'}`;
     list.innerHTML = items.map((item: CartItem) => `<article class="saved-item" data-id="${escapeHtml(item.id)}">
       <a class="saved-image" href="/produto?id=${encodeURIComponent(item.id)}">${item.image ? `<img src="${escapeHtml(item.image)}" alt="" width="120" height="120" loading="lazy">` : '<span>Imagem indisponível</span>'}</a>
@@ -44,9 +36,40 @@ import Layout from '../layouts/Layout.astro';
       <div class="saved-actions"><a class="btn-primary saved-buy" data-buy aria-disabled="true">Verificando link</a><a class="btn-secondary saved-details" href="/produto?id=${encodeURIComponent(item.id)}">Detalhes</a><button type="button" class="remove-saved" data-remove="${escapeHtml(item.id)}">Remover</button></div>
     </article>`).join('');
 
+    list.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
+      const id = button.dataset.remove!;
+      button.disabled = true;
+      try {
+        const auth = await import('../modules/auth/client').catch(() => null);
+        if (auth) await auth.removeRemoteCartItem(id);
+        removeCartItem(id);
+      }
+      catch { status.textContent = 'Não foi possível sincronizar a remoção. Tente novamente; o produto continua salvo.'; button.disabled = false; }
+    }));
+    return items;
+  }
+
+  async function updateOfferStates(items: CartItem[], version: number): Promise<void> {
+    let catalog: typeof import('../modules/catalog/client');
+    let outbound: typeof import('../modules/outbound/readiness.mjs');
+    try {
+      [catalog, outbound] = await Promise.all([
+        import('../modules/catalog/client'),
+        import('../modules/outbound/readiness.mjs')
+      ]);
+    } catch {
+      for (const item of items) {
+        const row = [...list.querySelectorAll<HTMLElement>('.saved-item')].find((element) => element.dataset.id === item.id);
+        const state = row?.querySelector<HTMLElement>('[data-state]');
+        if (state) state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.';
+      }
+      return;
+    }
+    const { catalogReady, getCatalogProduct } = catalog;
+    const { evaluateOfferReadiness } = outbound;
     for (const item of items) {
       const row = [...list.querySelectorAll<HTMLElement>('.saved-item')].find((element) => element.dataset.id === item.id);
-      if (!row) continue;
+      if (!row || version !== renderVersion) return;
       const state = row.querySelector<HTMLElement>('[data-state]')!;
       const buy = row.querySelector<HTMLAnchorElement>('[data-buy]')!;
       if (!catalogReady || !validUuid(item.id)) { state.textContent = 'Exemplo local: esta amostra não tem link de compra ativo.'; continue; }
@@ -61,19 +84,35 @@ import Layout from '../layouts/Layout.astro';
         else { buy.textContent = 'Link em verificação'; buy.setAttribute('aria-disabled', 'true'); }
       } catch { state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.'; }
     }
-    list.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
-      const id = button.dataset.remove!;
-      button.disabled = true;
-      try { await removeRemoteCartItem(id); removeCartItem(id); }
-      catch { status.textContent = 'Não foi possível sincronizar a remoção. Tente novamente; o produto continua salvo.'; button.disabled = false; }
-    }));
+  }
+
+  async function render() {
+    const version = ++renderVersion;
+    let items = renderLocalCart();
+    let auth: typeof import('../modules/auth/client');
+    try { auth = await import('../modules/auth/client'); } catch { return; }
+    let user = null;
+    try { user = await auth.currentUser(); } catch { /* local list remains usable if session lookup is unavailable */ }
+    if (version !== renderVersion) return;
+    if (user) {
+      try {
+        await auth.syncCartForUser(user.id);
+        if (version !== renderVersion) return;
+        items = renderLocalCart();
+      } catch { status.textContent = 'A sincronização não está disponível agora. Os itens salvos neste navegador continuam visíveis.'; }
+    }
+    if (version === renderVersion) await updateOfferStates(items, version);
   }
 
   document.querySelector<HTMLButtonElement>('#clearCart')!.addEventListener('click', async () => {
     if (confirm('Remover todos os itens salvos desta conta/dispositivo?')) {
       const button = document.querySelector<HTMLButtonElement>('#clearCart')!;
       button.disabled = true;
-      try { await clearRemoteCart(); clearLocalCart(); }
+      try {
+        const auth = await import('../modules/auth/client').catch(() => null);
+        if (auth) await auth.clearRemoteCart();
+        clearLocalCart();
+      }
       catch { status.textContent = 'Não foi possível sincronizar a limpeza. Os itens continuam salvos.'; }
       finally { button.disabled = false; }
     }

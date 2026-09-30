@@ -15,11 +15,17 @@ export function getStaticPaths() {
 const { product } = Astro.props;
 const isML = product.platform === 'mercadolivre';
 const storeName = isML ? 'Mercado Livre' : 'Magalu';
+const relatedProducts = sampleProducts.filter((item) => item.id !== product.id);
 const title = `${product.title} — Achados Radar`;
 const description = `Exemplo de produto no Achados Radar: ${product.title}. A amostra local não possui link de compra verificado.`;
+const productionHost = import.meta.env.PUBLIC_VERCEL_PROJECT_PRODUCTION_URL;
+const canonicalOrigin = productionHost
+  ? `https://${productionHost}`
+  : import.meta.env.DEV ? Astro.url.origin : undefined;
+const canonicalUrl = canonicalOrigin ? new URL(`/produto/${encodeURIComponent(product.id)}/`, canonicalOrigin).href : undefined;
 ---
 
-<Layout title={title} description={description}>
+<Layout title={title} description={description} canonicalUrl={canonicalUrl} ogImage={product.image} ogType="product">
   <div class="container product-detail-page">
     <nav class="breadcrumb-nav" aria-label="Navegação estrutural">
       <a href="/">Início</a>
@@ -28,6 +34,8 @@ const description = `Exemplo de produto no Achados Radar: ${product.title}. A am
       <span aria-hidden="true">&gt;</span>
       <span aria-current="page" class="breadcrumb-current">{product.title}</span>
     </nav>
+
+    <p class="demo-product-notice" role="status">Amostra de demonstração: preço e disponibilidade não foram confirmados agora, e esta página não possui link de compra ativo.</p>
 
     <div class="product-layout-grid">
       <!-- Coluna da Galeria -->
@@ -88,13 +96,13 @@ const description = `Exemplo de produto no Achados Radar: ${product.title}. A am
         )}
 
         <div class="stock-indicator">
-          <span class="status-dot-green" aria-hidden="true"></span>
-          <span>{product.stockStatus === 'in_stock' ? 'Produto em estoque verificado' : 'Disponibilidade sob consulta'}</span>
+          <span class="status-dot-muted" aria-hidden="true"></span>
+          <span>Disponibilidade não verificada nesta demonstração</span>
         </div>
 
         <!-- Botões de Ação -->
         <div class="action-buttons-stack">
-          <button type="button" class="btn-primary buy-now-btn" disabled aria-disabled="true">Link de compra indisponível na amostra</button>
+          <button type="button" class="btn-primary buy-now-btn" disabled aria-disabled="true">Compra indisponível nesta demonstração</button>
 
           <button
             type="button"
@@ -106,34 +114,94 @@ const description = `Exemplo de produto no Achados Radar: ${product.title}. A am
             <span aria-hidden="true">📌</span>
             <span>Salvar na Minha Lista</span>
           </button>
+          <button type="button" id="shareDemoProduct" class="btn-secondary share-demo-product">Compartilhar produto</button>
+          <p id="shareDemoStatus" class="share-demo-status" role="status" aria-live="polite"></p>
         </div>
 
         <div class="disclaimer-mini-card">
           <p>
-            ℹ️ <strong>Importante:</strong> Você será redirecionado para o site oficial do <strong>{storeName}</strong> através do nosso link de afiliado oficial. O pagamento, garantia e entrega são processados inteiramente pelo marketplace.
+            <strong>Dados de exemplo.</strong> O preço exibido serve apenas para demonstrar o layout e pode estar desatualizado. Nenhum redirecionamento ou link afiliado está ativo nesta página de amostra.
           </p>
         </div>
       </div>
     </div>
+
+    <section class="demo-related-section" aria-labelledby="demo-related-title">
+      <h2 id="demo-related-title">Mais ofertas para comparar</h2>
+      <p class="demo-related-note">Outras amostras para comparar entre as lojas. Preços e disponibilidade não foram confirmados.</p>
+      <div id="demoRelatedGrid" class="demo-related-grid" aria-live="polite">
+        {relatedProducts.map((item, index) => (
+          <article class="demo-related-card" data-demo-related-card hidden={index >= 8}>
+            <a href={`/produto/${encodeURIComponent(item.id)}`} aria-label={`Ver ${item.title}`}>
+              <img src={item.image} alt="" width="220" height="170" loading="lazy" decoding="async" />
+              <small>{item.platform === 'magalu' ? 'Magalu' : 'Mercado Livre'}</small>
+              <span>{item.title}</span>
+            </a>
+            <strong>{item.priceFormatted}</strong>
+          </article>
+        ))}
+      </div>
+      <button id="demoRelatedMore" class="btn-secondary demo-related-more" type="button" hidden>Carregar mais ofertas</button>
+      <p id="demoRelatedStatus" class="demo-related-status" role="status" aria-live="polite"></p>
+    </section>
   </div>
 </Layout>
+
+<script>
+  import { shareProductLink } from '../../modules/catalog/share.js';
+
+  const grid = document.querySelector<HTMLElement>('#demoRelatedGrid');
+  const more = document.querySelector<HTMLButtonElement>('#demoRelatedMore');
+  const status = document.querySelector<HTMLElement>('#demoRelatedStatus');
+  if (grid && more) {
+    const cards = [...grid.querySelectorAll<HTMLElement>('[data-demo-related-card]')];
+    let visibleCount = Math.min(8, cards.length);
+    more.hidden = visibleCount >= cards.length;
+    const revealNext = () => {
+      const nextCount = Math.min(visibleCount + 8, cards.length);
+      for (let index = visibleCount; index < nextCount; index++) cards[index].hidden = false;
+      visibleCount = nextCount;
+      more.hidden = visibleCount >= cards.length;
+      if (more.hidden && status) status.textContent = 'Você chegou ao fim dos exemplos disponíveis.';
+    };
+    more.addEventListener('click', revealNext);
+    if ('IntersectionObserver' in window && !more.hidden) {
+      const observer = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) revealNext();
+      }, { rootMargin: '500px' });
+      observer.observe(more);
+    }
+  }
+
+  const shareButton = document.querySelector<HTMLButtonElement>('#shareDemoProduct');
+  const shareStatus = document.querySelector<HTMLElement>('#shareDemoStatus');
+  shareButton?.addEventListener('click', async () => {
+    const result = await shareProductLink({ title: document.title, url: location.href, navigatorApi: navigator, documentApi: document });
+    if (result === 'shared' && shareStatus) shareStatus.textContent = 'Compartilhamento concluído.';
+    else if (result === 'copied' && shareStatus) shareStatus.textContent = 'Link do produto copiado.';
+    else if (result === 'manual' && shareStatus) shareStatus.textContent = `Copie o link do produto: ${location.href}`;
+  });
+</script>
 
 <style>
   .product-detail-page {
     padding: 32px 16px 64px;
     max-width: 1120px;
   }
+  .share-demo-product { width:100%; }
+  .share-demo-status { min-height:1.2em; color:#555; font-size:.85rem; overflow-wrap:anywhere; }
 
   .breadcrumb-nav {
     display: flex;
     align-items: center;
+    flex-wrap: nowrap;
+    min-width: 0;
     gap: 8px;
     font-size: 0.82rem;
     color: var(--text-muted);
     margin-bottom: 24px;
-    overflow-x: auto;
+    overflow: hidden;
     white-space: nowrap;
-    padding-bottom: 4px;
   }
 
   .breadcrumb-nav a {
@@ -145,6 +213,10 @@ const description = `Exemplo de produto no Achados Radar: ${product.title}. A am
   }
 
   .breadcrumb-current {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text-primary);
     font-weight: 500;
   }
@@ -173,6 +245,20 @@ const description = `Exemplo de produto no Achados Radar: ${product.title}. A am
     padding: 24px;
     overflow: hidden;
   }
+
+  .demo-product-notice {
+    margin: 0 0 20px;
+    padding: 12px 14px;
+    border: 1px solid #dedede;
+    border-left: 4px solid #9a7800;
+    border-radius: var(--radius-sm);
+    background: #fff8e5;
+    color: #453800;
+    font-size: .9rem;
+    line-height: 1.5;
+  }
+
+  .status-dot-muted { width: 9px; height: 9px; border-radius: 50%; background: #888; flex: 0 0 auto; }
 
   .detail-main-img {
     width: 100%;
@@ -301,4 +387,18 @@ const description = `Exemplo de produto no Achados Radar: ${product.title}. A am
     line-height: 1.5;
     color: var(--text-muted);
   }
+
+  .demo-related-section { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--border-subtle); }
+  .demo-related-section h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; }
+  .demo-related-note { margin: 6px 0 16px; color: var(--text-secondary); font-size: .86rem; }
+  .demo-related-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .demo-related-card { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
+  .demo-related-card[hidden] { display: none; }
+  .demo-related-card a { display: flex; flex: 1; flex-direction: column; color: var(--text-primary); text-decoration: none; }
+  .demo-related-card img { width: 100%; height: 150px; object-fit: contain; padding: 10px; background: #fff; }
+  .demo-related-card a span { padding: 8px 10px; font-size: .84rem; line-height: 1.35; }
+  .demo-related-card strong { padding: 0 10px; color: var(--text-primary); }
+  .demo-related-more { display: block; min-width: 220px; margin: 18px auto 0; }
+  .demo-related-status { min-height: 1.3em; margin-top: 10px; color: var(--text-muted); text-align: center; font-size: .8rem; }
+  @media (max-width: 760px) { .demo-related-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
