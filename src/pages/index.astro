@@ -175,15 +175,30 @@ const demo = demoProducts.map((product) => ({
     });
   }
 
+  function skipSpotlightImage(productId: string) {
+    if (!productId || failedSpotlightImages.has(productId)) return;
+    failedSpotlightImages.add(productId);
+    queueMicrotask(() => renderSpotlights(spotlightProducts));
+  }
+
   spotlightGrid.addEventListener('error', (event) => {
     const image = event.target;
     if (!(image instanceof HTMLImageElement) || !image.classList.contains('spotlight-image')) return;
     const card = image.closest<HTMLElement>('[data-product-id]');
     const productId = card?.dataset.productId;
     if (!productId) return;
-    failedSpotlightImages.add(decodeURIComponent(productId));
-    renderSpotlights(spotlightProducts);
+    skipSpotlightImage(decodeURIComponent(productId));
   }, true);
+  new MutationObserver((records) => {
+    for (const record of records) for (const node of record.addedNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      const placeholders = node.matches('.spotlight-image-placeholder') ? [node] : [...node.querySelectorAll<HTMLElement>('.spotlight-image-placeholder')];
+      for (const placeholder of placeholders) {
+        const productId = placeholder.closest<HTMLElement>('[data-product-id]')?.dataset.productId;
+        if (productId) skipSpotlightImage(decodeURIComponent(productId));
+      }
+    }
+  }).observe(spotlightGrid, { childList: true, subtree: true });
 
   function renderCard(product: CatalogProduct) {
     const id = encodeURIComponent(product.id);

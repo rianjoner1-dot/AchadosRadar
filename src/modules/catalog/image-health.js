@@ -3,7 +3,7 @@ export function isUsableProductImage(image) {
 }
 
 export function shouldUseGlobalImageFallback(image) {
-  return !image?.closest?.('#catalogGrid, #productMainImage');
+  return !image?.closest?.('#catalogGrid, #productMainImage, #spotlightGrid');
 }
 
 export function getCatalogImageFailureUrl(image) {

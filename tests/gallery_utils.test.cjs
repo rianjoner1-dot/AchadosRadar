@@ -18,8 +18,8 @@ test('catalog image reports retain the original store URL after a fallback sourc
   assert.equal(getCatalogImageFailureUrl(image), 'https://a-static.mlcdn.com.br/item/photo.jpg');
 });
 
-test('global image fallback defers to catalog and product-gallery handlers', () => {
-  assert.equal(shouldUseGlobalImageFallback({ closest: (selector) => selector === '#catalogGrid, #productMainImage' ? {} : null }), false);
+test('global image fallback defers to catalog, product-gallery and spotlight handlers', () => {
+  assert.equal(shouldUseGlobalImageFallback({ closest: (selector) => selector === '#catalogGrid, #productMainImage, #spotlightGrid' ? {} : null }), false);
   assert.equal(shouldUseGlobalImageFallback({ closest: () => null }), true);
 });
 
