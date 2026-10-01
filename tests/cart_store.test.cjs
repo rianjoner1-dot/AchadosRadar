@@ -73,6 +73,45 @@ test('G1.7: guest cart and separate account carts stay isolated when owner chang
   assert.deepEqual(JSON.parse(app.values.get('achados_radar_cart')).map(({ id }) => id), ['guest-item']);
 });
 
+test('G1.7: a view can read only the cart for the authenticated owner during account changes', () => {
+  const app = createCartStore();
+  app.storage.setItem('achados_radar_cart', JSON.stringify([item('guest-item')]));
+  app.storage.setItem('achados_radar_cart:user-a', JSON.stringify([item('user-a-item')]));
+  app.storage.setItem('achados_radar_cart:user-b', JSON.stringify([item('user-b-item')]));
+  app.storage.setItem('achados_radar_cart_owner', 'user-a');
+
+  assert.deepEqual(app.store.readLocalCart('user-b').map(({ id }) => id), ['user-b-item']);
+  assert.deepEqual(app.store.readLocalCart(null).map(({ id }) => id), ['guest-item']);
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['user-a-item']);
+});
+
+test('G1.7: signing in merges guest items without mixing another account cart', () => {
+  const app = createCartStore();
+  app.storage.setItem('achados_radar_cart', JSON.stringify([item('guest-item')]));
+  app.storage.setItem('achados_radar_cart:user-a', JSON.stringify([item('user-a-item')]));
+  app.storage.setItem('achados_radar_cart:user-b', JSON.stringify([item('user-b-item')]));
+  app.storage.setItem('achados_radar_cart_owner', 'user-a');
+
+  app.store.setCartOwner('user-b');
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['user-b-item']);
+  app.store.setCartOwner(null);
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['guest-item']);
+  app.store.setCartOwner('user-a');
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['user-a-item', 'guest-item']);
+});
+
+test('G1.7: first sign-in merges guest items into account cart and clears guest storage', () => {
+  const app = createCartStore();
+  app.storage.setItem('achados_radar_cart', JSON.stringify([item('shared'), item('guest-only')]));
+  app.storage.setItem('achados_radar_cart:user-a', JSON.stringify([item('shared', 'Existing account title'), item('account-only')]));
+
+  app.store.setCartOwner('user-a');
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['shared', 'account-only', 'guest-only']);
+  assert.equal(app.store.readLocalCart()[0].title, 'Produto shared');
+  assert.equal(app.values.has('achados_radar_cart'), false);
+  assert.equal(app.events.filter(({ type }) => type === 'cart:changed').length, 1);
+});
+
 test('G1.8: removing and clearing items persist changes and dispatch cart updates', () => {
   const app = createCartStore();
   app.store.saveCartItem(item('keep'));
@@ -82,6 +121,40 @@ test('G1.8: removing and clearing items persist changes and dispatch cart update
   app.store.clearLocalCart();
   assert.deepEqual(app.store.readLocalCart(), []);
   assert.equal(app.events.filter(({ type }) => type === 'cart:changed').length, 4);
+});
+
+test('G1.8: an action from a stale cart view changes only the owner it rendered', () => {
+  const app = createCartStore([
+    ['achados_radar_cart', JSON.stringify([item('guest')])],
+    ['achados_radar_cart:user-a', JSON.stringify([item('shared'), item('user-a-only')])],
+    ['achados_radar_cart:user-b', JSON.stringify([item('shared'), item('user-b-only')])],
+    ['achados_radar_cart_owner', 'user-b']
+  ]);
+
+  app.store.removeCartItem('shared', 'user-a');
+  assert.deepEqual(app.store.readLocalCart('user-a').map(({ id }) => id), ['user-a-only']);
+  assert.deepEqual(app.store.readLocalCart('user-b').map(({ id }) => id), ['shared', 'user-b-only']);
+  app.store.clearLocalCart('user-a');
+  assert.deepEqual(app.store.readLocalCart('user-a'), []);
+  assert.deepEqual(app.store.readLocalCart('user-b').map(({ id }) => id), ['shared', 'user-b-only']);
+  assert.deepEqual(app.store.readLocalCart(null).map(({ id }) => id), ['guest']);
+});
+
+test('G1.10: confirmed account deletion clears only that user cart and preserves other local carts', () => {
+  const app = createCartStore([
+    ['achados_radar_cart', JSON.stringify([item('guest')])],
+    ['achados_radar_cart:user-a', JSON.stringify([item('user-a')])],
+    ['achados_radar_cart:user-b', JSON.stringify([item('user-b')])]
+  ]);
+
+  app.store.deleteLocalCartForUser('user-a');
+  assert.equal(app.values.has('achados_radar_cart:user-a'), false);
+  assert.equal(app.values.has('achados_radar_cart:user-b'), true);
+  assert.equal(app.values.has('achados_radar_cart'), true);
+  assert.equal(app.events.filter(({ type }) => type === 'cart:changed').length, 1);
+
+  app.store.deleteLocalCartForUser('');
+  assert.equal(app.values.has('achados_radar_cart:user-b'), true, 'empty identities cannot clear another account cart');
 });
 
 test('E1.8: stale link and unavailable stock block purchase without deleting saved items', async () => {

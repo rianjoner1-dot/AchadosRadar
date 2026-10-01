@@ -81,6 +81,7 @@ test('C1: Vercel artifact must contain static product pages, dynamic runtime and
   const homePage = fs.readFileSync(homePagePath, 'utf8');
   assert.match(homePage, /Buscar ofertas/);
   assert.match(homePage, /catalogGrid/);
+  assert.match(homePage, /id="catalogGrid"[^>]*data-loading="true"/, 'Initial catalog shell reserves space before the AJAX response');
   assert.match(homePage, /loadMore/);
   assert.ok(fs.existsSync(staticOutputPath), 'Artefato estático da Vercel deve existir após build');
   assert.ok(fs.existsSync(path.join(staticOutputPath, 'produto/MLB3299039091/index.html')), 'Página estática de demonstração deve existir');
@@ -99,6 +100,8 @@ test('C1: Vercel artifact must contain static product pages, dynamic runtime and
   const layoutBundleName = fs.readdirSync(path.join(staticOutputPath, '_astro')).find((name) => name.startsWith('Layout.astro_astro_type_script'));
   assert.ok(layoutBundleName, 'Bundle do layout deve existir');
   assert.match(fs.readFileSync(path.join(staticOutputPath, '_astro', layoutBundleName), 'utf8'), /product-placeholder\.svg/);
+  const indexCss = collectFiles(path.join(staticOutputPath, '_astro')).filter((file) => /(?:^|[\\/])index\.[^\\/]+\.css$/.test(file)).map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+  assert.doesNotMatch(indexCss, /#catalogGrid[^{}]*data-loading=true[^{}]*\{min-height:(?:840|1500)px\}/, 'A short fixed loading height must not collapse the first catalog page');
   assert.match(demoProduct, /demoRelatedMore/);
   assert.equal((demoProduct.match(/class="demo-related-card"/g) ?? []).length, 19, 'related feed includes every other sample product without duplicating the current item');
   assert.match(demoProduct, /Carregar mais ofertas/);

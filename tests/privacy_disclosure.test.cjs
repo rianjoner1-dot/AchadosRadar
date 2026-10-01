@@ -8,11 +8,12 @@ const termsPage = fs.readFileSync(path.join(__dirname, '../src/pages/termos.astr
 const footer = fs.readFileSync(path.join(__dirname, '../src/components/Footer.astro'), 'utf8');
 const layout = fs.readFileSync(path.join(__dirname, '../src/layouts/Layout.astro'), 'utf8');
 
-test('privacy page distinguishes enabled development behavior from planned account features', () => {
-  assert.match(privacyPage, /cadastro e sincroniza&ccedil;&atilde;o de conta est&atilde;o desativados/);
-  assert.match(privacyPage, /Lista local/);
-  assert.match(privacyPage, /integra&ccedil;&atilde;o Supabase[\s\S]*?aguarda revis&atilde;o e configura&ccedil;&atilde;o/);
-  assert.match(privacyPage, /envio de foto de perfil n&atilde;o est&aacute; habilitado/);
+test('privacy page describes enabled authentication, analytics and retention accurately', () => {
+  assert.match(privacyPage, /email e c&oacute;digo tempor&aacute;rio/);
+  assert.match(privacyPage, /M&eacute;tricas agregadas de produto/);
+  assert.match(privacyPage, /n&atilde;o guardam nome, email, CPF, telefone, IP, ID de conta ou identificador de visitante/);
+  assert.match(privacyPage, /totais di&aacute;rios agregados n&atilde;o t&ecirc;m rotina autom&aacute;tica de expurgo/);
+  assert.match(privacyPage, /bucket `avatars`/);
   assert.match(privacyPage, /controlador[\s\S]*?canal oficial/);
   assert.match(privacyPage, /cookies ou tecnologias semelhantes/);
 });

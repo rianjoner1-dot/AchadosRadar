@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import sampleCards from '../tests/fixtures/sample_20_cards.json' with { type: 'json' };
+import { checkImagesInChrome } from './check-images-in-chrome.mjs';
 
 function readEnv(name) {
   const line = readFileSync('.env', 'utf8').split(String.fromCharCode(10))
@@ -51,7 +52,27 @@ const imageUrlsHttps = combined.every((row) => (row.images ?? []).every((image) 
 const oneImagePerCard = combined.every((row) => (row.images ?? []).length <= 1);
 const linkReady = combined.filter((row) => row.affiliate_link?.status === 'active').length;
 const inStock = combined.filter((row) => row.offer?.stock_status === 'in_stock').length;
-const detailsHaveStaticPage = combined.filter((row) => sampleIds.has(row.id)).length;
+const detailsHaveStaticPage = combined.filter((row) => sampleIds.has(row.external_id)).length;
+let imageChecks = [];
+if (process.argv.includes('--check-images')) {
+  const imageInputs = firstPage.slice(0, 10).flatMap((row) =>
+    (row.images ?? []).slice(0, 1).map((image) => ({
+      platform: row.platform,
+      url: image.url,
+      externalId: row.external_id,
+      product: { id: row.id, externalId: row.external_id, title: row.title }
+    }))
+  );
+  imageChecks = (await checkImagesInChrome(imageInputs)).map((check) => {
+    const products = imageInputs
+      .filter((image) => {
+        const url = new URL(image.url);
+        return url.host === check.host && url.pathname === check.path;
+      })
+      .map(({ product }) => product);
+    return { ...check, products };
+  });
+}
 
 console.log(JSON.stringify({
   pageOneCount: firstPage.length,
@@ -66,10 +87,11 @@ console.log(JSON.stringify({
   oneImagePerCard,
   activeAffiliateLinks: linkReady,
   inStockProducts: inStock,
+  ...(process.argv.includes('--check-images') ? { imageCheckMethod: 'Chrome HTMLImageElement naturalWidth/naturalHeight', imageChecks } : {}),
   productsWithPrerenderedDetailPages: detailsHaveStaticPage,
   currentDetailRoute: '/produto/[id]'
 }, null, 2));
 
-if (firstPage.length > 20 || overlap > 0 || searchOverlap > 0 || !publicFieldsSafe || !imageUrlsHttps || !oneImagePerCard) {
+if (firstPage.length > 20 || overlap > 0 || searchOverlap > 0 || !publicFieldsSafe || !imageUrlsHttps || !oneImagePerCard || imageChecks.some((result) => !result.ok || result.identity === 'mismatch')) {
   process.exitCode = 1;
 }

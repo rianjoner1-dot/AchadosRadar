@@ -6,13 +6,34 @@ import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolveChromeExecutable } from './chrome-executable.mjs';
 
-const baseUrl = process.argv[2] ?? 'http://127.0.0.1:4323';
-const routes = ['/', '/produto/MLB3299039091', '/carrinho', '/conta', '/privacidade'];
-const viewports = [390, 1440];
+const args = process.argv.slice(2);
+const option = (name) => args.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
+if (args.includes('--help')) {
+  console.log('Uso: node scripts/verify-responsive.mjs [URL] [--routes=/,/conta] [--viewports=390,1440]');
+  console.log('Rotas: caminhos separados por vírgula; use @first-live-product junto com /.');
+  process.exit(0);
+}
+const baseUrl = args.find((argument) => !argument.startsWith('--')) ?? 'http://127.0.0.1:4323';
+const defaultRoutes = ['/', '/produto/MLB3299039091', '@first-live-product', '/carrinho', '/conta', '/privacidade'];
+const routes = option('routes')?.split(',').map((route) => route.trim()).filter(Boolean) ?? defaultRoutes;
+const rawViewports = option('viewports')?.split(',').map((value) => Number(value.trim())) ?? [390, 1440];
+const viewports = [...new Set(rawViewports)];
+if (!routes.length) throw new Error('--routes deve conter ao menos uma rota.');
+if (routes.includes('@first-live-product') && !routes.includes('/')) throw new Error('--routes=@first-live-product exige também a rota /.');
+if (!viewports.length || viewports.some((width) => !Number.isSafeInteger(width) || width < 320 || width > 3840)) {
+  throw new Error('--viewports deve conter larguras inteiras entre 320 e 3840 px.');
+}
+try {
+  const parsedBaseUrl = new URL(baseUrl);
+  if (!['http:', 'https:'].includes(parsedBaseUrl.protocol)) throw new Error();
+} catch {
+  throw new Error('A URL base deve usar HTTP ou HTTPS.');
+}
 const profilePath = await mkdtemp(path.join(os.tmpdir(), 'achados-radar-responsive-'));
 let chrome;
 let socket;
 let nextId = 0;
+let currentCheck = 'startup';
 const pending = new Map();
 
 function command(method, params = {}) {
@@ -20,8 +41,8 @@ function command(method, params = {}) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       pending.delete(id);
-      reject(new Error(`Chrome DevTools command timed out: ${method}`));
-    }, 10_000);
+      reject(new Error(`Chrome DevTools command timed out: ${method} while checking ${currentCheck}`));
+      }, 30_000);
     pending.set(id, { resolve, reject, timeout, method });
     socket.send(JSON.stringify({ id, method, params }));
   });
@@ -34,7 +55,7 @@ async function waitForDebugEndpoint() {
       const [port] = (await readFile(portFile, 'utf8')).trim().split(/\r?\n/);
       return `http://127.0.0.1:${port}`;
     } catch {
-      if (chrome.exitCode !== null) throw new Error(`Chrome exited with code ${chrome.exitCode}`);
+    if (chrome.exitCode !== null) throw new Error(`Chrome exited with code ${chrome.exitCode}`);
       await delay(100);
     }
   }
@@ -64,6 +85,7 @@ try {
     '--window-size=1440,1000',
     'about:blank'
   ], { stdio: 'ignore', windowsHide: true });
+  chrome.unref();
 
   const debugEndpoint = await waitForDebugEndpoint();
   let tabs = [];
@@ -85,9 +107,22 @@ try {
   await command('Page.enable');
   await command('Runtime.enable');
   await command('Accessibility.enable');
+  await command('Network.enable');
+  // Keep an accessibility audit from creating synthetic anonymous product-view metrics.
+  await command('Network.setBlockedURLs', { urls: [
+    '*rest/v1/rpc/record_product_metric*',
+    '*rest/v1/rpc/report_product_image_failure*'
+  ] });
 
   const results = [];
+  const skipped = [];
+  let isStaticArtifact = false;
+  try {
+    const probe = await fetch(new URL('/_vercel/speed-insights/script.js', baseUrl), { signal: AbortSignal.timeout(3000) });
+    isStaticArtifact = probe.status === 204 || probe.headers.get('x-achados-static-artifact') === 'true';
+  } catch { /* A browser navigation below will report an unavailable server. */ }
   for (const width of viewports) {
+    let firstLiveProductRoute = null;
     await command('Emulation.setDeviceMetricsOverride', {
       width,
       height: 900,
@@ -95,8 +130,19 @@ try {
       mobile: width < 600
     });
     for (const route of routes) {
-      const navigation = await command('Page.navigate', { url: new URL(route, baseUrl).href });
-      if (navigation.errorText) throw new Error(`Could not load ${route}: ${navigation.errorText}`);
+      currentCheck = `${width}px ${route}`;
+      if (isStaticArtifact && route !== '/' && route !== '/produto/MLB3299039091') {
+        skipped.push({ viewport: width, route, reason: 'Static artifact host does not serve this SSR route; validate it in Astro dev or Vercel preview.' });
+        continue;
+      }
+      const targetRoute = route === '@first-live-product' ? firstLiveProductRoute : route;
+      if (route === '@first-live-product' && isStaticArtifact) {
+        skipped.push({ viewport: width, route: targetRoute ?? route, reason: 'Static artifact host does not run the SSR product-by-query route; validate this route in dev or Vercel preview.' });
+        continue;
+      }
+      if (!targetRoute) throw new Error('The live catalog did not expose a product detail link for this viewport.');
+      const navigation = await command('Page.navigate', { url: new URL(targetRoute, baseUrl).href });
+      if (navigation.errorText) throw new Error(`Could not load ${targetRoute}: ${navigation.errorText}`);
       let ready = false;
       for (let attempt = 0; attempt < 100; attempt += 1) {
         const state = await command('Runtime.evaluate', { expression: 'document.readyState', returnByValue: true });
@@ -104,6 +150,37 @@ try {
         await delay(100);
       }
       if (!ready) throw new Error(`Page load timed out: ${route}`);
+      if (route === '/') {
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          const link = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `document.querySelector('#catalogGrid a[href^="/produto?id="]')?.getAttribute('href') || null`
+          });
+          if (link.result.value) { firstLiveProductRoute = link.result.value; break; }
+          await delay(100);
+        }
+      }
+      const liveProductRoute = targetRoute.startsWith('/produto?id=');
+      if (liveProductRoute) {
+        let productContentReady = false;
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          const state = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `(() => { const content = document.querySelector('#productContent'); return Boolean(content && !content.hidden); })()`
+          });
+          if (state.result.value) { productContentReady = true; break; }
+          await delay(100);
+        }
+        if (!productContentReady) throw new Error(`Live product details did not load: ${route}`);
+        for (let attempt = 0; attempt < 50; attempt += 1) {
+          const state = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `Boolean(document.querySelector('#relatedGrid .related-card'))`
+          });
+          if (state.result.value) break;
+          await delay(100);
+        }
+      }
       await delay(200);
       const evaluation = await command('Runtime.evaluate', {
         returnByValue: true,
@@ -119,7 +196,13 @@ try {
           }).slice(0, 8);
           return { route: location.pathname, viewport: width, rootClient: document.documentElement.clientWidth,
             rootScroll: document.documentElement.scrollWidth, bodyScroll: document.body.scrollWidth,
-            overflowElements: overflow };
+            overflowElements: overflow,
+            liveProduct: location.pathname === '/produto' && Boolean(new URLSearchParams(location.search).get('id')),
+            productContentVisible: Boolean(document.querySelector('#productContent') && !document.querySelector('#productContent').hidden),
+            productTitlePresent: Boolean(document.querySelector('#productTitle')?.textContent?.trim()),
+            relatedCardCount: document.querySelectorAll('#relatedGrid .related-card').length,
+            firstRelatedCardDisplay: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).display : null,
+            firstRelatedCardBorder: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).borderTopWidth : null };
         })()`
       });
       const accessibilityTree = await command('Accessibility.getFullAXTree');
@@ -131,19 +214,28 @@ try {
       };
       let keyboard = null;
       if (width === 390) {
-        await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
-        await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
-        const focusResult = await command('Runtime.evaluate', {
-          returnByValue: true,
-          expression: `(() => { const el = document.activeElement; const style = getComputedStyle(el); return {
-            className: String(el.className || ''), tag: el.tagName, outlineStyle: style.outlineStyle,
-            outlineWidth: style.outlineWidth, visible: style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0
-          }; })()`
-        });
-        keyboard = focusResult.result.value;
+        keyboard = [];
+        const steps = route === '/' || liveProductRoute || route === '/produto/MLB3299039091' ? 16 : 1;
+        for (let step = 0; step < steps; step += 1) {
+          await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+          await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+          if (step === 0) await delay(250); // Let the skip link's focus transition become visible before measuring it.
+          const focusResult = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `(() => { const el = document.activeElement; const style = getComputedStyle(el); const rect = el.getBoundingClientRect(); return {
+              name: (el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.id || el.tagName).trim().slice(0, 80),
+              className: String(el.className || ''), tag: el.tagName, outlineStyle: style.outlineStyle,
+              outlineWidth: style.outlineWidth, top: Math.round(rect.top), positionTop: style.top,
+              visible: (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) || Boolean(el.parentElement && getComputedStyle(el.parentElement).boxShadow !== 'none'),
+              inViewport: rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth
+            }; })()`
+          });
+          keyboard.push(focusResult.result.value);
+        }
       }
       results.push({ ...evaluation.result.value, accessibility, keyboard });
       if (width === 390 && (route === '/' || route === '/produto/MLB3299039091')) {
+        await command('Runtime.evaluate', { expression: 'window.scrollTo(0, 0)' });
         const screenshot = await command('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
         const name = route === '/' ? 'home' : 'produto';
         const screenshotPath = path.join(os.tmpdir(), `achados-responsive-${name}.png`);
@@ -156,12 +248,26 @@ try {
   const failures = results.filter((result) => result.overflowElements.length > 0 || result.bodyScroll > result.viewport + 1 ||
     result.rootScroll > result.rootClient + 1 || !result.accessibility.mainLandmark ||
     result.accessibility.unnamedHeadings > 0 || result.accessibility.unnamedControls > 0 ||
-    (result.keyboard && (!result.keyboard.visible || !result.keyboard.className.includes('skip-link'))));
-  console.log(JSON.stringify({ checked: results.length, failures: failures.length, results }, null, 2));
+    (result.keyboard && (result.keyboard[0]?.visible !== true || !result.keyboard[0]?.className.includes('skip-link') ||
+      result.keyboard.some((focus, index) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link')) || (index > 0 && focus.className.includes('skip-link'))))) ||
+    (result.liveProduct && (!result.productContentVisible || !result.productTitlePresent || !result.relatedCardCount ||
+      result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px')));
+  const failureDetails = failures.map((result) => {
+    const issues = [];
+    if (result.overflowElements.length || result.bodyScroll > result.viewport + 1 || result.rootScroll > result.rootClient + 1) issues.push('horizontal_overflow');
+    if (!result.accessibility.mainLandmark) issues.push('main_landmark_missing');
+    if (result.accessibility.unnamedHeadings) issues.push('unnamed_heading');
+    if (result.accessibility.unnamedControls) issues.push('unnamed_control');
+    if (result.keyboard && (result.keyboard[0]?.visible !== true || !result.keyboard[0]?.className.includes('skip-link') ||
+      result.keyboard.some((focus, index) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link')) || (index > 0 && focus.className.includes('skip-link'))))) issues.push('keyboard_focus_visibility');
+    if (result.liveProduct && (!result.productContentVisible || !result.productTitlePresent || !result.relatedCardCount)) issues.push('product_detail_content_missing');
+    if (result.liveProduct && (result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px')) issues.push('related_cards_unstyled');
+    return { route: result.route, viewport: result.viewport, issues, relatedCardCount: result.relatedCardCount, firstRelatedCardDisplay: result.firstRelatedCardDisplay, firstRelatedCardBorder: result.firstRelatedCardBorder };
+  });
+  console.log(JSON.stringify({ checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, results }, null, 2));
   if (failures.length) process.exitCode = 1;
 } finally {
   for (const item of pending.values()) clearTimeout(item.timeout);
-  socket?.close();
   if (chrome && chrome.exitCode === null) {
     if (process.platform === 'win32') {
       spawnSync('taskkill.exe', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
@@ -170,18 +276,23 @@ try {
     }
     await Promise.race([new Promise((resolve) => chrome.once('exit', resolve)), delay(2_000)]);
   }
+  if (socket && socket.readyState !== WebSocket.CLOSED) {
+    const closed = new Promise((resolve) => socket.addEventListener('close', resolve, { once: true }));
+    socket.close();
+    await Promise.race([closed, delay(1_500)]);
+  }
   const tempRoot = path.resolve(os.tmpdir());
   if (path.dirname(path.resolve(profilePath)) === tempRoot) {
-    for (let attempt = 0; attempt < 15; attempt += 1) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
       try {
         await rm(profilePath, { recursive: true, force: true });
         break;
       } catch (error) {
-        if (!['EBUSY', 'EPERM'].includes(error.code) || attempt === 14) {
+        if (!['EBUSY', 'EPERM'].includes(error.code) || attempt === 29) {
           console.warn(`Temporary Chrome profile cleanup deferred: ${profilePath}`);
           break;
         }
-        await delay(100);
+        await delay(250);
       }
     }
   }

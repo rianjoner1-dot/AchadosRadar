@@ -13,7 +13,7 @@ test('E1: importer accepts macro fields, preserves image order and only publishe
   const sourcePath = path.join(tempDir, 'catalog.json');
   const now = new Date().toISOString();
   fs.writeFileSync(sourcePath, JSON.stringify([
-    { platform: 'magalu', id: 'sku-1', title: 'Brinco prata', price: 45.9, stockStatus: 'in_stock', stockQuantity: null, images: ['https://a-static.mlcdn.com.br/img/1.jpg', 'https://a-static.mlcdn.com.br/img/2.jpg'], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10', originalUrl: 'https://www.magazineluiza.com.br/p/produto/sku-1', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/sku-1', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now, refreshDueAt: new Date(Date.now() + 86400000).toISOString() },
+    { platform: 'magalu', id: 'sku-1', title: 'Brinco prata', price: 45.9, stockStatus: 'in_stock', stockQuantity: null, images: ['https://a-static.mlcdn.com.br/img/1.jpg', 'https://a-static.mlcdn.com.br/img/2.jpg'], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10', originalUrl: 'https://www.magazineluiza.com.br/p/produto/sku-1', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/sku-1', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now, refreshDueAt: new Date(Date.now() + 86400000).toISOString() },
     { platform: 'mercadolivre', id: 'MLB123', title: 'Fone bluetooth', price: 100, stockStatus: 'unknown', images: ['https://http2.mlstatic.com/img/1.jpg'], originalUrl: 'https://produto.mercadolivre.com.br/MLB-123', affiliateUrl: 'https://meli.la/aBc123', isOfficialShortLink: true, linkStatus: 'ready', lastCheckedAt: now },
     { platform: 'magalu', id: 'sku-2', title: 'Produto com imagem invasiva', price: 1, stockStatus: 'in_stock', images: ['https://example.com/track.png'], originalUrl: 'https://magazineluiza.com.br/p/x', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/x', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now }
   ]));
@@ -48,6 +48,19 @@ test('E1: importer accepts macro fields, preserves image order and only publishe
   assert.equal(normalized.shipping, 'Frete grátis');
   assert.equal(normalized.coupon, 'CUPOM10');
   assert.equal(normalized.stockQuantity, null, 'quantidade não observada permanece nula');
+  assert.equal(normalized.offerObservedAt, now, 'o importador preserva o horário real de coleta');
+
+  const unsafeImagesPath = path.join(tempDir, 'unsafe-images.json');
+  fs.writeFileSync(unsafeImagesPath, JSON.stringify([{ platform: 'magalu', id: 'sku-image-guard', title: 'Imagens com formato inseguro', price: 10, stockStatus: 'in_stock', images: [
+    'https://a-static.mlcdn.com.br/safe.jpg',
+    'https://user:pass@a-static.mlcdn.com.br/credentials.jpg',
+    'https://a-static.mlcdn.com.br:8443/custom-port.jpg',
+    'http://a-static.mlcdn.com.br/insecure.jpg',
+    'https://a-static.mlcdn.com.br.attacker.invalid/lookalike.jpg'
+  ], originalUrl: 'https://www.magazineluiza.com.br/p/produto/sku-image-guard', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/sku-image-guard', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now }]));
+  const unsafeImages = spawnSync(process.execPath, [script, unsafeImagesPath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
+  assert.equal(unsafeImages.status, 0, unsafeImages.stderr);
+  assert.deepEqual(JSON.parse(unsafeImages.stdout).details[0].imageUrls, ['https://a-static.mlcdn.com.br/safe.jpg']);
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -61,5 +74,58 @@ test('E1a: importer preserves stock evidence and downgrades contradictory in-sto
   assert.equal(normalized.stockQuantity, 0);
   assert.equal(normalized.stockStatus, 'unknown');
   assert.equal(normalized.stockEvidence, '0 unidades');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('E1c: missing or future offer observation time cannot make stock publishable or look fresh', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-observed-at-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  const base = { platform: 'magalu', title: 'Produto sem horário', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/produto/time-guard', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/time-guard', storeAffiliateId: 'loja', linkStatus: 'ready' };
+  fs.writeFileSync(sourcePath, JSON.stringify([{ ...base, id: 'missing-time' }, { ...base, id: 'future-time', collectedAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.publishable, 0, 'sem verificação do link e sem horário válido nenhum item pode ser publicado');
+  assert.equal(report.notPublishableReasons.oferta_sem_horario_de_observacao, 2);
+  assert.equal(report.details[0].stockStatus, 'unknown');
+  assert.equal(report.details[0].offerObservedAt, '1970-01-01T00:00:00.000Z');
+  assert.equal(report.details[1].stockStatus, 'unknown', 'data futura não pode validar o estoque observado');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('E1d: collectedAt is accepted as the actual offer observation timestamp', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-collected-at-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  const collectedAt = new Date(Date.now() - 60 * 1000).toISOString();
+  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'collected-time', title: 'Produto coletado', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/produto/collected-time', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/collected-time', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString(), collectedAt }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.publishable, 1);
+  assert.equal(report.details[0].offerObservedAt, collectedAt);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('E1b: only explicit marketplace-unavailable evidence can archive a product', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-image-recheck-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  fs.writeFileSync(sourcePath, JSON.stringify({ products: [], confirmedUnavailable: [
+    { platform: 'magalu', externalId: 'sku-gone', originalUrl: 'https://www.magazineluiza.com.br/p/sku-gone', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'explicit_not_found_without_title_or_price', evidence: 'explicit_not_found_without_title_or_price' },
+    { platform: 'mercadolivre', externalId: 'MLB-uncertain', originalUrl: 'https://produto.mercadolivre.com.br/MLB-uncertain', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'search_returned_no_results', evidence: 'search_returned_no_results' }
+  ] }));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run'], { encoding: 'utf8' });
+  assert.equal(result.status, 1, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.archiveCandidates, 1);
+  assert.equal(report.valid, 0, 'pending archival evidence is counted separately from publishable catalog products');
+  assert.equal(report.rejected[0].errors[0], 'evidencia_de_indisponibilidade_ausente_ou_invalida');
+  const pendingPath = path.join(tempDir, 'pending.json');
+  fs.writeFileSync(pendingPath, JSON.stringify([
+    { platform: 'magalu', externalId: 'sku-gone', originalUrl: 'https://www.magazineluiza.com.br/p/sku-gone', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'explicit_not_found_without_title_or_price' },
+    { platform: 'mercadolivre', externalId: 'MLB-uncertain', originalUrl: 'https://produto.mercadolivre.com.br/MLB-uncertain', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'search_returned_no_results' }
+  ]));
+  const externalQueue = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary'], { encoding: 'utf8', env: { ...process.env, CONFIRMED_UNAVAILABLE_REPORTS: pendingPath } });
+  assert.equal(externalQueue.status, 1, externalQueue.stderr);
+  assert.equal(JSON.parse(externalQueue.stdout).archiveCandidates, 1, 'dry-run reads the separate local bridge queue without network writes');
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
