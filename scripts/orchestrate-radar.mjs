@@ -35,7 +35,7 @@ async function findBrowser() {
 }
 
 const selectedBrowser = await findBrowser();
-const profilePath = await mkdtemp(path.join(os.tmpdir(), 'radar-autonomo-'));
+const profilePath = path.join(projectRoot, 'data', 'chrome-profile');
 
 const browser = spawn(selectedBrowser.path, [
   '--window-position=-32000,-32000', '--window-size=10,10', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
