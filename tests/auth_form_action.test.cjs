@@ -57,3 +57,28 @@ test('confirmed account session clears tokens and callback parameters from the a
   assert.match(page, /window\.location\.search \|\| window\.location\.hash/);
   assert.match(page, /window\.history\.replaceState\(null, '', window\.location\.pathname\)/);
 });
+
+test('initial profile name is stored only after OTP send and recovered by matching email', () => {
+  const otpSent = page.indexOf('const sent = await runAuthAction(() => client.auth.signInWithOtp');
+  const pendingNameStored = page.indexOf('if (sent && accountName)');
+  assert.ok(otpSent >= 0 && pendingNameStored > otpSent, 'the pending name must be stored only after the OTP request succeeds');
+  assert.match(page, /storePendingAccountName\(lastEmail, accountName, sessionStorage\)/);
+  assert.match(page, /readPendingAccountName\(accountEmail, sessionStorage\)/);
+  assert.match(page, /clearPendingAccountName\(accountEmail, sessionStorage\)/);
+  assert.match(page, /await persistInitialProfileName\([\s\S]*?profileClient\.from\('profiles'\)\.update\(\{ full_name: name \}\)[\s\S]*?\.select\('id'\)\.maybeSingle\(\)/);
+});
+
+test('profile save confirms that Supabase updated a profile row before showing success', () => {
+  assert.match(page, /const \{ data: updatedProfile, error \} = await supabase\.from\('profiles'\)\.update\(patch\)\.eq\('id', user\.id\)\.select\('id'\)\.maybeSingle\(\)/);
+  assert.match(page, /if \(!updatedProfile\?\.id\) throw new Error\('O perfil não foi encontrado para atualização\./);
+  assert.match(page, /if \(avatarUrl\) \{[\s\S]*?clearSelectedAvatarPreview\(\)[\s\S]*?avatarPreview\.src = avatarUrl[\s\S]*?profileStatus\.textContent = 'Perfil atualizado\.'/);
+});
+
+test('avatar input gives immediate validation feedback on selection', () => {
+  assert.match(page, /URL\.createObjectURL\(file\)/);
+  assert.match(page, /Prévia da foto carregada\. Salve as alterações para atualizar seu perfil\./);
+  assert.match(page, /URL\.revokeObjectURL\(selectedAvatarPreviewUrl\)/);
+  assert.match(page, /Não foi possível abrir essa imagem\. Escolha outra foto\./);
+  assert.match(page, /avatarFileName\.textContent = file\?\.name \?\? 'Nenhum arquivo selecionado'/);
+  assert.match(page, /Escolha uma foto JPEG, PNG ou WebP com até 5 MB\./);
+});

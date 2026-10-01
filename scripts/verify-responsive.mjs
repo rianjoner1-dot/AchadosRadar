@@ -11,9 +11,11 @@ const option = (name) => args.find((argument) => argument.startsWith(`--${name}=
 if (args.includes('--help')) {
   console.log('Optional flow: --smoke-admin-guest asserts anonymous visitors cannot see admin metrics.');
   console.log('Uso: node scripts/verify-responsive.mjs [URL] [--routes=/,/conta] [--viewports=390,1440]');
+  console.log('Saida: --summary-only mostra somente o resultado por rota e o detalhe da galeria real.');
   console.log('Fluxos opcionais: --smoke-search valida busca, loja, precos minimo/maximo e ordenacao sem registrar eventos.');
   console.log('Fluxos opcionais: --smoke-related-feed percorre as paginas relacionadas disponiveis sem abrir ofertas.');
   console.log('Fluxos opcionais: --smoke-guest-cart valida salvar/remover um produto de demonstração sem sair para o marketplace.');
+  console.log('Fluxos opcionais: --smoke-account-ui valida o nome da primeira conta e a seleção visual de foto sem enviar dados.');
   console.log('Rotas: caminhos separados por vírgula; use @first-live-product junto com /.');
   process.exit(0);
 }
@@ -22,6 +24,8 @@ const defaultRoutes = ['/', '/produto/MLB3299039091', '@first-live-product', '/c
 const routes = option('routes')?.split(',').map((route) => route.trim()).filter(Boolean) ?? defaultRoutes;
 const smokeAdminGuest = args.includes('--smoke-admin-guest');
 if (smokeAdminGuest && !routes.includes('/painel-admin')) throw new Error('--smoke-admin-guest requires --routes=/painel-admin.');
+const smokeAccountUi = args.includes('--smoke-account-ui');
+if (smokeAccountUi && !routes.includes('/conta')) throw new Error('--smoke-account-ui requires --routes=/conta.');
 const rawViewports = option('viewports')?.split(',').map((value) => Number(value.trim())) ?? [390, 1440];
 const viewports = [...new Set(rawViewports)];
 if (!routes.length) throw new Error('--routes deve conter ao menos uma rota.');
@@ -112,6 +116,7 @@ try {
   });
   await command('Page.enable');
   await command('Runtime.enable');
+  await command('Log.enable');
   await command('Accessibility.enable');
   await command('Network.enable');
   // Keep an accessibility audit from creating synthetic anonymous product-view metrics.
@@ -122,11 +127,18 @@ try {
   ] });
 
   const results = [];
+  const browserDiagnostics = [];
+  socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+    if (message.method === 'Runtime.exceptionThrown') browserDiagnostics.push({ type: 'exception', details: message.params.exceptionDetails?.text });
+    if (message.method === 'Log.entryAdded' && ['error', 'warning'].includes(message.params.entry?.level)) browserDiagnostics.push({ type: message.params.entry.level, text: message.params.entry.text });
+  });
   const skipped = [];
   let guestCartSmoke = null;
   let adminGuestSmoke = null;
   let catalogSearchSmoke = null;
   let relatedFeedSmoke = null;
+  let accountUiSmoke = null;
   let isStaticArtifact = false;
   try {
     const probe = await fetch(new URL('/_vercel/speed-insights/script.js', baseUrl), { signal: AbortSignal.timeout(3000) });
@@ -161,6 +173,37 @@ try {
         await delay(100);
       }
       if (!ready) throw new Error(`Page load timed out: ${route}`);
+      if (smokeAccountUi && route === '/conta' && width === viewports[0]) {
+        const formState = await command('Runtime.evaluate', {
+          returnByValue: true,
+          expression: `(() => { const name = document.querySelector('#newAccountName'); const file = document.querySelector('#avatarFile');
+            const card = file?.closest('label.avatar-upload-card');
+            return { nameField: Boolean(name && name.getAttribute('autocomplete') === 'name' && Number(name.maxLength) === 80),
+              fileAccept: file?.accept || '', cardCopy: card?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+              labelOwnsInput: Boolean(card && card.contains(file)), filesOutput: Boolean(document.querySelector('#avatarFileName')) }; })()`
+        });
+        const state = formState.result.value;
+        if (!state.nameField || !state.labelOwnsInput || !state.filesOutput || !state.cardCopy.includes('Clique para adicionar uma foto') ||
+          !['image/jpeg', 'image/png', 'image/webp'].every((type) => state.fileAccept.includes(type))) {
+          throw new Error(`Account form contract failed: ${JSON.stringify(state)}`);
+        }
+        const sampleFile = path.join(profilePath, 'avatar-smoke.png');
+        await writeFile(sampleFile, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/f9sAAAAASUVORK5CYII=', 'base64'));
+        await command('DOM.enable');
+        const documentRoot = await command('DOM.getDocument', { depth: 1 });
+        const fileNode = await command('DOM.querySelector', { nodeId: documentRoot.root.nodeId, selector: '#avatarFile' });
+        if (!fileNode.nodeId) throw new Error('Avatar file input was not present in the account form.');
+        await command('DOM.setFileInputFiles', { nodeId: fileNode.nodeId, files: [sampleFile] });
+        await command('Runtime.evaluate', { expression: `document.querySelector('#avatarFile')?.dispatchEvent(new Event('change', { bubbles: true }))` });
+        const selectedFile = await command('Runtime.evaluate', {
+          returnByValue: true,
+          expression: `({value: document.querySelector('#avatarFileName')?.textContent?.trim() || '', fileCount: document.querySelector('#avatarFile')?.files?.length || 0})`
+        });
+        accountUiSmoke = { ...state, selectedFileNameShown: selectedFile.result.value.value === 'avatar-smoke.png', selectedFileCount: selectedFile.result.value.fileCount, remoteWrites: 0 };
+        if (!accountUiSmoke.selectedFileNameShown || accountUiSmoke.selectedFileCount !== 1) {
+          throw new Error(`Avatar selection did not update its visible filename: ${JSON.stringify({ ...accountUiSmoke, browserDiagnostics })}`);
+        }
+      }
       if (smokeAdminGuest && route === '/painel-admin') {
         for (let attempt = 0; attempt < 50; attempt += 1) {
           const gate = await command('Runtime.evaluate', {
@@ -258,28 +301,82 @@ try {
         unnamedHeadings: axNodes.filter((node) => node.role?.value === 'heading' && !String(node.name?.value ?? '').trim()).length,
         unnamedControls: axNodes.filter((node) => ['button', 'link', 'textbox', 'searchbox', 'combobox', 'spinbutton'].includes(node.role?.value) && !String(node.name?.value ?? '').trim()).length
       };
-      let keyboard = null;
-      if (width === 390) {
-        keyboard = [];
-        const steps = route === '/' || liveProductRoute || route === '/produto/MLB3299039091' ? 16 : 1;
-        for (let step = 0; step < steps; step += 1) {
+      let productGalleryKeyboard = null;
+      if (route === '@first-live-product' && evaluation.result.value.productContentVisible) {
+        await command('Runtime.evaluate', { expression: 'document.body.setAttribute("tabindex", "-1"); document.body.focus()' });
+        const galleryBefore = await command('Runtime.evaluate', {
+          returnByValue: true,
+          expression: `(() => { const buttons = [...document.querySelectorAll('#productThumbnails .gallery-thumb')];
+            const announcement = document.querySelector('#galleryAnnouncement');
+            return { count: buttons.length, initialPressed: buttons.filter(button => button.getAttribute('aria-pressed') === 'true').length,
+              hasLiveRegion: announcement?.getAttribute('aria-live') === 'polite' && announcement?.getAttribute('aria-atomic') === 'true',
+              labels: buttons.map(button => button.getAttribute('aria-label')) }; })()`
+        });
+        const galleryInitial = galleryBefore.result.value;
+        if (galleryInitial.count > 0) {
+          let reachedGalleryByKeyboard = false;
+          for (let keypress = 0; keypress < 80; keypress += 1) {
+            await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+            await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+            const isGalleryFocused = await command('Runtime.evaluate', {
+              returnByValue: true,
+              expression: `document.activeElement === document.querySelector('#productThumbnails .gallery-thumb')`
+            });
+            if (isGalleryFocused.result.value) { reachedGalleryByKeyboard = true; break; }
+          }
+          if (galleryInitial.count > 1) {
+            await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 });
+            await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 });
+          }
+          productGalleryKeyboard = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `(() => { const buttons = [...document.querySelectorAll('#productThumbnails .gallery-thumb')];
+              const selected = buttons.filter(button => button.getAttribute('aria-pressed') === 'true');
+              const active = document.activeElement;
+              const announcement = document.querySelector('#galleryAnnouncement');
+              return { count: buttons.length, selectedCount: selected.length, selectedIndex: buttons.indexOf(selected[0]),
+                announcement: announcement?.textContent?.trim() || '', liveRegion: announcement?.getAttribute('aria-live') || '',
+                focusedThumbnail: buttons.includes(active), focusedLabel: active?.getAttribute('aria-label') || '',
+                visibleFocus: active ? (getComputedStyle(active).outlineStyle !== 'none' && parseFloat(getComputedStyle(active).outlineWidth) > 0) || getComputedStyle(active).boxShadow !== 'none' : false,
+                labels: buttons.map(button => button.getAttribute('aria-label')) }; })()`
+          }).then((result) => result.result.value);
+          productGalleryKeyboard.passed = productGalleryKeyboard.selectedCount === 1
+            && productGalleryKeyboard.liveRegion === 'polite'
+            && reachedGalleryByKeyboard
+            && productGalleryKeyboard.focusedThumbnail
+            && productGalleryKeyboard.visibleFocus
+            && (galleryInitial.count > 1
+              ? productGalleryKeyboard.selectedIndex === 1 && productGalleryKeyboard.announcement.startsWith(`Foto 2 de ${galleryInitial.count}:`)
+              : productGalleryKeyboard.selectedIndex === 0 && productGalleryKeyboard.announcement.startsWith('Foto 1 de 1:'));
+        } else productGalleryKeyboard = { count: 0, passed: false, reason: 'A galeria nao apresentou thumbnails para validar.' };
+        await command('Runtime.evaluate', { expression: 'document.activeElement?.blur(); window.scrollTo(0, 0)' });
+      }
+      await command('Runtime.evaluate', { expression: 'document.body.setAttribute("tabindex", "-1"); document.body.focus(); window.scrollTo(0, 0)' });
+      const focusableCount = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => [...document.querySelectorAll('a[href],button:not(:disabled),input:not(:disabled):not([type="hidden"]),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])')].filter(el => el.tagName !== 'ASTRO-DEV-TOOLBAR' && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getClientRects().length).length)()`
+      });
+      const keyboard = [];
+      const keyboardSteps = Math.min(32, Math.max(1, focusableCount.result.value));
+      for (let step = 0; step < keyboardSteps; step += 1) {
           await command('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
           await command('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
           if (step === 0) await delay(250); // Let the skip link's focus transition become visible before measuring it.
           const focusResult = await command('Runtime.evaluate', {
             returnByValue: true,
-            expression: `(() => { const el = document.activeElement; const style = getComputedStyle(el); const rect = el.getBoundingClientRect(); return {
-              name: (el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.id || el.tagName).trim().slice(0, 80),
-              className: String(el.className || ''), tag: el.tagName, outlineStyle: style.outlineStyle,
-              outlineWidth: style.outlineWidth, top: Math.round(rect.top), positionTop: style.top,
-              visible: (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) || Boolean(el.parentElement && getComputedStyle(el.parentElement).boxShadow !== 'none'),
-              inViewport: rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth
-            }; })()`
+            expression: `(() => { const el = document.activeElement; const style = getComputedStyle(el); const rect = el.getBoundingClientRect();
+              const ancestors = [el, el.parentElement, el.parentElement?.parentElement].filter(Boolean);
+              const visible = ancestors.some(node => { const s = getComputedStyle(node); return (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 && s.outlineColor !== 'rgba(0, 0, 0, 0)') || s.boxShadow !== 'none'; });
+              return { name: (el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.id || el.tagName).trim().slice(0, 80),
+                className: String(el.className || ''), tag: el.tagName, outlineStyle: style.outlineStyle,
+                outlineWidth: style.outlineWidth, top: Math.round(rect.top), positionTop: style.top, visible,
+                inViewport: rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth }; })()`
           });
-          keyboard.push(focusResult.result.value);
-        }
+          const focused = focusResult.result.value;
+          if (step > 0 && (focused.tag === 'BODY' || focused.tag === 'ASTRO-DEV-TOOLBAR' || focused.className.includes('skip-link'))) break;
+          keyboard.push(focused);
       }
-      results.push({ ...evaluation.result.value, accessibility, keyboard });
+      results.push({ ...evaluation.result.value, accessibility, keyboard, productGalleryKeyboard });
       if (smokeAdminGuest && route === '/painel-admin') adminGuestSmoke = evaluation.result.value.adminGuestAccess;
       if (width === 390 && (route === '/' || route === '/produto/MLB3299039091')) {
         await delay(route === '/' ? 1_500 : 0);
@@ -528,7 +625,7 @@ try {
     (smokeAdminGuest && result.route === '/painel-admin' &&
       (!result.adminGuestAccess?.metricsHidden || !result.adminGuestAccess.statusText.includes('Entre na conta administrativa'))) ||
     (result.liveProduct && (!result.productContentVisible || !result.productTitlePresent || !result.relatedCardCount ||
-      result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px')));
+      result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px' || !result.productGalleryKeyboard?.passed)));
   const failureDetails = failures.map((result) => {
     const issues = [];
     if (result.overflowElements.length || result.bodyScroll > result.viewport + 1 || result.rootScroll > result.rootClient + 1) issues.push('horizontal_overflow');
@@ -541,9 +638,16 @@ try {
       result.keyboard.some((focus, index) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link')) || (index > 0 && focus.className.includes('skip-link'))))) issues.push('keyboard_focus_visibility');
     if (result.liveProduct && (!result.productContentVisible || !result.productTitlePresent || !result.relatedCardCount)) issues.push('product_detail_content_missing');
     if (result.liveProduct && (result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px')) issues.push('related_cards_unstyled');
-    return { route: result.route, viewport: result.viewport, issues, relatedCardCount: result.relatedCardCount, firstRelatedCardDisplay: result.firstRelatedCardDisplay, firstRelatedCardBorder: result.firstRelatedCardBorder };
+    if (result.liveProduct && !result.productGalleryKeyboard?.passed) issues.push('product_gallery_aria_keyboard');
+    return { route: result.route, viewport: result.viewport, issues, relatedCardCount: result.relatedCardCount, firstRelatedCardDisplay: result.firstRelatedCardDisplay, firstRelatedCardBorder: result.firstRelatedCardBorder,
+      firstFocus: result.keyboard?.[0] ?? null,
+      badFocus: result.keyboard?.filter((focus) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link'))).map((focus) => ({ name: focus.name, className: focus.className, tag: focus.tag, top: focus.top, outlineStyle: focus.outlineStyle, inViewport: focus.inViewport })),
+      productGalleryKeyboard: result.productGalleryKeyboard };
   });
-  console.log(JSON.stringify({ checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, guestCartSmoke, adminGuestSmoke, catalogSearchSmoke, relatedFeedSmoke, results }, null, 2));
+  const summary = { checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, guestCartSmoke, adminGuestSmoke, catalogSearchSmoke, relatedFeedSmoke, accountUiSmoke,
+    productRoutes: results.filter((result) => result.liveProduct).map((result) => ({ route: result.route, viewport: result.viewport, productTitlePresent: result.productTitlePresent,
+      productGalleryImageCount: result.productGalleryImageCount, productGalleryKeyboard: result.productGalleryKeyboard, relatedCardCount: result.relatedCardCount })) };
+  console.log(JSON.stringify(args.includes('--summary-only') ? summary : { ...summary, results }, null, 2));
   if (failures.length) process.exitCode = 1;
 } finally {
   for (const item of pending.values()) clearTimeout(item.timeout);

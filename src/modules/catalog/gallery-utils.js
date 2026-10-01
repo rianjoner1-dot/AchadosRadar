@@ -24,6 +24,7 @@ export function initProductGallery(imageHost, thumbnails, productTitle, announce
       if (imageHost.firstChild !== image || isUsableProductImage(image)) return;
       if (typeof onImageFailure === 'function') onImageFailure(button.dataset.image);
       imageHost.textContent = 'Foto indisponível';
+      if (announcement) announcement.textContent = `Foto ${index + 1} de ${thumbnails.length} indisponível: ${productTitle}`;
     };
     image.addEventListener('error', showFallback, { once: true });
     image.addEventListener('load', showFallback, { once: true });

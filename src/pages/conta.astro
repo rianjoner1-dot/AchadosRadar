@@ -65,6 +65,8 @@ import { authReady } from '../modules/auth/client';
   import { normalizeBrazilianPhone } from '../modules/auth/phone.mjs';
   import { runAuthAction } from '../modules/auth/run-action.mjs';
   import { buildOtpOptions } from '../modules/auth/otp-options.mjs';
+  import { persistInitialProfileName } from '../modules/auth/persist-initial-profile-name.mjs';
+  import { clearPendingAccountName, readPendingAccountName, storePendingAccountName } from '../modules/auth/pending-account-name.mjs';
   const login = document.querySelector<HTMLElement>('#loginPanel')!;
   const profile = document.querySelector<HTMLElement>('#profilePanel')!;
   const requestForm = document.querySelector<HTMLFormElement>('#requestOtpForm')!;
@@ -76,22 +78,60 @@ import { authReady } from '../modules/auth/client';
   const emailInput = document.querySelector<HTMLInputElement>('#emailInput')!;
   const avatarFileInput = document.querySelector<HTMLInputElement>('#avatarFile')!;
   const avatarFileName = document.querySelector<HTMLElement>('#avatarFileName')!;
+  const avatarPreview = document.querySelector<HTMLImageElement>('#avatarPreview')!;
   let sessionRenderVersion = 0;
   let renderedUserId: string | null = null;
+  let persistedAvatarUrl = '';
+  let selectedAvatarPreviewUrl: string | null = null;
   let lastEmail = '';
 
+  function clearSelectedAvatarPreview() {
+    if (selectedAvatarPreviewUrl) URL.revokeObjectURL(selectedAvatarPreviewUrl);
+    selectedAvatarPreviewUrl = null;
+  }
+
   avatarFileInput.addEventListener('change', () => {
-    avatarFileName.textContent = avatarFileInput.files?.[0]?.name ?? 'Nenhum arquivo selecionado';
+    const file = avatarFileInput.files?.[0];
+    avatarFileName.textContent = file?.name ?? 'Nenhum arquivo selecionado';
+    clearSelectedAvatarPreview();
+    avatarPreview.onerror = null;
+    if (!file) {
+      avatarPreview.hidden = !persistedAvatarUrl;
+      if (persistedAvatarUrl) avatarPreview.src = persistedAvatarUrl;
+      else avatarPreview.removeAttribute('src');
+      if (profileStatus.textContent.startsWith('Escolha uma foto') || profileStatus.textContent.startsWith('Prévia da foto')) profileStatus.textContent = '';
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      profileStatus.textContent = 'Escolha uma foto JPEG, PNG ou WebP com até 5 MB.';
+      avatarPreview.hidden = !persistedAvatarUrl;
+      if (persistedAvatarUrl) avatarPreview.src = persistedAvatarUrl;
+      else avatarPreview.removeAttribute('src');
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    selectedAvatarPreviewUrl = previewUrl;
+    avatarPreview.src = previewUrl;
+    avatarPreview.hidden = false;
+    profileStatus.textContent = 'Prévia da foto carregada. Salve as alterações para atualizar seu perfil.';
+    avatarPreview.onerror = () => {
+      if (selectedAvatarPreviewUrl === previewUrl && avatarPreview.src === previewUrl) {
+        profileStatus.textContent = 'Não foi possível abrir essa imagem. Escolha outra foto.';
+      }
+    };
   });
 
   function clearPrivateProfile() {
+    clearSelectedAvatarPreview();
+    persistedAvatarUrl = '';
+    avatarPreview.onerror = null;
     (document.querySelector<HTMLInputElement>('#displayName')!).value = '';
     document.querySelector<HTMLElement>('#profileGreeting')!.textContent = '';
     avatarFileInput.value = '';
     avatarFileName.textContent = 'Nenhum arquivo selecionado';
     (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = '';
-    (document.querySelector<HTMLImageElement>('#avatarPreview')!).removeAttribute('src');
-    (document.querySelector<HTMLImageElement>('#avatarPreview')!).hidden = true;
+    avatarPreview.removeAttribute('src');
+    avatarPreview.hidden = true;
     document.querySelector<HTMLAnchorElement>('#adminPanelLink')!.hidden = true;
     document.querySelector('#accountEmail')!.textContent = '';
     profileStatus.textContent = '';
@@ -99,7 +139,8 @@ import { authReady } from '../modules/auth/client';
 
   async function renderSession() {
     const version = ++sessionRenderVersion;
-    if (!supabase) return;
+    const profileClient = supabase;
+    if (!profileClient) return;
     let user;
     try { user = await currentUser(); }
     catch {
@@ -129,18 +170,40 @@ import { authReady } from '../modules/auth/client';
     try { await syncCartForUser(user.id); }
     catch { if (version === sessionRenderVersion) profileStatus.textContent = 'Não foi possível sincronizar a lista agora; seu perfil continua disponível.'; }
     if (version !== sessionRenderVersion) return;
-    const { data, error: profileError } = await supabase.from('profiles').select('full_name,phone_e164,avatar_url,role').eq('id', user.id).maybeSingle();
+    let { data, error: profileError } = await profileClient.from('profiles').select('full_name,phone_e164,avatar_url,role').eq('id', user.id).maybeSingle();
     if (version !== sessionRenderVersion) return;
     if (profileError) { profileStatus.textContent = 'Não foi possível carregar os dados do perfil agora.'; return; }
+    const accountEmail = user.email ?? '';
+    let pendingName = '';
+    try {
+      pendingName = readPendingAccountName(accountEmail, sessionStorage);
+      // Discard names saved by the older, unbound format instead of applying them to an unknown account.
+      sessionStorage.removeItem('pending_account_name');
+    } catch {}
+    const initialName = data?.full_name?.trim() || pendingName || (user.user_metadata?.full_name as string | undefined)?.trim() || '';
+    if (data?.full_name?.trim()) {
+      try { clearPendingAccountName(accountEmail, sessionStorage); } catch {}
+    }
+    if (!data?.full_name?.trim() && initialName) {
+      const persistedName = await persistInitialProfileName(
+        initialName,
+        async (name) => await profileClient.from('profiles').update({ full_name: name }).eq('id', user.id).select('id').maybeSingle(),
+        () => clearPendingAccountName(accountEmail, sessionStorage)
+      );
+      if (version !== sessionRenderVersion) return;
+      if (!persistedName.saved) profileStatus.textContent = 'Seu nome foi recuperado, mas não foi possível salvá-lo no perfil. Edite e salve novamente.';
+      data = { ...(data ?? { phone_e164: null, avatar_url: null, role: 'customer' }), full_name: initialName };
+    }
     document.querySelector<HTMLAnchorElement>('#adminPanelLink')!.hidden = data?.role !== 'admin';
     (document.querySelector<HTMLInputElement>('#displayName')!).value = data?.full_name ?? '';
     document.querySelector<HTMLElement>('#profileGreeting')!.textContent = data?.full_name
       ? `Olá, ${data.full_name}!`
       : 'Complete seu perfil com seu nome.';
     (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = data?.phone_e164 ?? '';
-    const avatar = document.querySelector<HTMLImageElement>('#avatarPreview')!;
-    avatar.hidden = !data?.avatar_url;
-    if (data?.avatar_url) avatar.src = data.avatar_url;
+    persistedAvatarUrl = data?.avatar_url ?? '';
+    avatarPreview.hidden = !persistedAvatarUrl;
+    if (persistedAvatarUrl) avatarPreview.src = persistedAvatarUrl;
+    else avatarPreview.removeAttribute('src');
   }
   if (supabase) {
     void renderSession();
@@ -175,6 +238,9 @@ import { authReady } from '../modules/auth/client';
     status.textContent = 'Enviando código...';
     const otpOptions = buildOtpOptions(location.origin, accountName);
     const sent = await runAuthAction(() => client.auth.signInWithOtp({ email: lastEmail, options: otpOptions }));
+    if (sent && accountName) {
+      try { storePendingAccountName(lastEmail, accountName, sessionStorage); } catch {}
+    }
     status.textContent = sent ? 'Link de acesso enviado. Abra o email neste navegador; se ele também mostrar um código, digite-o abaixo.' : 'Não foi possível enviar agora. Confira o email e tente novamente.';
     verifyForm.hidden = !sent;
   });
@@ -236,10 +302,17 @@ import { authReady } from '../modules/auth/client';
       if (file) avatarUrl = await uploadAvatar(user, file);
       const patch: Record<string, string | null> = { full_name: name || null, phone_e164: phone };
       if (avatarUrl) patch.avatar_url = avatarUrl;
-      const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
+      const { data: updatedProfile, error } = await supabase.from('profiles').update(patch).eq('id', user.id).select('id').maybeSingle();
       if (error) throw error;
+      if (!updatedProfile?.id) throw new Error('O perfil não foi encontrado para atualização. Tente entrar novamente.');
       document.querySelector<HTMLElement>('#profileGreeting')!.textContent = name ? `Olá, ${name}!` : 'Complete seu perfil com seu nome.';
-      if (avatarUrl) { const preview = document.querySelector<HTMLImageElement>('#avatarPreview')!; preview.src = avatarUrl; preview.hidden = false; }
+      if (avatarUrl) {
+        clearSelectedAvatarPreview();
+        persistedAvatarUrl = avatarUrl;
+        avatarPreview.onerror = null;
+        avatarPreview.src = avatarUrl;
+        avatarPreview.hidden = false;
+      }
       avatarFileInput.value = '';
       avatarFileName.textContent = 'Nenhum arquivo selecionado';
       profileStatus.textContent = 'Perfil atualizado.';

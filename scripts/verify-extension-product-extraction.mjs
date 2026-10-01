@@ -24,23 +24,29 @@ const productSpecs = process.argv.slice(2)
 if (!productSpecs.length) throw new Error('Provide at least one --product=platform|ID|HTTPS_URL argument.');
 if (manifest.manifest_version !== 3 || manifest.background?.service_worker !== 'background/service_worker.js') throw new Error('The extension MV3 service worker is missing.');
 
-async function findChromium() {
+async function findBrowser() {
+  const configuredBrowser = process.env.ACHADOS_CHROME_EXECUTABLE?.trim();
+  if (configuredBrowser) {
+    const resolvedPath = path.resolve(configuredBrowser);
+    await access(resolvedPath);
+    return { path: resolvedPath, name: 'Google Chrome stable with a temporary profile' };
+  }
   const root = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ms-playwright');
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const candidates = entries.filter((entry) => entry.isDirectory() && /^chromium-\d+$/.test(entry.name))
     .sort((left, right) => Number(right.name.slice(9)) - Number(left.name.slice(9)))
     .map((entry) => path.join(root, entry.name, 'chrome-win64', 'chrome.exe'));
   for (const candidate of candidates) {
-    try { await access(candidate); return candidate; } catch { /* Try the next installed test browser. */ }
+    try { await access(candidate); return { path: candidate, name: 'Chromium for Testing' }; } catch { /* Try the next installed test browser. */ }
   }
   throw new Error(`Chromium for Testing was not found under ${root}.`);
 }
 
-const chromiumPath = await findChromium();
+const selectedBrowser = await findBrowser();
 const temporaryRoot = path.resolve(os.tmpdir());
 const profilePath = await mkdtemp(path.join(temporaryRoot, 'achados-product-capture-'));
 if (path.dirname(path.resolve(profilePath)) !== temporaryRoot) throw new Error('Temporary browser profile escaped the system temp directory.');
-const browser = spawn(chromiumPath, [
+const browser = spawn(selectedBrowser.path, [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--disable-background-networking', '--remote-debugging-port=0',
   `--user-data-dir=${profilePath}`,
@@ -90,7 +96,13 @@ function send(method, params = {}) {
 
 async function evaluate(expression) {
   const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-  if (response.exceptionDetails) throw new Error(response.exceptionDetails.text || 'Extension evaluation failed.');
+  if (response.exceptionDetails) {
+    const detail = response.exceptionDetails.exception?.description || response.exceptionDetails.exception?.value;
+    const location = response.exceptionDetails.lineNumber === undefined
+      ? ''
+      : ` at ${response.exceptionDetails.lineNumber + 1}:${(response.exceptionDetails.columnNumber || 0) + 1}`;
+    throw new Error(`${response.exceptionDetails.text || 'Extension evaluation failed.'}${detail ? `: ${detail}` : ''}${location}`);
+  }
   return response.result?.value;
 }
 
@@ -139,6 +151,14 @@ try {
     const messageType = spec.platform === 'magalu' ? 'CRAWL_MAGALU_PRODUCT' : 'CRAWL_MERCADOLIVRE_PRODUCT';
     const response = await sendTabMessage(tabId, { type: messageType, options: { topicName: 'Validação local' } });
     const item = response?.value?.item;
+    const pageDiagnostic = await evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => ({
+      title: document.title,
+      canonical: document.querySelector('link[rel="canonical"]')?.href || null,
+      heading: document.querySelector('h1')?.innerText?.trim().slice(0, 180) || null,
+      ogTitle: document.querySelector('meta[property="og:title"]')?.content || null,
+      ogPrice: document.querySelector('meta[property="product:price:amount"]')?.content || null,
+      textStart: document.body?.innerText?.replace(/\\s+/g, ' ').trim().slice(0, 320) || null
+    }) }).then(results => results[0]?.result || null)`);
     const images = Array.isArray(item?.images) ? item.images : [];
     const passed = Boolean(response?.ok && response.value?.ok && item?.id === spec.expectedId && item.title && Number(item.price) > 0 && images.length > 0);
     capturedProducts.push({
@@ -154,12 +174,13 @@ try {
       installments: item?.installments || null,
       coupon: item?.coupon || null,
       imageCount: images.length,
+      pageDiagnostic,
       error: response?.error || response?.value?.error || null
     });
   }
 
   console.log(JSON.stringify({
-    browser: 'Chromium for Testing',
+    browser: selectedBrowser.name,
     extensionWorkerStarted: true,
     productPagesOpened: productSpecs.length,
     mode: 'read-only extraction; no save, bridge, Supabase, radar or affiliate navigation',

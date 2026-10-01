@@ -48,6 +48,16 @@ test('G1.8: a local cart remains usable and gets an accurate status when account
   assert.match(cartPage, /A conta não pôde ser carregada\. Você ainda pode salvar produtos neste navegador\./);
 });
 
+test('G1.7/G1.8: restoring the cart from BFCache rechecks auth and reads the latest cart', () => {
+  assert.match(cartPage, /window\.addEventListener\('pageshow', \(event\) => \{\s*if \(event\.persisted\) void render\(\);\s*\}\);/);
+});
+
+test('G1.6/G1.7: a transient session recheck failure hides account items without starting a render loop', () => {
+  assert.match(cartPage, /try \{ confirmedUser = await auth\.currentUser\(\); \}\s*catch \{\s*if \(version !== renderVersion\) return;\s*const guestItems = renderLocalCart\(null\);\s*status\.textContent = 'Não foi possível confirmar sua sessão\./);
+  assert.match(cartPage, /Sua lista da conta permanece salva e oculta até a conexão voltar\./);
+  assert.doesNotMatch(cartPage, /catch \{[^}]*void render\(\)/s);
+});
+
 test('H1.3: an open product or cart page disables marketplace exit when a deadline passes', () => {
   assert.match(productPage, /const currentReadiness = evaluateOfferReadiness\(\{ link, offer \}\)/);
   assert.match(productPage, /buy\.removeAttribute\('href'\)/);

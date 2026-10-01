@@ -8,6 +8,28 @@ const { spawnSync } = require('node:child_process');
 const projectRoot = path.resolve(__dirname, '..');
 const script = path.join(projectRoot, 'scripts/import-catalog.mjs');
 
+test('E1: importer rejects credentials embedded in original and affiliate URLs', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-url-credentials-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  const common = {
+    platform: 'magalu', title: 'Produto com URL autenticada', price: 10, stockStatus: 'in_stock',
+    images: ['https://a-static.mlcdn.com.br/item.jpg'], storeAffiliateId: 'loja',
+    linkStatus: 'ready', lastCheckedAt: new Date().toISOString(), offerObservedAt: new Date().toISOString()
+  };
+  fs.writeFileSync(sourcePath, JSON.stringify([
+    { ...common, id: 'original-credentials', originalUrl: 'https://usuario:senha@www.magazineluiza.com.br/p/original-credentials', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/original-credentials' },
+    { ...common, id: 'affiliate-credentials', originalUrl: 'https://www.magazineluiza.com.br/p/affiliate-credentials', affiliateUrl: 'https://usuario:senha@www.magazinevoce.com.br/loja/p/affiliate-credentials' }
+  ]));
+
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run'], { encoding: 'utf8' });
+  assert.equal(result.status, 1, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.valid, 0);
+  assert.ok(report.rejected.find(({ id }) => id === 'original-credentials').errors.includes('url_original_fora_da_allowlist'));
+  assert.ok(report.rejected.find(({ id }) => id === 'affiliate-credentials').errors.includes('link_afiliado_ausente_ou_fora_da_allowlist'));
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('E1: importer accepts macro fields, preserves image order and only publishes proven, in-stock links', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-import-'));
   const sourcePath = path.join(tempDir, 'catalog.json');

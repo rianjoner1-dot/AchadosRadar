@@ -208,7 +208,15 @@ import Layout from '../layouts/Layout.astro';
       try {
         await auth.syncCartForUser(user.id);
       } catch { status.textContent = 'A sincronização não está disponível agora. Os itens salvos neste navegador continuam visíveis.'; }
-      const confirmedUser = await auth.currentUser().catch(() => null);
+      let confirmedUser = null;
+      try { confirmedUser = await auth.currentUser(); }
+      catch {
+        if (version !== renderVersion) return;
+        const guestItems = renderLocalCart(null);
+        status.textContent = 'Não foi possível confirmar sua sessão. Sua lista da conta permanece salva e oculta até a conexão voltar.';
+        await updateOfferStates(guestItems, version);
+        return;
+      }
       if (version !== renderVersion) return;
       if (confirmedUser?.id !== user.id) { void render(); return; }
     }
@@ -236,6 +244,9 @@ import Layout from '../layouts/Layout.astro';
   });
   document.addEventListener('cart:changed', () => void render());
   window.setInterval(updateCartLinkTimes, 60_000);
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) void render();
+  });
   window.addEventListener('storage', (event) => {
     if (event.key === 'achados_radar_cart_owner' || event.key === 'achados_radar_cart' || event.key?.startsWith('achados_radar_cart:')) void render();
   });

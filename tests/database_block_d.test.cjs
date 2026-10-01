@@ -389,6 +389,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await runMigration(db, '20260930210000_product_image_recheck_queue.sql');
     await runMigration(db, '20260930220000_stable_image_recheck_priority.sql');
     await runMigration(db, '20260930230000_keep_archived_product_metrics.sql');
+    await runMigration(db, '20261001090000_cart_owner_reads_archived_products.sql');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.profiles', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to profiles');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to saved carts');
     assert.equal((await db.query("SELECT has_table_privilege('authenticated', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, true, 'Authenticated users retain cart access, filtered by RLS');
@@ -522,6 +523,19 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await setAuthContext(db, { role: 'service_role' });
     assert.equal((await db.query('SELECT public.archive_unavailable_catalog_item($1, $2) AS archived', ['magalu', 'atomic-sku'])).rows[0].archived, true, 'Only the trusted catalog importer can archive an unavailable product');
     assert.equal((await db.query('SELECT status FROM public.products WHERE id = $1', [firstImport.rows[0].id])).rows[0].status, 'archived', 'Archived products no longer appear through the published catalog filter');
+    await setAuthContext(db, { role: 'authenticated', sub: userId });
+    const savedArchivedItem = await db.query(`
+      SELECT cart.product_id, product.platform, product.title, product.status
+      FROM public.cart_items AS cart
+      LEFT JOIN public.products AS product ON product.id = cart.product_id
+      WHERE cart.user_id = $1;
+    `, [userId]);
+    assert.deepEqual(savedArchivedItem.rows, [{ product_id: firstImport.rows[0].id, platform: 'magalu', title: 'Produto Atomic atualizado', status: 'archived' }], 'The owner can still reconstruct their saved archived product while its offer stays unavailable');
+    await setAuthContext(db, { role: 'authenticated', sub: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' });
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM public.products WHERE id = $1', [firstImport.rows[0].id])).rows[0].count, 0, 'A different account cannot read another user\'s archived product');
+    await setAuthContext(db, { role: 'anon' });
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM public.products WHERE id = $1', [firstImport.rows[0].id])).rows[0].count, 0, 'Anonymous catalog reads never reveal archived products');
+    await setAuthContext(db, { role: 'service_role' });
     assert.equal((await db.query('SELECT count(*)::int AS count FROM public.offers WHERE product_id = $1', [firstImport.rows[0].id])).rows[0].count, 2, 'Offer observations retain history');
     assert.equal((await db.query('SELECT count(*)::int AS count FROM public.product_images WHERE product_id = $1', [firstImport.rows[0].id])).rows[0].count, 1, 'Latest image gallery updates atomically');
     assert.equal((await db.query('SELECT count(*)::int AS count FROM public.cart_items WHERE product_id = $1', [firstImport.rows[0].id])).rows[0].count, 1, 'Reimport does not remove the saved cart item');

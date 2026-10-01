@@ -1,14 +1,18 @@
 -- Read-only verification for the linked Supabase project. Returns metadata/counts only.
+-- Keep the migration inventory synchronized with supabase/migrations; tests enforce parity.
 SELECT
   current_database() AS database_name,
   current_setting('server_version') AS server_version,
   (
-    SELECT count(*) = 11
+    SELECT count(*) = 23
     FROM supabase_migrations.schema_migrations
     WHERE version IN (
       '20260929180000', '20260929180100', '20260929180200', '20260929180300',
       '20260929180400', '20260929180500', '20260929180600', '20260929180700',
-      '20260930100000', '20260930110000', '20260930120000'
+      '20260930100000', '20260930110000', '20260930120000', '20260930130000',
+      '20260930140000', '20260930150000', '20260930160000', '20260930170000',
+      '20260930180000', '20260930190000', '20260930200000', '20260930210000',
+      '20260930220000', '20260930230000', '20261001090000'
     )
   ) AS all_site_migrations_applied,
   to_regclass('public.products') IS NOT NULL AS products_table_exists,

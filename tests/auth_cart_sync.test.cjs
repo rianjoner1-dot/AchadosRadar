@@ -129,6 +129,28 @@ test('G1.6: authenticated sync merges guest, account and remote items once and p
   assert.deepEqual(app.insertedByUser.get(userA).map(({ product_id }) => product_id), [productAccount, productGuest]);
 });
 
+test('G1.6: archived remote products remain in the owner cart without offer data', async () => {
+  const archived = remoteRow(productGuest, 'Produto arquivado');
+  archived.products = {
+    ...archived.products,
+    status: 'archived',
+    product_images: [],
+    offers: []
+  };
+  const app = createAuthClient({ remoteByUser: { [userA]: [archived] } });
+
+  await app.client.syncCartForUser(userA);
+
+  const saved = JSON.parse(app.values.get(`achados_radar_cart:${userA}`));
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].id, productGuest);
+  assert.equal(saved[0].title, 'Produto arquivado');
+  assert.equal(saved[0].platform, 'magalu');
+  assert.equal(saved[0].price, null);
+  assert.equal(saved[0].image, '');
+  assert.equal(app.values.get('achados_radar_cart_owner'), userA);
+});
+
 test('G1.8: anonymous cart actions treat a missing Supabase session as normal and skip remote writes', async () => {
   const app = createAuthClient({
     activeUserId: null,

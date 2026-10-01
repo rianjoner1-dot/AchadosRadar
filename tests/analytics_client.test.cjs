@@ -12,6 +12,7 @@ const compiled = ts.transpileModule(source, {
 
 function createAnalytics({ fetchImpl, storage = new Map() }) {
   const module = { exports: {} };
+  const timeouts = [];
   const sessionStorage = {
     getItem(key) { if (storage instanceof Error) throw storage; return storage.get(key) ?? null; },
     setItem(key, value) { if (storage instanceof Error) throw storage; storage.set(key, value); }
@@ -21,6 +22,7 @@ function createAnalytics({ fetchImpl, storage = new Map() }) {
     exports: module.exports,
     Set,
     Promise,
+    AbortSignal: { timeout(milliseconds) { timeouts.push(milliseconds); return { timeoutMs: milliseconds }; } },
     sessionStorage,
     fetch: fetchImpl,
     require(name) {
@@ -29,7 +31,7 @@ function createAnalytics({ fetchImpl, storage = new Map() }) {
     }
   };
   vm.runInNewContext(compiled, context, { filename: 'analytics-client.js' });
-  return { client: module.exports, storage };
+  return { client: module.exports, storage, timeouts };
 }
 
 const productId = '11111111-1111-4111-8111-111111111111';
@@ -47,6 +49,8 @@ test('H: product view is deduplicated per tab only after the RPC succeeds', asyn
   await app.client.recordProductView(productId);
   assert.equal(calls.length, 2, 'The first successful RPC is marked and later views in the same tab are suppressed');
   assert.deepEqual(JSON.parse(calls[1].options.body), { target_product_id: productId, metric_kind: 'view' });
+  assert.deepEqual(app.timeouts, [4000, 4000], 'each request has a finite timeout so a stalled RPC cannot remain in flight forever');
+  assert.equal(calls[0].options.signal.timeoutMs, 4000);
 });
 
 test('H: concurrent product renders send at most one view RPC', async () => {

@@ -20,7 +20,8 @@ export async function recordProductView(productId: string): Promise<void> {
       method: 'POST',
       headers: { apikey: config.key, authorization: `Bearer ${config.key}`, 'content-type': 'application/json' },
       body: JSON.stringify({ target_product_id: productId, metric_kind: 'view' }),
-      keepalive: true
+      keepalive: true,
+      signal: AbortSignal.timeout(4000)
     });
     if (response.ok) {
       try { sessionStorage.setItem(key, '1'); }

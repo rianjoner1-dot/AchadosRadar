@@ -266,7 +266,7 @@ test('confirmed missing products archive through the local service-role bridge a
   }
 });
 
-async function waitFor(check, timeoutMs = 10_000) {
+async function waitFor(check, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await check()) return;

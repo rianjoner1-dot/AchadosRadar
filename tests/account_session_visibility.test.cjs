@@ -14,7 +14,7 @@ test('G1: profile stays hidden until the server validates a session', () => {
 
 test('G1.7/G1.9: stale auth failures cannot hide a newer profile and current failures clear private fields', () => {
   assert.match(page, /catch \{\s*if \(version !== sessionRenderVersion\) return;\s*renderedUserId = null;[\s\S]*?clearPrivateProfile\(\);/);
-  assert.match(page, /function clearPrivateProfile\(\)[\s\S]*?#displayName[\s\S]*?#phoneNumber[\s\S]*?#avatarPreview[\s\S]*?#adminPanelLink[\s\S]*?#accountEmail/);
+  assert.match(page, /function clearPrivateProfile\(\)[\s\S]*?clearSelectedAvatarPreview\(\)[\s\S]*?persistedAvatarUrl = ''[\s\S]*?#displayName[\s\S]*?#phoneNumber[\s\S]*?avatarPreview\.removeAttribute\('src'\)[\s\S]*?#adminPanelLink[\s\S]*?#accountEmail/);
 });
 
 test('G1.10: local account cart is deleted only after the server confirms account deletion', () => {

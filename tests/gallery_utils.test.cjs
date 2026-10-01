@@ -101,12 +101,14 @@ test('a failed main product image reports its exact URL and displays a fallback'
     addEventListener() {}
   };
   const reported = [];
+  const announcement = { textContent: '' };
 
   try {
-    initProductGallery(imageHost, [thumbnail], 'Produto de teste', null, (url) => reported.push(url));
+    initProductGallery(imageHost, [thumbnail], 'Produto de teste', announcement, (url) => reported.push(url));
     imageHost.firstChild.emit('error');
     assert.deepEqual(reported, ['https://images.example/product.webp']);
     assert.equal(imageHost.textContent, 'Foto indisponível');
+    assert.equal(announcement.textContent, 'Foto 1 de 1 indisponível: Produto de teste');
   } finally {
     if (previousDocument === undefined) delete global.document;
     else global.document = previousDocument;

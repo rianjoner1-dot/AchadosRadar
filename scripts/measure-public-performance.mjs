@@ -9,6 +9,14 @@ import { resolveChromeExecutable } from './chrome-executable.mjs';
 const baseUrl = process.argv.find((arg) => arg.startsWith('http')) ?? 'https://achadosradar.vercel.app';
 const summaryOnly = process.argv.includes('--summary');
 const saveScreenshots = process.argv.includes('--shots');
+const requestedWidths = process.argv.find((arg) => arg.startsWith('--viewports='))
+  ?.slice('--viewports='.length)
+  .split(',')
+  .map((width) => Number(width.trim()));
+const viewportWidths = requestedWidths?.length ? [...new Set(requestedWidths)] : [390, 1440];
+if (viewportWidths.some((width) => !Number.isSafeInteger(width) || width < 320 || width > 3840)) {
+  throw new Error('--viewports deve conter larguras inteiras entre 320 e 3840 px.');
+}
 const profilePath = await mkdtemp(path.join(os.tmpdir(), 'achados-radar-perf-'));
 let chrome;
 let socket;
@@ -131,7 +139,8 @@ try {
   await command('Page.addScriptToEvaluateOnNewDocument', { source: `${vitalsObserver}\n${imageReportGuard}` });
 
   const results = [];
-  for (const viewport of [{ width: 390, height: 844, mobile: true }, { width: 1440, height: 900, mobile: false }]) {
+  for (const width of viewportWidths) {
+    const viewport = { width, height: width <= 640 ? 844 : 900, mobile: width <= 640 };
     requests.clear();
     await command('Network.clearBrowserCache');
     await command('Network.clearBrowserCookies');
