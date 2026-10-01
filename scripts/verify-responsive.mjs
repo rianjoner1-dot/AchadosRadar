@@ -200,6 +200,15 @@ try {
             liveProduct: location.pathname === '/produto' && Boolean(new URLSearchParams(location.search).get('id')),
             productContentVisible: Boolean(document.querySelector('#productContent') && !document.querySelector('#productContent').hidden),
             productTitlePresent: Boolean(document.querySelector('#productTitle')?.textContent?.trim()),
+            spotlightHidden: document.querySelector('#spotlightSection')?.hidden ?? null,
+            spotlightCards: [...document.querySelectorAll('#spotlightGrid .spotlight-card')].map((card) => ({
+              id: card.dataset.productId,
+              title: card.querySelector('h3')?.textContent?.trim(),
+              imageSrc: card.querySelector('img')?.currentSrc || null,
+              imageWidth: card.querySelector('img')?.naturalWidth ?? null,
+              imageFallback: card.querySelector('img')?.dataset.imageFallback === 'true',
+              placeholder: Boolean(card.querySelector('.spotlight-image-placeholder'))
+            })),
             relatedCardCount: document.querySelectorAll('#relatedGrid .related-card').length,
             firstRelatedCardDisplay: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).display : null,
             firstRelatedCardBorder: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).borderTopWidth : null };
