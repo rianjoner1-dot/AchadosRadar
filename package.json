@@ -16,7 +16,8 @@
     "audit:catalog-pages": "node scripts/audit-public-catalog-pages.mjs",
     "audit:catalog-images": "node scripts/audit-live-product-images.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
-    "validate:local": "npm run check && npm run build && npm test && npm run test:budget"
+    "validate:local": "npm run check && npm run build && npm test && npm run test:budget",
+    "orchestrate": "node scripts/orchestrate-radar.mjs"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.11",

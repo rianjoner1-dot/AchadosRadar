@@ -47,8 +47,8 @@ const temporaryRoot = path.resolve(os.tmpdir());
 const profilePath = await mkdtemp(path.join(temporaryRoot, 'achados-product-capture-'));
 if (path.dirname(path.resolve(profilePath)) !== temporaryRoot) throw new Error('Temporary browser profile escaped the system temp directory.');
 const browser = spawn(selectedBrowser.path, [
-  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-  '--disable-background-networking', '--remote-debugging-port=0',
+  '--window-position=-32000,-32000', '--window-size=10,10', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  '--remote-debugging-port=0',
   `--user-data-dir=${profilePath}`,
   `--disable-extensions-except=${extensionPath}`,
   `--load-extension=${extensionPath}`,

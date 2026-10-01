@@ -5,9 +5,9 @@ html, body { background: var(--bg-canvas); color: var(--text-primary); }
 .brand-accent { color: var(--text-primary); }
 .radar-dot, .live-dot { background: var(--accent-amber); box-shadow: none; animation: none; }
 .search-form { border: 1px solid #bdbdbd; border-radius: var(--radius-sm); background: #fff; box-shadow: none; }
-.search-form:focus-within { border-color: #555; box-shadow: 0 0 0 2px rgba(51, 51, 51, .16); }
-.search-btn, .cart-count-badge { background: #333; color: #fff; box-shadow: none; }
-.search-btn:hover { background: #111; color: #fff; }
+.search-form:focus-within { border-color: var(--action); box-shadow: 0 0 0 2px rgba(11, 79, 138, .16); }
+.search-btn, .cart-count-badge { background: var(--action); color: #fff; box-shadow: none; }
+.search-btn:hover { background: var(--action-hover); color: #fff; }
 .nav-btn { border: 1px solid #ccc; background: #fff; }
 .nav-btn:hover { border-color: #999; background: #f7f7f7; }
 .site-footer { border-top: 1px solid var(--border-subtle); background: #eee; color: var(--text-secondary); }

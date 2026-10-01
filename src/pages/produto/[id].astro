@@ -61,8 +61,9 @@ const canonicalUrl = canonicalOrigin ? new URL(`/produto/${encodeURIComponent(pr
       <!-- Coluna de Informações e Compra -->
       <div class="info-column">
         <div class="badges-row">
-          <span class={`badge-platform ${isML ? 'badge-mercadolivre' : 'badge-magalu'}`}>
-            {storeName}
+          <span class="badge-platform">
+            <img src={`/images/marketplaces/${product.platform}.png`} alt="" width="480" height="160" />
+            <span>{storeName}</span>
           </span>
           <span class="badge-seller">
             Vendido por: <strong>{product.sellerName || 'Loja Parceira'}</strong>

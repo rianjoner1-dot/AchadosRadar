@@ -46,7 +46,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           <p id="galleryAnnouncement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
         <section class="product-info">
-          <p id="productStore" class="product-store"></p>
+          <p id="productStore" class="product-store"><img id="productStoreLogo" width="480" height="160" alt="" /><span id="productStoreName"></span></p>
           <h1 id="productTitle"></h1>
           <p id="productSeller" class="product-seller"></p>
           <div id="productPrice" class="product-price-box"></div>
@@ -120,7 +120,9 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         document.title = `${product.title} | Achados Radar`;
         document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', `${product.title}. Confira os detalhes observados e finalize a compra na ${store}.`);
         document.querySelector('#breadcrumbProduct')!.textContent = product.title;
-        document.querySelector('#productStore')!.textContent = store;
+        const storeLogo = document.querySelector<HTMLImageElement>('#productStoreLogo')!;
+        storeLogo.src = `/images/marketplaces/${product.platform}.png`;
+        document.querySelector('#productStoreName')!.textContent = store;
         document.querySelector('#productTitle')!.textContent = product.title;
         document.querySelector('#productSeller')!.textContent = `Vendido por ${offer?.seller_name || store}`;
         document.querySelector('#productDescription')!.textContent = product.description || 'A loja parceira pode apresentar informações adicionais sobre este produto.';
@@ -228,7 +230,8 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .gallery-thumb:focus-visible { outline:3px solid #333; outline-offset:2px; }
   .gallery-thumb img { width:100%; height:100%; object-fit:contain; }
   .product-info { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
-  .product-store { color:#555; text-transform:uppercase; font-size:.75rem; letter-spacing:.05em; font-weight:700; }
+  .product-store { display:flex; align-items:center; gap:8px; min-height:30px; padding:5px 9px; border:1px solid #e4e8ec; border-radius:8px; background:#f7f9fb; color:#555; text-transform:uppercase; font-size:.75rem; letter-spacing:.05em; font-weight:700; }
+  .product-store img { display:block; width:58px; height:20px; object-fit:contain; border-radius:2px; }
   .product-info h1 { color:#222; font-size:clamp(1.45rem,3vw,2rem); line-height:1.3; }
   .product-seller { color:#666; font-size:.86rem; }
   .product-price-box { display:flex; flex-direction:column; gap:5px; width:100%; background:#f7f7f7; padding:16px; border-radius:7px; }
@@ -239,14 +242,20 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-facts li { display:flex; justify-content:space-between; gap:15px; border-bottom:1px solid #eee; padding-bottom:7px; font-size:.84rem; }
   .product-facts li span { color:#666; }
   .product-facts li strong { color:#222; text-align:right; }
-  .link-timing { color:#666; font-size:.78rem; }
+  .link-timing { width:100%; padding:9px 12px; border:1px solid #ead9a5; border-left:4px solid #9b6e00; border-radius:7px; background:#fbf3db; color:#75550d; font-size:.78rem; font-weight:600; }
   .product-buy, #saveProduct { width:100%; }
+  #buyProduct[aria-disabled="true"] { border-color:#476a89; background:#476a89; color:#fff; box-shadow:none; cursor:not-allowed; font-weight:800; transform:none; }
+  #buyProduct[aria-disabled="true"]:hover { border-color:#476a89; background:#476a89; box-shadow:none; transform:none; }
+  #saveProduct { border-color:#cbdcc8; background:#edf3ec; color:#315f38; font-weight:750; }
+  #saveProduct:hover { border-color:#9eb99a; background:#e1eddf; }
   .share-status { min-height:1.2em; color:#555; font-size:.85rem; overflow-wrap:anywhere; }
-  #buyProduct[aria-disabled="true"] { opacity:.6; pointer-events:auto; }
+  #buyProduct[aria-disabled="true"] { opacity:1; pointer-events:auto; }
   .share-actions { display:flex; width:100%; gap:10px; }
-  .share-action { display:inline-flex; min-width:0; min-height:44px; flex:1; align-items:center; justify-content:center; gap:8px; padding:9px 12px; border:1px solid #bdbdbd; border-radius:8px; background:#fff; color:#333; font:inherit; font-size:.9rem; font-weight:650; cursor:pointer; }
-  .share-action:hover { border-color:#888; background:#f6f6f6; }
-  .share-action:focus-visible { outline:2px solid #333; outline-offset:3px; }
+  .share-action { display:inline-flex; min-width:0; min-height:46px; flex:1; align-items:center; justify-content:center; gap:8px; padding:9px 12px; border:1px solid #b8cce0; border-radius:8px; background:#edf4fb; color:#0b4f8a; font:inherit; font-size:.9rem; font-weight:750; cursor:pointer; transition:background-color .16s ease,border-color .16s ease,transform .16s ease; }
+  .share-action:hover { border-color:#8caecf; background:#dceafa; transform:translateY(-1px); }
+  #shareWhatsApp { border-color:#147c55; background:#147c55; color:#fff; }
+  #shareWhatsApp:hover { border-color:#0d6242; background:#0d6242; }
+  .share-action:focus-visible { outline:3px solid #0b4f8a; outline-offset:3px; }
   .product-disclaimer { padding:12px; background:#f7f7f7; color:#555; font-size:.78rem; line-height:1.5; border-radius:6px; }
   .product-description, .related-section { margin-top:36px; border-top:1px solid #e5e5e5; padding-top:24px; }
   .product-description h2, .related-section h2 { color:#222; font-size:1.25rem; margin-bottom:12px; }

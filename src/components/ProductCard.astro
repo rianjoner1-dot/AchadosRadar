@@ -21,7 +21,7 @@ interface Props {
 }
 
 const { product } = Astro.props;
-const isML = product.platform === 'mercadolivre';
+const storeLabel = product.storeName || ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' }[product.platform] ?? 'Loja parceira');
 ---
 
 <article class="product-card" data-product-id={product.id}>
@@ -36,8 +36,9 @@ const isML = product.platform === 'mercadolivre';
       class="card-img"
     />
     <div class="card-badges">
-      <span class={`badge-platform ${isML ? 'badge-mercadolivre' : 'badge-magalu'}`}>
-        {isML ? 'Mercado Livre' : 'Magalu'}
+      <span class="badge-platform">
+        <img src={`/images/marketplaces/${product.platform}.png`} alt="" width="480" height="160" loading="lazy" />
+        <span>{storeLabel}</span>
       </span>
       {product.discountPercent && (
         <span class="badge-discount">{product.discountPercent}</span>

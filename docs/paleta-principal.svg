@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" role="img" aria-labelledby="title desc">
+  <title id="title">Paleta principal do Achados Radar</title>
+  <desc id="desc">Cores neutras da interface, ações em carvão, verde de destaque e cores de status âmbar e rose.</desc>
+  <rect width="1200" height="820" fill="#f5f5f5"/>
+  <rect x="42" y="42" width="1116" height="736" rx="24" fill="#ffffff" stroke="#dedede"/>
+  <text x="82" y="105" fill="#222222" font-family="Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="3">ACHADOS RADAR  /  IDENTIDADE VISUAL</text>
+  <text x="82" y="164" fill="#222222" font-family="Arial, sans-serif" font-size="42" font-weight="700">Paleta principal</text>
+  <text x="82" y="198" fill="#555555" font-family="Arial, sans-serif" font-size="18">Base neutra, com verde para realçar ofertas e cores discretas para estados.</text>
+
+  <text x="82" y="259" fill="#555555" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="1.5">BASE DA INTERFACE</text>
+  <g font-family="Arial, sans-serif">
+    <rect x="82" y="280" width="246" height="142" rx="12" fill="#f5f5f5" stroke="#dedede"/>
+    <text x="102" y="378" fill="#222222" font-size="18" font-weight="700">Fundo da página</text>
+    <text x="102" y="405" fill="#555555" font-size="15">#F5F5F5</text>
+
+    <rect x="348" y="280" width="246" height="142" rx="12" fill="#ffffff" stroke="#dedede"/>
+    <text x="368" y="378" fill="#222222" font-size="18" font-weight="700">Superfície / cards</text>
+    <text x="368" y="405" fill="#555555" font-size="15">#FFFFFF</text>
+
+    <rect x="614" y="280" width="246" height="142" rx="12" fill="#dedede" stroke="#c9c9c9"/>
+    <text x="634" y="378" fill="#222222" font-size="18" font-weight="700">Bordas suaves</text>
+    <text x="634" y="405" fill="#555555" font-size="15">#DEDEDE</text>
+
+    <rect x="880" y="280" width="238" height="142" rx="12" fill="#222222"/>
+    <text x="900" y="378" fill="#ffffff" font-size="18" font-weight="700">Texto principal</text>
+    <text x="900" y="405" fill="#e5e5e5" font-size="15">#222222</text>
+  </g>
+
+  <text x="82" y="480" fill="#555555" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="1.5">AÇÕES E DESTAQUES</text>
+  <g font-family="Arial, sans-serif">
+    <rect x="82" y="501" width="328" height="116" rx="12" fill="#0b4f8a"/>
+    <text x="106" y="558" fill="#ffffff" font-size="19" font-weight="700">Ação principal</text>
+    <text x="106" y="589" fill="#eeeeee" font-size="15">#0B4F8A  ·  hover #073B66</text>
+
+    <rect x="436" y="501" width="328" height="116" rx="12" fill="#47734e"/>
+    <text x="460" y="558" fill="#ffffff" font-size="19" font-weight="700">Verde de destaque</text>
+    <text x="460" y="589" fill="#edf5ed" font-size="15">#47734E</text>
+
+    <rect x="790" y="501" width="328" height="116" rx="12" fill="#f1f0e9" stroke="#e4e0d7"/>
+    <text x="814" y="558" fill="#222222" font-size="19" font-weight="700">Fundo acolhedor</text>
+    <text x="814" y="589" fill="#555555" font-size="15">#F1F0E9</text>
+  </g>
+
+  <text x="82" y="676" fill="#555555" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="1.5">ESTADOS</text>
+  <g font-family="Arial, sans-serif" font-size="15" font-weight="700">
+    <rect x="82" y="695" width="16" height="16" rx="4" fill="#9b6e00"/><text x="108" y="709" fill="#555555">Atenção  #9B6E00</text>
+    <rect x="340" y="695" width="16" height="16" rx="4" fill="#9e3f3f"/><text x="366" y="709" fill="#555555">Indisponível  #9E3F3F</text>
+    <rect x="650" y="695" width="16" height="16" rx="4" fill="#78917a"/><text x="676" y="709" fill="#555555">Verde suave  #78917A</text>
+    <text x="82" y="749" fill="#707070" font-size="13" font-weight="400">Cores extraídas dos tokens do tema e dos componentes visuais atuais do site.</text>
+  </g>
+</svg>

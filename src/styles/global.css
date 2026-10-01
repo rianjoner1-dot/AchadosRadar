@@ -13,9 +13,9 @@
   --accent-emerald: #47734e;
   --accent-amber: #9b6e00;
   --accent-rose: #9e3f3f;
-  --action: #333333;
-  --action-hover: #111111;
-  --focus-ring: 2px solid #333;
+  --action: #0b4f8a;
+  --action-hover: #073b66;
+  --focus-ring: 3px solid #0b4f8a;
   --font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   --radius-sm: 5px;
@@ -71,13 +71,15 @@ img { display: block; max-width: 100%; height: auto; }
   line-height: 1.25;
   text-align: center;
   text-decoration: none;
-  transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
 }
-.btn-primary { border-color: #333333; background: var(--action); color: #fff; }
-.btn-primary:hover { border-color: #111111; background: var(--action-hover); text-decoration: none; }
+.btn-primary { border-color: var(--action); background: var(--action); color: #fff; font-weight: 800; box-shadow: 0 3px 8px rgba(11, 79, 138, .22); }
+.btn-primary:hover { border-color: var(--action-hover); background: var(--action-hover); box-shadow: 0 5px 12px rgba(7, 59, 102, .25); transform: translateY(-1px); text-decoration: none; }
+.btn-primary:active { transform: translateY(0); }
 .btn-secondary { border-color: #bdbdbd; background: #fff; color: #333; }
 .btn-secondary:hover { border-color: #888; background: #f6f6f6; text-decoration: none; }
-.badge-platform { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #f2f2f2; color: #444; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.badge-platform { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid #e1e4e7; border-radius: var(--radius-sm); background: #f7f9fb; color: #444; font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.badge-platform img { display: block; width: 44px; height: 15px; object-fit: contain; border-radius: 2px; }
 .badge-seller { max-width: 180px; overflow: hidden; color: var(--text-muted); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
