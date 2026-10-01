@@ -15,8 +15,14 @@ Estado: checkpoint validado; objetivo geral ainda não concluído.
 ## Pendências para retomar o objetivo integral
 
 1. E: amostra real do Mercado Livre no Chrome, ciclo supervisionado de renovação, contador da extensão com registros reais e execução controlada do radar.
-2. G: configurar SMTP/redirects no Supabase; testar OTP real; validar perfil, avatar e sincronização/troca/limpeza do carrinho pela interface autenticada; testar remoção real do avatar ao excluir conta.
+2. G: configurar SMTP/redirects no Supabase; testar OTP real; validar perfil, prévia e persistência/reload do avatar pela interface autenticada; validar sincronização/troca/limpeza do carrinho no navegador; testar remoção real do avatar ao excluir conta. O upload e substituição no Storage via API autenticada agora passaram em ambiente dev após a correção RLS de 01/10.
 3. H: leitor de tela real; revisar preview privado da Vercel Pro; repetir fluxos no preview; confirmar autorização/divulgação de afiliados; deploy/observação final.
 4. Aparência: revisar o tema neutro em desktop/tablet no preview e publicar a versão visual aprovada.
 
 O checklist detalhado continua em `ETAPAS_PROCEDURAIS.md`; evidências e limites de cada execução estão em `VALIDACOES.md`. Este checkpoint encerra somente esta rodada de trabalho, não certifica 100% do objetivo EFGH.
+
+## Correção posterior: upload de foto de perfil
+
+Em 01/10 foi reproduzido o erro `new row violates row-level security policy` no Storage com usuário temporário autenticado. A migration `20261001120000_fix_avatar_storage_upload_rls.sql` foi aplicada ao projeto Supabase ligado de desenvolvimento; mantém RLS por pasta do proprietário e deixa tipo/tamanho sob as restrições nativas do bucket. O teste real passou para primeiro upload e substituição (`upsert`), e removeu objeto e conta temporários. A leitura remota confirmou as 24 migrations aplicadas e RLS ativo. A suíte local final passou 168/168, com Astro check limpo, build Vercel aprovado, 1 função e ~1,35 MB de ativos estáticos.
+
+O fluxo pela tela autenticada do proprietário, incluindo seleção, preview, recarga e foto JPEG original, ainda precisa de confirmação no Chrome. A mensagem técnica do Storage foi substituída por orientação amigável no código; essa melhoria de texto exige publicar o frontend, enquanto a correção da policy já está no Supabase. Nenhum deploy frontend ocorreu nesta correção.

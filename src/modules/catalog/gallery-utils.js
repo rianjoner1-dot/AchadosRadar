@@ -16,13 +16,14 @@ export function initProductGallery(imageHost, thumbnails, productTitle, announce
     if (!button) return;
     const image = document.createElement('img');
     image.alt = productTitle;
+    image.dataset.originalImageUrl = button.dataset.originalImageUrl || button.dataset.image;
     image.width = 640;
     image.height = 640;
     image.decoding = 'async';
     if (index === 0) image.fetchPriority = 'high';
     const showFallback = () => {
       if (imageHost.firstChild !== image || isUsableProductImage(image)) return;
-      if (typeof onImageFailure === 'function') onImageFailure(button.dataset.image);
+      if (typeof onImageFailure === 'function') onImageFailure(button.dataset.originalImageUrl || button.dataset.image);
       imageHost.textContent = 'Foto indisponível';
       if (announcement) announcement.textContent = `Foto ${index + 1} de ${thumbnails.length} indisponível: ${productTitle}`;
     };

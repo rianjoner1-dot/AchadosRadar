@@ -41,13 +41,13 @@ test('product gallery ignores unrelated keys and empty galleries', () => {
 
 test('product gallery changes the main photo and exposes one keyboard-selected thumbnail', () => {
   const previousDocument = global.document;
-  global.document = { createElement: () => ({ addEventListener() {} }) };
+  global.document = { createElement: () => ({ dataset: {}, addEventListener() {} }) };
   const imageHost = { image: null, replaceChildren(image) { this.image = image; } };
   const announcement = { textContent: '' };
   const makeButton = (url) => {
     const listeners = {};
     return {
-      dataset: { image: url },
+      dataset: { image: url, originalImageUrl: `https://images.example/original-${url.split('/').pop()}` },
       attributes: {},
       tabIndex: -1,
       focused: false,
@@ -62,6 +62,7 @@ test('product gallery changes the main photo and exposes one keyboard-selected t
   try {
     initProductGallery(imageHost, thumbnails, 'Produto de teste', announcement);
     assert.equal(imageHost.image.src, thumbnails[0].dataset.image);
+    assert.equal(imageHost.image.dataset.originalImageUrl, thumbnails[0].dataset.originalImageUrl);
     assert.equal(imageHost.image.fetchPriority, 'high');
     assert.equal(thumbnails[0].attributes['aria-pressed'], 'true');
     assert.equal(thumbnails[0].tabIndex, 0);
@@ -87,7 +88,7 @@ test('a failed main product image reports its exact URL and displays a fallback'
   global.document = {
     createElement: () => {
       const listeners = {};
-      return { addEventListener(type, listener) { listeners[type] = listener; }, emit(type) { listeners[type]?.(); } };
+      return { dataset: {}, addEventListener(type, listener) { listeners[type] = listener; }, emit(type) { listeners[type]?.(); } };
     }
   };
   const imageHost = {
@@ -96,7 +97,7 @@ test('a failed main product image reports its exact URL and displays a fallback'
     replaceChildren(image) { this.firstChild = image; }
   };
   const thumbnail = {
-    dataset: { image: 'https://images.example/product.webp' },
+    dataset: { image: 'https://images.example/large-product.webp', originalImageUrl: 'https://images.example/product.webp' },
     setAttribute() {},
     addEventListener() {}
   };

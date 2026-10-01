@@ -133,7 +133,12 @@ export async function uploadAvatar(user: User, file: File): Promise<string> {
   const blob = await prepareAvatarBlob(file);
   const path = `${user.id}/avatar.webp`;
   const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', cacheControl: '0', upsert: true });
-  if (error) throw error;
+  if (error) {
+    if (error.statusCode === '403' || /row-level security policy/i.test(error.message)) {
+      throw new Error('Não foi possível gravar a foto de perfil. Confira se o arquivo é JPEG, PNG ou WebP e tente novamente.');
+    }
+    throw error;
+  }
   const { data } = supabase.storage.from('avatars').getPublicUrl(path);
   return versionAvatarUrl(data.publicUrl);
 }

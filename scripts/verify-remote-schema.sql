@@ -4,7 +4,7 @@ SELECT
   current_database() AS database_name,
   current_setting('server_version') AS server_version,
   (
-    SELECT count(*) = 23
+    SELECT count(*) = 24
     FROM supabase_migrations.schema_migrations
     WHERE version IN (
       '20260929180000', '20260929180100', '20260929180200', '20260929180300',
@@ -12,7 +12,7 @@ SELECT
       '20260930100000', '20260930110000', '20260930120000', '20260930130000',
       '20260930140000', '20260930150000', '20260930160000', '20260930170000',
       '20260930180000', '20260930190000', '20260930200000', '20260930210000',
-      '20260930220000', '20260930230000', '20261001090000'
+      '20260930220000', '20260930230000', '20261001090000', '20261001120000'
     )
   ) AS all_site_migrations_applied,
   to_regclass('public.products') IS NOT NULL AS products_table_exists,

@@ -20,7 +20,7 @@ export interface CatalogProduct {
   title: string;
   description?: string | null;
   created_at: string;
-  images: { url: string; display_order: number }[];
+  images: { url: string; display_order: number; original_url?: string }[];
   offer: CatalogOffer | null;
   affiliate_link: { status: string; expires_at?: string | null; refresh_due_at?: string | null; verified_at?: string } | null;
   search_score?: number;

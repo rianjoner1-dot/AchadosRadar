@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shareProductLink } = require('../src/modules/catalog/share.js');
+const { copyProductLink, getWhatsAppShareUrl, shareProductLink } = require('../src/modules/catalog/share.js');
 
 function createDocument(copyResult = true) {
   const activeElement = { restored: false, focus() { this.restored = true; } };
@@ -30,6 +30,25 @@ test('uses native share when available', async () => {
   });
   assert.equal(result, 'shared');
   assert.deepEqual(payload, { title: 'Produto', url: 'https://shop.example/p/1' });
+});
+
+test('creates a WhatsApp share URL with encoded product title and link', () => {
+  const shareUrl = getWhatsAppShareUrl({ title: 'Tênis & oferta', url: 'https://shop.example/p/1?x=1&y=2' });
+  assert.equal(shareUrl, 'https://wa.me/?text=T%C3%AAnis%20%26%20oferta%20https%3A%2F%2Fshop.example%2Fp%2F1%3Fx%3D1%26y%3D2');
+});
+
+test('copy button copies directly without opening the native share menu', async () => {
+  let copied;
+  const result = await copyProductLink({
+    url: 'https://shop.example/p/copy-only',
+    navigatorApi: {
+      share: async () => assert.fail('copy action must not open native share'),
+      clipboard: { writeText: async (value) => { copied = value; } }
+    },
+    documentApi: {}
+  });
+  assert.equal(result, 'copied');
+  assert.equal(copied, 'https://shop.example/p/copy-only');
 });
 
 test('copies through Clipboard API when native share is unavailable', async () => {

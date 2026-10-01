@@ -1,13 +1,4 @@
-export async function shareProductLink({ title, url, navigatorApi, documentApi }) {
-  if (typeof navigatorApi?.share === 'function') {
-    try {
-      await navigatorApi.share({ title, url });
-      return 'shared';
-    } catch (error) {
-      if (error?.name === 'AbortError') return 'cancelled';
-    }
-  }
-
+export async function copyProductLink({ url, navigatorApi, documentApi }) {
   if (typeof navigatorApi?.clipboard?.writeText === 'function') {
     try {
       await navigatorApi.clipboard.writeText(url);
@@ -32,4 +23,22 @@ export async function shareProductLink({ title, url, navigatorApi, documentApi }
     field.remove();
     previousFocus?.focus?.();
   }
+}
+
+export async function shareProductLink({ title, url, navigatorApi, documentApi }) {
+  if (typeof navigatorApi?.share === 'function') {
+    try {
+      await navigatorApi.share({ title, url });
+      return 'shared';
+    } catch (error) {
+      if (error?.name === 'AbortError') return 'cancelled';
+    }
+  }
+
+  return copyProductLink({ url, navigatorApi, documentApi });
+}
+
+export function getWhatsAppShareUrl({ title, url }) {
+  const text = `${title} ${url}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }

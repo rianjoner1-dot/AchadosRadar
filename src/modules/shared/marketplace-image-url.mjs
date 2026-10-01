@@ -1,6 +1,8 @@
 const imageHosts = {
   mercadolivre: ['mlstatic.com', 'mlstatic.com.br'],
-  magalu: ['mlcdn.com.br', 'magazineluiza.com.br']
+  magalu: ['mlcdn.com.br', 'magazineluiza.com.br'],
+  amazon: ['media-amazon.com', 'ssl-images-amazon.com', 'images-amazon.com'],
+  shopee: ['susercontent.com', 'shopee.com.br', 'shopee.com']
 };
 
 export function isAllowedMarketplaceImageUrl(platform, candidate) {

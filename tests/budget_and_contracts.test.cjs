@@ -94,8 +94,10 @@ test('C1: Vercel artifact must contain static product pages, dynamic runtime and
   assert.match(demoProduct, /Mais ofertas para comparar/);
   assert.match(demoProduct, /property="og:image"/);
   assert.doesNotMatch(demoProduct, /localhost:4321\/produto\/MLB3299039091\//, 'Static build must not publish localhost as the canonical origin');
-  assert.match(demoProduct, /Compartilhar produto/);
-  assert.match(demoProduct, /shareDemoProduct/);
+  assert.match(demoProduct, /Compartilhar pelo WhatsApp/);
+  assert.match(demoProduct, /Copiar link do produto/);
+  assert.match(demoProduct, /shareDemoWhatsApp/);
+  assert.match(demoProduct, /shareDemoCopyLink/);
   assert.ok(fs.existsSync(path.join(staticOutputPath, 'product-placeholder.svg')), 'Fallback de imagem deve estar no artefato estático');
   const layoutBundleName = fs.readdirSync(path.join(staticOutputPath, '_astro')).find((name) => name.startsWith('Layout.astro_astro_type_script'));
   assert.ok(layoutBundleName, 'Bundle do layout deve existir');

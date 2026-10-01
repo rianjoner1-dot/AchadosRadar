@@ -19,7 +19,20 @@ const adminClient = createClient(supabaseUrl, serviceRoleKey, {
 });
 
 const userClient = createClient(supabaseUrl, supabaseKey, {
-  auth: { autoRefreshToken: false, persistSession: false }
+  auth: { autoRefreshToken: false, persistSession: false },
+  global: {
+    fetch: async (input, init) => {
+      const requestUrl = typeof input === 'string' ? input : input?.url;
+      if (requestUrl?.includes('/storage/v1/object/avatars/')) {
+        const headers = new Headers(init?.headers ?? (typeof input === 'object' ? input.headers : undefined));
+        const token = headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+        const payload = token?.split('.')[1];
+        const claims = payload ? JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) : null;
+        console.log(`    Storage request JWT: role=${claims?.role ?? 'ausente'}, subject=${claims?.sub ? 'presente' : 'ausente'}`);
+      }
+      return fetch(input, init);
+    }
+  }
 });
 
 async function runBackendIntegration() {
@@ -27,6 +40,7 @@ async function runBackendIntegration() {
   const testPassword = `PassWord#${Date.now()}!`;
   let userId = null;
   let runError = null;
+  let avatarObjectPath = null;
   console.log('[1] Criando usuário temporário de teste via admin.');
   const { data: adminAuthData, error: createErr } = await adminClient.auth.admin.createUser({
     email: testEmail,
@@ -59,14 +73,54 @@ async function runBackendIntegration() {
   if (updErr) throw updErr;
   console.log(`    Perfil atualizado com nome.`);
 
-  console.log(`[4] Pulando Storage/Avatar em Node (G1.4) devido a limite do multipart...`);
-  // const buffer = Buffer.from("fake-image-content-jpeg-data");
-  // const { data: uploadData, error: uploadErr } = await userClient.storage.from('avatars').upload(`${user.id}/avatar.jpg`, buffer, {
-  //   contentType: 'image/jpeg',
-  //   upsert: true
-  // });
-  // if (uploadErr) throw uploadErr;
-  // console.log(`    Avatar enviado para path: ${uploadData.path}`);
+  console.log('[4] Testando upload autenticado no bucket avatars.');
+  const { data: sessionDataForStorage, error: storageSessionError } = await userClient.auth.getSession();
+  if (storageSessionError) throw storageSessionError;
+  const storageTokenPayload = sessionDataForStorage.session?.access_token?.split('.')[1];
+  const storageClaims = storageTokenPayload
+    ? JSON.parse(Buffer.from(storageTokenPayload, 'base64url').toString('utf8'))
+    : null;
+  console.log(`    Sessao Storage: role=${storageClaims?.role ?? 'ausente'}, uid_confere=${storageClaims?.sub === user.id}`);
+  const avatarBytes = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==', 'base64');
+  const policyCheckPath = `${user.id}/avatar-policy-check.webp`;
+  const { error: seedError } = await adminClient.storage.from('avatars').upload(policyCheckPath, avatarBytes, {
+    contentType: 'image/webp',
+    cacheControl: '0',
+    upsert: true
+  });
+  if (seedError) throw seedError;
+  let policyList = null;
+  let policyListError = null;
+  try {
+    const result = await userClient.storage.from('avatars').list(user.id, { search: 'avatar-policy-check.webp' });
+    policyList = result.data;
+    policyListError = result.error;
+  } finally {
+    const { error: seedCleanupError } = await adminClient.storage.from('avatars').remove([policyCheckPath]);
+    if (seedCleanupError) {
+      avatarObjectPath = policyCheckPath;
+      throw seedCleanupError;
+    }
+  }
+  if (policyListError) throw policyListError;
+  const visibleSeed = policyList?.find((item) => item.name === 'avatar-policy-check.webp');
+  console.log(`    Política SELECT do usuário: ${visibleSeed ? 'aprovada' : 'objeto nao visivel'}; metadata=${JSON.stringify(visibleSeed?.metadata ?? null)}`);
+
+  avatarObjectPath = `${user.id}/avatar.webp`;
+  const { error: avatarUploadError } = await userClient.storage.from('avatars').upload(avatarObjectPath, avatarBytes, {
+    contentType: 'image/webp',
+    cacheControl: '0',
+    upsert: false
+  });
+  if (avatarUploadError) throw avatarUploadError;
+  console.log('    Upload inicial do usuário autenticado aceito.');
+  const { error: avatarReplaceError } = await userClient.storage.from('avatars').upload(avatarObjectPath, avatarBytes, {
+    contentType: 'image/webp',
+    cacheControl: '0',
+    upsert: true
+  });
+  if (avatarReplaceError) throw avatarReplaceError;
+  console.log('    Substituição do avatar existente com upsert aceita.');
 
   console.log(`[5] Testando Carrinho (G1.5/G1.6/G1.8)`);
   const { data: prodList, error: productErr } = await adminClient.from('products').select('id').eq('status', 'published').limit(1);
@@ -92,7 +146,21 @@ async function runBackendIntegration() {
   } catch (error) {
     runError = error;
   } finally {
+    let cleanupFailed = false;
+    if (userId && avatarObjectPath) {
+      const { error: avatarCleanupError } = await adminClient.storage.from('avatars').remove([avatarObjectPath]);
+      if (avatarCleanupError) {
+        cleanupFailed = true;
+        console.error('Não foi possível remover o arquivo avatar temporário:', avatarObjectPath);
+        if (!runError) runError = avatarCleanupError;
+      } else {
+        console.log('[6a] Avatar temporário removido.');
+      }
+    }
     if (userId) {
+      if (cleanupFailed) {
+        console.error('Conta temporária preservada para permitir limpeza manual segura:', userId);
+      } else {
       console.log('[6] Limpando usuário temporário de teste.');
       const { error: cleanupError } = await adminClient.auth.admin.deleteUser(userId);
       if (cleanupError) {
@@ -100,6 +168,7 @@ async function runBackendIntegration() {
         if (!runError) runError = cleanupError;
       } else {
         console.log('    Usuário temporário removido.');
+      }
       }
     }
   }

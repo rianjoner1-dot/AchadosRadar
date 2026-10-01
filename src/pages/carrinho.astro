@@ -35,8 +35,10 @@ import Layout from '../layouts/Layout.astro';
     list.dataset.cartOwner = ownerId ?? '';
     list.innerHTML = items.map((item: CartItem) => `<article class="saved-item" data-id="${escapeHtml(item.id)}">
       <a class="saved-image" href="/produto?id=${encodeURIComponent(item.id)}">${item.image ? `<img src="${escapeHtml(item.image)}" alt="" width="120" height="120" loading="lazy">` : '<span>Imagem indisponível</span>'}</a>
-      <div class="saved-info"><span class="saved-store">${escapeHtml(item.platform === 'magalu' ? 'Magalu' : 'Mercado Livre')}</span><h2><a href="/produto?id=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h2><p class="saved-seller">${item.sellerName ? `Vendido por ${escapeHtml(item.sellerName)}` : ''}</p><p class="saved-price" data-price>Último preço salvo: ${escapeHtml(item.priceFormatted || 'indisponível')}</p><p class="saved-offer-facts" data-offer-facts hidden></p><p class="saved-expiry" data-expiry hidden></p><p class="saved-state" data-state>Verificando preço, estoque e link atuais...</p></div>
-      <div class="saved-actions"><a class="btn-primary saved-buy" data-buy aria-disabled="true">Verificando link</a><a class="btn-secondary saved-details" href="/produto?id=${encodeURIComponent(item.id)}">Detalhes</a><button type="button" class="remove-saved" data-remove="${escapeHtml(item.id)}">Remover</button></div>
+      <div class="saved-info"><div class="saved-labels"><span class="saved-store">${escapeHtml(item.platform === 'magalu' ? 'Magalu' : 'Mercado Livre')}</span><span class="saved-state" data-state data-tone="checking" role="status">Verificando oferta</span></div><h2><a href="/produto?id=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h2><div class="saved-price-panel"><span>Preço observado</span><strong data-price>${escapeHtml(item.priceFormatted || 'Consulte a loja')}</strong></div>
+        <details class="saved-more"><summary>Detalhes da oferta</summary><div class="saved-more-content"><p class="saved-offer-facts" data-offer-facts hidden></p><p class="saved-expiry" data-expiry hidden></p><p class="saved-explanation" data-explanation>Atualizando as informações da oferta...</p></div></details>
+      </div>
+      <div class="saved-actions"><a class="btn-primary saved-buy" data-buy aria-disabled="true">Verificando oferta</a><a class="btn-secondary saved-details" href="/produto?id=${encodeURIComponent(item.id)}">Ver produto</a><button type="button" class="remove-saved" data-remove="${escapeHtml(item.id)}">Remover da lista</button></div>
     </article>`).join('');
 
     list.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
@@ -69,7 +71,9 @@ import Layout from '../layouts/Layout.astro';
       for (const item of items) {
         const row = [...list.querySelectorAll<HTMLElement>('.saved-item')].find((element) => element.dataset.id === item.id);
         const state = row?.querySelector<HTMLElement>('[data-state]');
-        if (state) state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.';
+        if (state) { state.textContent = 'Oferta indisponível'; state.dataset.tone = 'unavailable'; }
+        const explanation = row?.querySelector<HTMLElement>('[data-explanation]');
+        if (explanation) explanation.textContent = 'Não foi possível atualizar a oferta agora. O produto continua salvo na sua lista.';
       }
       return;
     }
@@ -79,21 +83,23 @@ import Layout from '../layouts/Layout.astro';
       const row = [...list.querySelectorAll<HTMLElement>('.saved-item')].find((element) => element.dataset.id === item.id);
       if (!row || version !== renderVersion) return;
       const state = row.querySelector<HTMLElement>('[data-state]')!;
+      const explanation = row.querySelector<HTMLElement>('[data-explanation]')!;
       const buy = row.querySelector<HTMLAnchorElement>('[data-buy]')!;
-      const disableBuy = () => {
+      const disableBuy = (label = 'Oferta indisponível') => {
         buy.removeAttribute('href');
         buy.removeAttribute('target');
         buy.removeAttribute('rel');
         buy.setAttribute('aria-disabled', 'true');
-        buy.textContent = 'Link em verificação';
+        buy.textContent = label;
       };
-      if (!catalogReady || !validUuid(item.id)) { state.textContent = 'Exemplo local: esta amostra não tem link de compra ativo.'; return; }
+      const setStatus = (label: string, tone: string, detail: string) => { state.textContent = label; state.dataset.tone = tone; explanation.textContent = detail; };
+      if (!catalogReady || !validUuid(item.id)) { setStatus('Amostra', 'checking', 'Este produto de demonstração não tem um link de compra ativo.'); return; }
       try {
         const latest = await getCatalogProduct(item.id);
         if (version !== renderVersion) return;
         if (!latest) {
-          row.querySelector<HTMLElement>('[data-price]')!.textContent = `Último preço salvo: ${item.priceFormatted || 'indisponível'} (sem atualização atual)`;
-          state.textContent = 'Este produto não está mais no catálogo. Ele continua salvo na sua lista, mas não pode ser comprado por este link.';
+          row.querySelector<HTMLElement>('[data-price]')!.textContent = item.priceFormatted || 'Consulte a loja';
+          setStatus('Oferta indisponível', 'unavailable', 'Este produto não está mais no catálogo. Ele continua salvo na sua lista, mas não pode ser comprado por este link.');
           buy.textContent = 'Produto indisponível';
           buy.removeAttribute('href');
           buy.setAttribute('aria-disabled', 'true');
@@ -117,32 +123,36 @@ import Layout from '../layouts/Layout.astro';
         const price = row.querySelector<HTMLElement>('[data-price]')!;
         const facts = row.querySelector<HTMLElement>('[data-offer-facts]')!;
         if (offer?.observed_at) {
-          price.textContent = `Preço observado: ${formatPrice(offer.price)}`;
-          const observedAt = new Date(offer.observed_at);
+          price.textContent = formatPrice(offer.price);
           const factList = [
             offer.installments_text,
             offer.shipping_text,
-            offer.coupon_code ? `Cupom ${offer.coupon_code}` : '',
-            offer.stock_status === 'in_stock' ? 'Estoque confirmado' : offer.stock_status === 'out_of_stock' ? 'Sem estoque na última consulta' : 'Estoque não confirmado',
-            offer.stock_quantity !== null && offer.stock_quantity !== undefined ? `Quantidade: ${offer.stock_quantity}` : '',
-            Number.isFinite(observedAt.getTime()) ? `Consultado em ${observedAt.toLocaleString('pt-BR')}` : ''
+            offer.coupon_code ? `Cupom ${offer.coupon_code}` : ''
           ].filter(Boolean);
           facts.textContent = factList.join(' · ');
           facts.hidden = factList.length === 0;
         } else {
-          price.textContent = `Último preço salvo: ${item.priceFormatted || 'indisponível'} (sem atualização atual)`;
+          price.textContent = item.priceFormatted || 'Consulte a loja';
           facts.hidden = true;
           facts.textContent = '';
         }
         const readiness = evaluateOfferReadiness({ link, offer });
         row.dataset.offerReady = String(readiness.ready);
-        state.textContent = readiness.ready ? readiness.reason : readiness.reason + ' O item continua salvo.';
+        const reason = readiness.reason || '';
+        const normalizedReason = reason.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const label = readiness.ready ? 'Disponível para compra'
+          : /expir|prazo/.test(normalizedReason) ? 'Link expirado'
+          : /revis|verific|desatualiz/.test(normalizedReason) ? 'Link em verificação'
+          : /sem estoque/.test(normalizedReason) ? 'Sem estoque'
+          : /estoque|disponibilidade/.test(normalizedReason) ? 'Estoque a confirmar'
+          : 'Oferta indisponível';
+        setStatus(label, readiness.ready ? 'available' : label === 'Sem estoque' || label === 'Oferta indisponível' ? 'unavailable' : 'checking', readiness.ready ? 'Oferta verificada. A compra será concluída no site da loja.' : `${reason} O produto continua salvo na sua lista.`);
         if (readiness.ready) { buy.href = `/api/out/${encodeURIComponent(item.id)}`; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.textContent = `Continuar na ${storeName(latest.platform)}`; buy.removeAttribute('aria-disabled'); }
-        else { disableBuy(); }
+        else { disableBuy(label); }
       } catch {
         if (version === renderVersion) {
           disableBuy();
-          state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.';
+          setStatus('Oferta indisponível', 'checking', 'Não foi possível atualizar a oferta agora. O produto continua salvo na sua lista.');
         }
       }
     };
@@ -176,9 +186,11 @@ import Layout from '../layouts/Layout.astro';
         buy?.setAttribute('aria-disabled', 'true');
         if (buy) buy.textContent = 'Link em verificação';
         const state = row.querySelector<HTMLElement>('[data-state]');
-        if (state) state.textContent = link.expires_at && Date.parse(link.expires_at) <= Date.now()
-          ? 'O prazo oficial do link terminou. O item continua salvo.'
-          : 'A revisão interna do link venceu; a compra fica temporariamente indisponível. O item continua salvo.';
+        if (state) { state.textContent = link.expires_at && Date.parse(link.expires_at) <= Date.now() ? 'Link expirado' : 'Link em verificação'; state.dataset.tone = 'checking'; }
+        const explanation = row.querySelector<HTMLElement>('[data-explanation]');
+        if (explanation) explanation.textContent = link.expires_at && Date.parse(link.expires_at) <= Date.now()
+          ? 'O prazo oficial do link terminou. O produto continua salvo; a compra fica indisponível até a oferta ser atualizada.'
+          : 'A revisão interna do link venceu. O produto continua salvo; a compra fica temporariamente indisponível.';
       }
     }
   }
@@ -252,28 +264,46 @@ import Layout from '../layouts/Layout.astro';
   });
   void render();
 </script>
-<style>
+<style is:global>
   .cart-page { max-width:1040px; padding-top:38px; padding-bottom:60px; }
-  .cart-heading h1 { color:#222; font-size:2rem; }
-  .cart-heading p { color:#666; margin-top:6px; }
-  .cart-eyebrow { color:#555 !important; font-size:.75rem; letter-spacing:.08em; font-weight:700; }
-  .cart-notice { background:#f5f5f5; border:1px solid #ddd; border-radius:6px; padding:14px 16px; margin:22px 0; color:#444; font-size:.88rem; }
-  .cart-empty { text-align:center; padding:46px 16px; border:1px dashed #ccc; border-radius:8px; }
+  .cart-heading h1 { color:#262820; font-size:2rem; letter-spacing:-.025em; }
+  .cart-heading p { color:#625f58; margin-top:6px; }
+  .cart-eyebrow { color:#657b62 !important; font-size:.75rem; letter-spacing:.1em; font-weight:750; }
+  .cart-notice { background:#f1f5ef; border:1px solid #dfe8dc; border-left:4px solid #78917a; border-radius:8px; padding:14px 16px; margin:22px 0; color:#454c43; font-size:.88rem; }
+  .cart-empty { text-align:center; padding:46px 16px; border:1px dashed #c9cec4; border-radius:10px; background:#fafbf8; }
   .cart-empty h2 { color:#222; }
   .cart-empty p { margin:8px 0 16px; color:#666; }
   .cart-topline { display:flex; justify-content:space-between; align-items:center; margin:24px 0 12px; color:#555; font-size:.88rem; }
   .text-button, .remove-saved { color:#555; text-decoration:underline; padding:8px; }
-  .cart-items { display:grid; gap:12px; }
-  .saved-item { display:grid; grid-template-columns:120px minmax(0,1fr) auto; gap:18px; align-items:center; padding:14px; border:1px solid #ddd; border-radius:7px; background:#fff; }
-  .saved-image { width:120px; height:120px; display:grid; place-items:center; }
-  .saved-image img { width:100%; height:100%; object-fit:contain; }
-  .saved-store { color:#666; font-size:.7rem; text-transform:uppercase; font-weight:700; }
-  .saved-info h2 { color:#222; font:500 .98rem/1.4 var(--font-body); margin:5px 0; }
-  .saved-seller, .saved-state { color:#666; font-size:.78rem; margin-top:4px; }
-  .saved-price { color:#222; font-weight:700; margin-top:7px; }
-  .saved-actions { display:flex; flex-direction:column; align-items:stretch; gap:7px; min-width:150px; }
-  .saved-actions .btn-primary, .saved-actions .btn-secondary { min-height:38px; font-size:.82rem; padding:7px 10px; }
-  .saved-buy[aria-disabled="true"] { opacity:.55; pointer-events:none; }
+  .cart-items { display:grid; gap:14px; }
+  .saved-item { display:grid; grid-template-columns:142px minmax(0,1fr) 164px; gap:20px; align-items:center; padding:16px; border:1px solid #e1e1da; border-radius:12px; background:linear-gradient(120deg,#fff 0%,#fff 70%,#fbfaf6 100%); box-shadow:0 2px 8px rgba(39,42,34,.035); }
+  .saved-image { width:142px; height:142px; display:grid; place-items:center; overflow:hidden; border:1px solid #efede7; border-radius:9px; background:#f7f6f1; }
+  .saved-image img { width:100%; height:100%; padding:9px; object-fit:contain; }
+  .saved-image span { padding:10px; color:#777; font-size:.75rem; text-align:center; }
+  .saved-labels { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+  .saved-store, .saved-state { display:inline-flex; align-items:center; min-height:24px; padding:4px 8px; border-radius:5px; font-size:.68rem; line-height:1.2; font-weight:700; }
+  .saved-store { background:#f0eee7; color:#625640; letter-spacing:.045em; text-transform:uppercase; }
+  .saved-state[data-tone="available"] { background:#edf3ec; color:#346538; }
+  .saved-state[data-tone="checking"] { background:#fbf3db; color:#805d16; }
+  .saved-state[data-tone="unavailable"] { background:#f8ecea; color:#8d423a; }
+  .saved-info h2 { color:#282921; font:650 1rem/1.4 var(--font-body); margin:9px 0 12px; text-wrap:pretty; }
+  .saved-info h2 a { color:inherit; text-decoration:none; }
+  .saved-info h2 a:hover { text-decoration:underline; text-underline-offset:3px; }
+  .saved-price-panel { display:flex; flex-direction:column; gap:1px; width:max-content; min-width:174px; padding:8px 11px; border:1px solid #e1e9df; border-radius:7px; background:#f1f5ef; }
+  .saved-price-panel > span { color:#647263; font-size:.67rem; font-weight:600; }
+  .saved-price-panel strong { color:#2e5834; font-size:1.2rem; line-height:1.25; font-weight:800; font-variant-numeric:tabular-nums; }
+  .saved-more { margin-top:10px; color:#5f6259; font-size:.76rem; }
+  .saved-more summary { width:max-content; cursor:pointer; color:#586e5a; font-weight:650; text-underline-offset:3px; }
+  .saved-more summary:focus-visible, .saved-item a:focus-visible, .saved-item button:focus-visible { outline:3px solid #78917a; outline-offset:3px; }
+  .saved-more-content { padding:8px 10px; margin-top:6px; border-radius:6px; background:#f7f7f3; color:#666; }
+  .saved-more-content p { margin:3px 0; }
+  .saved-offer-facts, .saved-expiry, .saved-explanation { font-size:.74rem; line-height:1.45; }
+  .saved-actions { display:flex; flex-direction:column; align-items:stretch; gap:8px; min-width:0; }
+  .saved-actions .btn-primary, .saved-actions .btn-secondary { min-height:40px; font-size:.8rem; padding:8px 10px; text-align:center; }
+  .saved-buy[aria-disabled="true"] { opacity:.58; pointer-events:none; }
+  .remove-saved { color:#71675f; font-size:.76rem; text-decoration:none; }
+  .remove-saved:hover { color:#8d423a; text-decoration:underline; }
   #cartStatus { color:#555; margin-top:10px; }
-  @media(max-width:700px) { .saved-item { grid-template-columns:82px minmax(0,1fr); gap:12px; } .saved-image { width:82px;height:82px; } .saved-actions { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; } .saved-actions .remove-saved { grid-column:1/-1; } }
+  @media(max-width:760px) { .saved-item { grid-template-columns:104px minmax(0,1fr); gap:13px; padding:12px; } .saved-image { width:104px;height:104px; } .saved-actions { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; } .saved-actions .remove-saved { grid-column:1/-1; justify-self:start; padding:5px 0; } }
+  @media(max-width:420px) { .saved-item { grid-template-columns:78px minmax(0,1fr); gap:10px; padding:10px; } .saved-image { width:78px;height:78px; } .saved-info h2 { font-size:.88rem; margin:7px 0 9px; } .saved-price-panel { min-width:0; padding:7px 9px; } .saved-price-panel strong { font-size:1.08rem; } .saved-labels { gap:5px; } .saved-store, .saved-state { font-size:.6rem; padding-inline:6px; } }
 </style>

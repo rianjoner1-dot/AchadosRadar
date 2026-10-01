@@ -198,6 +198,24 @@ test('uploadAvatar contract: propagates upload error without calling getPublicUr
   assert.equal(harness.calls.getPublicUrlCalls, 0, 'getPublicUrl must not be called when storage upload fails');
 }));
 
+test('uploadAvatar contract: translates Storage RLS errors into a user-facing message', withMockCanvas(async () => {
+  const user = { id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' };
+  const file = new Blob(['raw-jpeg-bytes'], { type: 'image/jpeg' });
+  const storageError = Object.assign(new Error('new row violates row-level security policy'), {
+    status: 400,
+    statusCode: '403',
+    code: 'AccessDenied'
+  });
+  const harness = createTestHarness({ uploadError: storageError });
+
+  await assert.rejects(
+    harness.client.uploadAvatar(user, file),
+    (error) => error !== storageError
+      && /Não foi possível gravar a foto de perfil/.test(error.message)
+      && !/row-level security policy/.test(error.message)
+  );
+}));
+
 test('uploadAvatar contract: propagates upload error without calling getPublicUrl when storage upload throws', withMockCanvas(async () => {
   const userId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   const user = { id: userId };

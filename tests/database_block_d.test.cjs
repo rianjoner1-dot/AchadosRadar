@@ -275,6 +275,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     // the bucket contract or weakening the per-user Storage policies.
     await runMigration(db, '20260930130000_expand_avatars_bucket_size.sql');
     await runMigration(db, '20260930140000_expand_avatars_rls_policy.sql');
+    await runMigration(db, '20261001120000_fix_avatar_storage_upload_rls.sql');
 
     // Valida configuração do bucket avatars
     const bucketRes = await db.query(`SELECT * FROM storage.buckets WHERE id = 'avatars';`);
@@ -318,36 +319,16 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
       'RLS deve negar tentativa de upload na pasta de outro usuário'
     );
 
-    // 3. NEGAÇÃO: Usuário A tenta enviar arquivo acima de 2 MB (ex: 2.5 MB) -> DEVE FALHAR
-    await assert.rejects(
-      async () => {
-        await db.query(`
-          INSERT INTO storage.objects (bucket_id, name, metadata)
-          VALUES (
-            'avatars',
-            '${userA}/giant.webp',
-            '{"mimetype": "image/webp", "size": 2500000}'::jsonb
-          );
-        `);
-      },
-      /new row violates row-level security policy/,
-      'RLS deve negar arquivos acima do limite de 2 MB'
-    );
-
-    // 4. NEGAÇÃO: Usuário A tenta enviar arquivo SVG -> DEVE FALHAR
-    await assert.rejects(
-      async () => {
-        await db.query(`
-          INSERT INTO storage.objects (bucket_id, name, metadata)
-          VALUES (
-            'avatars',
-            '${userA}/malicious.svg',
-            '{"mimetype": "image/svg+xml", "size": 5000}'::jsonb
-          );
-        `);
-      },
-      /new row violates row-level security policy/,
-      'RLS deve rejeitar SVG para prevenir ataques XSS'
+    // MIME and size are enforced by the Storage bucket itself; object RLS
+    // governs identity/path and must not re-evaluate potentially variant metadata.
+    const ownerPolicies = await db.query(`
+      SELECT policyname, cmd FROM pg_policies
+      WHERE schemaname = 'storage' AND tablename = 'objects'
+        AND policyname IN ('users_insert_own_avatar', 'users_select_own_avatar', 'users_update_own_avatar')
+    `);
+    assert.deepEqual(
+      ownerPolicies.rows.map((row) => `${row.policyname}:${row.cmd}`).sort(),
+      ['users_insert_own_avatar:INSERT', 'users_select_own_avatar:SELECT', 'users_update_own_avatar:UPDATE']
     );
   });
 

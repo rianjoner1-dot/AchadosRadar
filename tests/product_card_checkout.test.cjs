@@ -24,11 +24,11 @@ test('H1.4: each saved cart item uses its own product ID and current offer readi
 });
 
 test('H1.3: cart fail-closed path removes any stale checkout destination after readiness failure', () => {
-  assert.match(cartPage, /const disableBuy = \(\) => \{/);
+  assert.match(cartPage, /const disableBuy = \(label = 'Oferta indisponível'\) => \{/);
   assert.match(cartPage, /buy\.removeAttribute\('href'\)/);
   assert.match(cartPage, /buy\.removeAttribute\('target'\)/);
   assert.match(cartPage, /buy\.removeAttribute\('rel'\)/);
-  assert.match(cartPage, /else \{ disableBuy\(\); \}/);
+  assert.match(cartPage, /else \{ disableBuy\(label\); \}/);
   assert.match(cartPage, /catch \{\s*if \(version === renderVersion\) \{\s*disableBuy\(\);/);
 });
 
