@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import { catalogReady } from '../modules/catalog/client';
 import { getPublicSupabaseConfig } from '../modules/shared/config';
+import { classifyProductImageIdentity } from '../modules/catalog/image-identity.mjs';
 
 export const prerender = false;
 
@@ -10,7 +11,7 @@ const { url: publicUrl, key: publicKey, isDemo: localDemoMode } = getPublicSupab
 let socialProduct: { title: string; description: string; image: string | null } | null = null;
 if (!localDemoMode && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId) && publicUrl && publicKey) {
   try {
-    const productQuery = new URLSearchParams({ select: 'title,description', id: `eq.${requestedId}`, status: 'eq.published', limit: '1' });
+    const productQuery = new URLSearchParams({ select: 'title,description,platform,external_id', id: `eq.${requestedId}`, status: 'eq.published', limit: '1' });
     const headers = { apikey: publicKey, authorization: `Bearer ${publicKey}` };
     const imageQuery = new URLSearchParams({ select: 'url', product_id: `eq.${requestedId}`, order: 'display_order.asc', limit: '1' });
     const [productResponse, imageResponse] = await Promise.all([
@@ -21,7 +22,10 @@ if (!localDemoMode && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId) && publi
     if (product?.title) {
       const [image] = imageResponse.ok ? await imageResponse.json() : [];
       let safeImage: string | null = null;
-      try { const parsed = new URL(image?.url); if (parsed.protocol === 'https:') safeImage = parsed.href; } catch { /* omit invalid image URLs from social metadata */ }
+      try {
+        const parsed = new URL(image?.url);
+        if (parsed.protocol === 'https:' && classifyProductImageIdentity(product.platform, product.external_id, parsed.href) !== 'mismatch') safeImage = parsed.href;
+      } catch { /* omit invalid image URLs from social metadata */ }
       socialProduct = { title: `${product.title} | Achados Radar`, description: `${product.description || 'Confira as informações observadas desta oferta.'} A compra é concluída na loja parceira.`, image: safeImage };
     }
   } catch { /* metadata stays generic while Supabase is unavailable */ }
@@ -128,6 +132,8 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           const currentReadiness = evaluateOfferReadiness({ link, offer });
           if (!currentReadiness.ready) {
             buy.removeAttribute('href');
+            buy.removeAttribute('target');
+            buy.removeAttribute('rel');
             buy.setAttribute('aria-disabled', 'true');
             buy.textContent = currentReadiness.reason;
           }

@@ -4,8 +4,20 @@ const {
   MAX_AVATAR_INPUT_BYTES,
   MAX_AVATAR_OUTPUT_BYTES,
   MAX_AVATAR_PIXELS,
+  versionAvatarUrl,
   prepareAvatarBlob
 } = require('../src/modules/auth/avatar.mjs');
+
+test('avatar replacements use a fresh HTTPS URL version without changing the stored object path', () => {
+  const current = 'https://project.supabase.co/storage/v1/object/public/avatars/user/avatar.webp?token=public';
+  const first = new URL(versionAvatarUrl(current, 10));
+  const second = new URL(versionAvatarUrl(current, 11));
+  assert.equal(first.pathname, second.pathname);
+  assert.equal(first.searchParams.get('token'), 'public');
+  assert.equal(first.searchParams.get('v'), '10');
+  assert.equal(second.searchParams.get('v'), '11');
+  assert.throws(() => versionAvatarUrl('http://project.test/avatar.webp'), /HTTPS/);
+});
 
 function fixture({ width = 640, height = 480, outputBytes = 32, context = true, output = true } = {}) {
   const bitmap = { width, height, closeCalls: 0, close() { this.closeCalls++; } };

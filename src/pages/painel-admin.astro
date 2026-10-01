@@ -50,6 +50,7 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   import { supabase } from '../modules/auth/client';
+  import { createAdminMetricsLoader } from '../modules/analytics/admin-metrics-loader.mjs';
   type ProductMetric = { productId: string; title: string; platform: string; views: number; outboundClicks: number };
   type MetricResult = { days: number; from: string; through: string; totals: { views: number; outboundClicks: number }; mostViewedProducts: ProductMetric[]; mostClickedProducts: ProductMetric[] };
   const status = document.querySelector<HTMLElement>('#adminStatus')!;
@@ -84,24 +85,38 @@ import Layout from '../layouts/Layout.astro';
     status.textContent = `${viewedCount + clickedCount} produtos com atividade no período.`;
   }
 
-  async function load() {
-    if (!supabase) { status.textContent = 'O painel requer uma sessão administrativa no Supabase.'; return; }
-    status.textContent = 'Carregando métricas…';
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { status.textContent = 'Entre na conta administrativa para acessar este painel.'; return; }
-    try {
-      const response = await fetch(`/api/admin/metrics?days=${encodeURIComponent(daysSelect.value)}`, {
-        headers: { authorization: `Bearer ${session.access_token}` }, cache: 'no-store'
+  const loadAdminMetrics = createAdminMetricsLoader({
+    getSession: async () => {
+      if (!supabase) return null;
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return data.session;
+    },
+    fetchMetrics: async (session, days) => {
+      const response = await fetch("/api/admin/metrics?days=" + encodeURIComponent(days), {
+        headers: { authorization: "Bearer " + (session as { access_token: string }).access_token }, cache: "no-store"
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Acesso ao painel negado.');
-      render(result as MetricResult);
-    } catch (error) {
+      if (!response.ok) throw new Error(result.error || "Acesso ao painel negado.");
+      return result as MetricResult;
+    },
+    onLoading: () => { status.textContent = "Carregando m\u00e9tricas..."; },
+    onUnauthenticated: () => {
       panel.hidden = true;
-      status.textContent = error instanceof Error ? error.message : 'Não foi possível carregar o painel.';
+      status.textContent = "Entre na conta administrativa para acessar este painel.";
+    },
+    onSuccess: (result) => render(result as MetricResult),
+    onError: (error) => {
+      panel.hidden = true;
+      status.textContent = error instanceof Error ? error.message : "N\u00e3o foi poss\u00edvel carregar o painel.";
     }
+  });
+
+  function load() {
+    if (!supabase) { status.textContent = "O painel requer uma sess\u00e3o administrativa no Supabase."; return; }
+    void loadAdminMetrics(daysSelect.value);
   }
-  daysSelect.addEventListener('change', () => void load());
+   daysSelect.addEventListener('change', () => void load());
   document.querySelector('#refreshMetrics')!.addEventListener('click', () => void load());
   void load();
 </script>

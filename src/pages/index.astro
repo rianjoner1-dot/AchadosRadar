@@ -82,6 +82,7 @@ const demo = demoProducts.map((product) => ({
 <script>
   import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
   import { selectSpotlightOffers } from '../modules/catalog/spotlights.mjs';
+  import { isKnownUnavailableMercadoLivreImage, preloadProductImage } from '../modules/catalog/image-health.js';
   import { matchesDemoProduct } from '../modules/catalog/search-utils.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
 
@@ -96,6 +97,8 @@ const demo = demoProducts.map((product) => ({
   const spotlightCount = document.querySelector<HTMLElement>('#spotlightCount')!;
   let spotlightProducts: CatalogProduct[] = [];
   const failedSpotlightImages = new Set<string>();
+  const imageDestinationChecks = new Map<string, Promise<boolean>>();
+  let spotlightRenderVersion = 0;
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
   let cursor: { created_at: string; id: string; price?: number | null; score?: number | null } | null = null;
@@ -175,10 +178,56 @@ const demo = demoProducts.map((product) => ({
     });
   }
 
+  function checkSpotlightImageDestination(imageUrl: string) {
+    let check = imageDestinationChecks.get(imageUrl);
+    if (!check) {
+      check = (async () => {
+        const imageLoaded = await preloadProductImage(imageUrl);
+        if (imageLoaded === false) return true;
+        if (imageLoaded === true) return isKnownUnavailableMercadoLivreImage(imageUrl);
+        return false;
+      })();
+      imageDestinationChecks.set(imageUrl, check);
+      if (imageDestinationChecks.size > 100) imageDestinationChecks.delete(imageDestinationChecks.keys().next().value!);
+    }
+    return check;
+  }
+
+  async function prepareSpotlights(products: CatalogProduct[], resetFailedImages = false) {
+    if (resetFailedImages || products !== spotlightProducts) {
+      spotlightProducts = products;
+      failedSpotlightImages.clear();
+    }
+    const version = ++spotlightRenderVersion;
+    const inspectedProducts = new Set<string>();
+    while (version === spotlightRenderVersion) {
+      const selected = selectSpotlightOffers(products, 3, failedSpotlightImages);
+      const unchecked = selected.filter(({ product }) => {
+        const image = safeImage(product);
+        return image && !inspectedProducts.has(product.id);
+      });
+      if (!unchecked.length) break;
+      for (const { product } of unchecked) inspectedProducts.add(product.id);
+      const missing = await Promise.all(unchecked.map(async ({ product }) => {
+        const image = safeImage(product);
+        const unavailable = await checkSpotlightImageDestination(image);
+        return unavailable ? { product, image } : null;
+      }));
+      if (version !== spotlightRenderVersion) return;
+      for (const item of missing) {
+        if (!item) continue;
+        failedSpotlightImages.add(item.product.id);
+        void reportCatalogImageFailure(item.product.id, item.image);
+      }
+      if (!missing.some(Boolean)) break;
+    }
+    if (version === spotlightRenderVersion) renderSpotlights(products);
+  }
+
   function skipSpotlightImage(productId: string) {
     if (!productId || failedSpotlightImages.has(productId)) return;
     failedSpotlightImages.add(productId);
-    queueMicrotask(() => renderSpotlights(spotlightProducts));
+    queueMicrotask(() => { void prepareSpotlights(spotlightProducts); });
   }
 
   spotlightGrid.addEventListener('error', (event) => {
@@ -270,7 +319,7 @@ const demo = demoProducts.map((product) => ({
     try {
       const products = await searchCatalog({ ...currentFilters(), cursor, limit: 20, signal: controller?.signal });
       if (version !== requestVersion) return;
-      if (reset) { grid.replaceChildren(); renderSpotlights(products, true); }
+      if (reset) { grid.replaceChildren(); void prepareSpotlights(products, true); }
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
       grid.removeAttribute('data-loading');
       if (reset) {

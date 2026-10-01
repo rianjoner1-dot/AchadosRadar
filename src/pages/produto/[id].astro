@@ -149,10 +149,29 @@ const canonicalUrl = canonicalOrigin ? new URL(`/produto/${encodeURIComponent(pr
 
 <script>
   import { shareProductLink } from '../../modules/catalog/share.js';
+  import { bindImageFailureReporting } from '../../modules/catalog/image-fallback.js';
+  import { isKnownUnavailableMercadoLivreImage } from '../../modules/catalog/image-health.js';
 
   const grid = document.querySelector<HTMLElement>('#demoRelatedGrid');
   const more = document.querySelector<HTMLButtonElement>('#demoRelatedMore');
   const status = document.querySelector<HTMLElement>('#demoRelatedStatus');
+  if (grid) {
+    bindImageFailureReporting(grid, {
+      selector: '.demo-related-card img:not([data-fallback-bound])',
+      productSelector: '[data-demo-related-card]',
+      placeholderClass: 'demo-related-image-placeholder',
+      reportFailure: () => {},
+    });
+    for (const image of grid.querySelectorAll<HTMLImageElement>('.demo-related-card img')) {
+      const imageUrl = image.currentSrc || image.src;
+      if (!imageUrl.startsWith('https://http2.mlstatic.com/')) continue;
+      void isKnownUnavailableMercadoLivreImage(imageUrl).then((unavailable) => {
+        if (unavailable && image.isConnected && image.dataset.failureHandled !== 'true') {
+          image.dispatchEvent(new Event('error'));
+        }
+      });
+    }
+  }
   if (grid && more) {
     const cards = [...grid.querySelectorAll<HTMLElement>('[data-demo-related-card]')];
     let visibleCount = Math.min(8, cards.length);
@@ -396,6 +415,7 @@ const canonicalUrl = canonicalOrigin ? new URL(`/produto/${encodeURIComponent(pr
   .demo-related-card[hidden] { display: none; }
   .demo-related-card a { display: flex; flex: 1; flex-direction: column; color: var(--text-primary); text-decoration: none; }
   .demo-related-card img { width: 100%; height: 150px; object-fit: contain; padding: 10px; background: #fff; }
+  .demo-related-card :global(.demo-related-image-placeholder) { display: grid; width: 100%; height: 150px; place-items: center; padding: 10px; background: #f6f6f6; color: var(--text-muted); font-size: .82rem; }
   .demo-related-card a span { padding: 8px 10px; font-size: .84rem; line-height: 1.35; }
   .demo-related-card strong { padding: 0 10px; color: var(--text-primary); }
   .demo-related-more { display: block; min-width: 220px; margin: 18px auto 0; }

@@ -52,6 +52,22 @@ export function removeCartItem(id: string, ownerId?: string | null): void {
   writeLocalCart(readLocalCart(ownerId).filter((item) => item.id !== id), ownerId);
 }
 
+export function removeCartItemSnapshot(snapshot: Pick<CartItem, 'id' | 'savedAt'>, ownerId?: string | null): boolean {
+  const items = readLocalCart(ownerId);
+  const remaining = items.filter((item) => item.id !== snapshot.id || item.savedAt !== snapshot.savedAt);
+  if (remaining.length === items.length) return false;
+  writeLocalCart(remaining, ownerId);
+  return true;
+}
+
+export function removeCartItems(snapshot: Pick<CartItem, 'id' | 'savedAt'>[], ownerId?: string | null): void {
+  if (!snapshot.length) return;
+  const savedItems = new Map(snapshot.map((item) => [item.id, item.savedAt]));
+  writeLocalCart(readLocalCart(ownerId).filter((item) =>
+    !savedItems.has(item.id) || savedItems.get(item.id) !== item.savedAt
+  ), ownerId);
+}
+
 export function clearLocalCart(ownerId?: string | null): void { writeLocalCart([], ownerId); }
 
 export function deleteLocalCartForUser(userId: string): void {

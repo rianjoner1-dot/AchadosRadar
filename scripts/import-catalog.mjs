@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAllowedMarketplaceImageUrl } from '../src/modules/shared/marketplace-image-url.mjs';
+import { matchesMarketplaceProductIdentity } from '../src/modules/catalog/product-identity.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseUrl = process.env.PUBLIC_SUPABASE_URL;
@@ -24,17 +25,16 @@ const missingObservationTimestamp = '1970-01-01T00:00:00.000Z';
 const get = (o, ...keys) => keys.map((key) => o?.[key]).find((value) => value !== undefined && value !== null);
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const toPrice = (value) => typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
-const isUnavailableEvidence = (item) => item?.marketplaceUnavailable === true
-  && (item.marketplaceUnavailableEvidence === unavailableEvidence || item.evidence === unavailableEvidence)
-  && ['mercadolivre', 'magalu'].includes(get(item, 'platform', 'marketplace', 'store'))
-  && Boolean(text(get(item, 'external_id', 'externalId', 'id', 'productId')))
-  && (() => {
-    try {
-      const platform = get(item, 'platform', 'marketplace', 'store');
-      const url = new URL(get(item, 'originalUrl', 'original_url', 'url', 'productUrl'));
-      return url.protocol === 'https:' && allowedHosts[platform].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
-    } catch { return false; }
-  })();
+const isUnavailableEvidence = (item) => {
+  const platform = get(item, 'platform', 'marketplace', 'store');
+  const externalId = text(get(item, 'external_id', 'externalId', 'id', 'productId'));
+  const originalUrl = text(get(item, 'originalUrl', 'original_url', 'url', 'productUrl'));
+  return item?.marketplaceUnavailable === true
+    && (item.marketplaceUnavailableEvidence === unavailableEvidence || item.evidence === unavailableEvidence)
+    && ['mercadolivre', 'magalu'].includes(platform)
+    && Boolean(externalId)
+    && matchesMarketplaceProductIdentity(platform, externalId, originalUrl);
+};
 function normalize(item) {
   const platform = get(item, 'platform', 'marketplace', 'store');
   const externalId = text(get(item, 'external_id', 'externalId', 'id', 'productId'));
@@ -62,6 +62,10 @@ function normalize(item) {
   const affiliate = safeUrl(affiliateUrl);
   if (!original) errors.push('url_original_fora_da_allowlist');
   if (!affiliate) errors.push('link_afiliado_ausente_ou_fora_da_allowlist');
+  if (original && externalId && ['magalu', 'mercadolivre'].includes(platform)
+    && !matchesMarketplaceProductIdentity(platform, externalId, original)) {
+    errors.push('id_externo_nao_corresponde_url_original');
+  }
   const imagesRaw = get(item, 'images', 'photos', 'pictures', 'fotos') ?? [get(item, 'image', 'thumbnail', 'imagem')];
   const images = (Array.isArray(imagesRaw) ? imagesRaw : []).map((img) => typeof img === 'string' ? img : get(img, 'url', 'src'))
     .filter((url) => isAllowedMarketplaceImageUrl(platform, url))
@@ -72,7 +76,9 @@ function normalize(item) {
   const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
   const rawStockStatus = get(item, 'stockStatus', 'stock_status');
   const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'unknown';
-  const rawObservedAt = get(item, 'offerObservedAt', 'offer_observed_at', 'observedAt', 'observed_at', 'collectedAt', 'collected_at', 'lastCheckedAt', 'linkVerifiedAt', 'verified_at');
+  // Link checks prove only the affiliate destination is reachable; only timestamps
+  // from product/offer collection may freshness-gate price and stock.
+  const rawObservedAt = get(item, 'offerObservedAt', 'offer_observed_at', 'observedAt', 'observed_at', 'collectedAt', 'collected_at');
   const parsedObservedAt = rawObservedAt ? new Date(rawObservedAt) : null;
   const hasTrustedObservationTime = parsedObservedAt instanceof Date
     && !Number.isNaN(parsedObservedAt.getTime())
@@ -81,7 +87,14 @@ function normalize(item) {
   const consistentStockStatus = stockStatus === 'in_stock' && (stockQuantity === 0 || !hasTrustedObservationTime) ? 'unknown' : stockStatus;
   const macroVerifiedAt = get(item, 'lastCheckedAt', 'linkVerifiedAt', 'verified_at');
   const officialFlag = get(item, 'isOfficialShortLink', 'linkReady', 'affiliateLinkVerified') === true;
-  const magaluOfficialUrl = platform === 'magalu' && Boolean(get(item, 'storeAffiliateId', 'store_affiliate_id')) && Boolean(affiliate) && new URL(affiliate).hostname.endsWith('magazinevoce.com.br');
+  const storeAffiliateId = text(get(item, 'storeAffiliateId', 'store_affiliate_id'));
+  const magaluOfficialUrl = platform === 'magalu' && Boolean(storeAffiliateId) && Boolean(affiliate) && (() => {
+    const parsed = new URL(affiliate);
+    const storeSlug = parsed.pathname.split('/').filter(Boolean)[0] || '';
+    return (parsed.hostname === 'magazinevoce.com.br' || parsed.hostname.endsWith('.magazinevoce.com.br'))
+      && storeSlug === storeAffiliateId
+      && matchesMarketplaceProductIdentity('magalu', externalId, affiliate);
+  })();
   const mercadolivreOfficialUrl = Boolean(affiliate) && new URL(affiliate).hostname.endsWith('meli.la');
   const verifiedDate = macroVerifiedAt ? new Date(macroVerifiedAt) : null;
   const linkIsReady = macroStatus === 'ready' && verifiedDate instanceof Date && !Number.isNaN(verifiedDate.getTime()) && (platform === 'magalu' ? magaluOfficialUrl : officialFlag && mercadolivreOfficialUrl);

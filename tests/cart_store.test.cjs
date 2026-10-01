@@ -123,6 +123,34 @@ test('G1.8: removing and clearing items persist changes and dispatch cart update
   assert.equal(app.events.filter(({ type }) => type === 'cart:changed').length, 4);
 });
 
+test('G1.8: delayed removal cannot delete a newer save of the same product', () => {
+  const oldSave = { ...item('re-saved'), savedAt: '2026-10-01T10:00:00.000Z' };
+  const app = createCartStore([['achados_radar_cart', JSON.stringify([oldSave])]]);
+  const removalSnapshot = { id: oldSave.id, savedAt: oldSave.savedAt };
+  app.store.writeLocalCart([{ ...item('re-saved', 'Salvo novamente'), savedAt: '2026-10-01T10:00:01.000Z' }]);
+
+  assert.equal(app.store.removeCartItemSnapshot(removalSnapshot), false);
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['re-saved']);
+  assert.equal(app.store.readLocalCart()[0].title, 'Salvo novamente');
+});
+
+test('G1.8: clear operation removes only the snapshot and preserves items saved while it was pending', () => {
+  const app = createCartStore([['achados_radar_cart', JSON.stringify([
+    { ...item('replace-during-clear'), savedAt: '2026-10-01T10:00:00.000Z' },
+    { ...item('clear-me'), savedAt: '2026-10-01T10:00:00.000Z' }
+  ])]]);
+  const snapshot = app.store.readLocalCart().map(({ id, savedAt }) => ({ id, savedAt }));
+
+  app.store.writeLocalCart([
+    { ...item('replace-during-clear', 'Salvo novamente'), savedAt: '2026-10-01T10:00:01.000Z' },
+    { ...item('added-during-clear'), savedAt: '2026-10-01T10:00:01.000Z' }
+  ]);
+  app.store.removeCartItems(snapshot);
+
+  assert.deepEqual(app.store.readLocalCart().map(({ id }) => id), ['replace-during-clear', 'added-during-clear']);
+  assert.equal(app.store.readLocalCart()[0].title, 'Salvo novamente');
+});
+
 test('G1.8: an action from a stale cart view changes only the owner it rendered', () => {
   const app = createCartStore([
     ['achados_radar_cart', JSON.stringify([item('guest')])],

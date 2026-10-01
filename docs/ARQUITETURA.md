@@ -6,7 +6,8 @@
 Extensão Chrome
    │ POST loopback apenas; produto, fotos, preço, estoque, parcelas, frete, cupom e estado do link
    ▼
-Ponte local :6875 ──► data/catalogo_macro.json ──► importador local com service role ──► Supabase Postgres
+Ponte local do site :6876 ──► data/catalogo_macro.json ──► importador local com service role ──► Supabase Postgres
+Servidor legado da macro :6875 ──► produtos_coletados/ (preservado)
                                                               │ RLS + RPC de busca
                                       ┌───────────────────────┴──────────────────┐
                                       ▼                                          ▼
@@ -34,7 +35,7 @@ A ponte escuta somente em `127.0.0.1`, valida origem `chrome-extension://`, limi
 - Estoque desconhecido permanece `NULL`/`unknown`; quantidade só é gravada quando explicitamente capturada.
 - Busca é normalizada para ignorar acentos e pontuação e usa similaridade trigramada com paginação por cursor.
 - A macro só deve permitir publicação quando link oficial, destino do produto e estoque estiverem comprovados. Status HTTP isolado não valida destino.
-- O ciclo atual do robô preserva o ID do produto e pode marcar revisão, falta de estoque ou conversão pendente. A sincronização antiga apontava à porta `6875`, que não tinha servidor ativo. A nova ponte foi implementada e passou em teste local sintético; o primeiro envio real pela extensão ainda está pendente. A importação para Supabase exige validar link oficial e estoque em amostra recente.
+- O ciclo atual do robô preserva o ID do produto e pode marcar revisão, falta de estoque ou conversão pendente. O servidor Python legado ocupa a porta `6875`; a ponte do site usa `6876` para evitar colisão. A extensão envia atualizações aos dois serviços sem substituir o arquivo legado. O primeiro envio real pela extensão ainda está pendente. A importação para Supabase exige validar link oficial e estoque em amostra recente.
 - Fotos reportadas pelo site entram no início do ciclo autônomo. Erros temporários de abertura/extração tentam novamente após 15 minutos; produto reencontrado com foto válida ou inexistência explicitamente confirmada e registrada aguarda 12 horas antes de nova checagem. Só o sinal oficial de produto não encontrado, com ID exato e sem título/preço, aciona arquivamento; falha de imagem isolada nunca oculta o item. Arquivado sai da vitrine e continua no carrinho como indisponível, sem apagar o registro.
 
 ## Conta e lista salva

@@ -1,6 +1,6 @@
 const hosts = {
-  mercadolivre: ['mercadolivre.com.br', 'mercadolivre.com', 'meli.la'],
-  magalu: ['magazinevoce.com.br', 'magazineluiza.com.br', 'magalu.com.br', 'magazineluiza.onelink.me']
+  mercadolivre: ['meli.la'],
+  magalu: ['magazinevoce.com.br', 'magazineluiza.onelink.me']
 };
 const exactHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
 

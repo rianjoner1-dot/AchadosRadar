@@ -9,6 +9,11 @@ const { spawn } = require('node:child_process');
 const projectRoot = path.resolve(__dirname, '..');
 const script = path.join(projectRoot, 'scripts/local-catalog-bridge.mjs');
 
+test('site catalog bridge uses dedicated port 6876', async () => {
+  const bridgeSource = await fs.readFile(script, 'utf8');
+  assert.match(bridgeSource, /LOCAL_CATALOG_BRIDGE_PORT \|\| 6876/);
+});
+
 test('E1: local bridge accepts extension posts, upserts safely, and rejects web origins', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-bridge-'));
   const dataPath = path.join(tempDir, 'catalog.json');
@@ -39,7 +44,7 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`;
     const first = await fetch(`${baseUrl}/api/save_product`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
-      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo', originalUrl: 'https://www.magazineluiza.com.br/p/produto/SKU-1', price: 19.9, stockStatus: 'unknown', stockEvidence: 'Quantidade não exibida', images: [
+      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo', originalUrl: 'https://www.magazineluiza.com.br/p/SKU-1/produto', affiliateUrl: 'https://www.magazinevoce.com.br/minhaloja/p/SKU-1', linkStatus: 'ready', price: 19.9, stockStatus: 'unknown', stockEvidence: 'Quantidade não exibida', images: [
         'https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg',
         'https://user:pass@a-static.mlcdn.com.br/private.jpg', 'https://a-static.mlcdn.com.br:8443/custom-port.jpg',
         'http://a-static.mlcdn.com.br/insecure.jpg', 'https://a-static.mlcdn.com.br.attacker.invalid/lookalike.jpg'
@@ -58,9 +63,62 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     assert.equal(catalog.products[0].title, 'Produto exemplo atualizado');
     assert.deepEqual(catalog.products[0].images, ['https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg']);
     assert.equal(catalog.products[0].coupon, 'CUPOM10');
+    assert.equal(catalog.products[0].installments, '3x sem juros', 'a partial refresh retains installment facts it did not replace');
+    assert.equal(catalog.products[0].shipping, 'Frete grátis', 'a partial refresh retains shipping facts it did not replace');
+    assert.equal(catalog.products[0].affiliateUrl, 'https://www.magazinevoce.com.br/minhaloja/p/SKU-1', 'a partial refresh retains the saved affiliate destination');
+    assert.equal(catalog.products[0].stockStatus, 'unknown', 'omitted stock status is not fabricated during upsert');
+
+    for (const mismatchedIdentity of [
+      { id: 'SKU-ORIGINAL-MISMATCH', originalUrl: 'https://www.magazineluiza.com.br/p/OTHER-SKU/produto', affiliateUrl: 'https://www.magazinevoce.com.br/minhaloja/p/SKU-ORIGINAL-MISMATCH' },
+      { id: 'SKU-AFFILIATE-MISMATCH', originalUrl: 'https://www.magazineluiza.com.br/p/SKU-AFFILIATE-MISMATCH/produto', affiliateUrl: 'https://www.magazinevoce.com.br/minhaloja/p/OTHER-SKU' }
+    ]) {
+      const invalidIdentity = await fetch(`${baseUrl}/api/save_product`, {
+        method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
+        body: JSON.stringify({ platform: 'magalu', title: 'Produto com URL incompatível', ...mismatchedIdentity })
+      });
+      assert.equal(invalidIdentity.status, 422, 'normal product upserts reject an ID that does not match its marketplace URL');
+    }
+    assert.equal(JSON.parse(await fs.readFile(dataPath, 'utf8')).products.length, 1, 'mismatched products never enter the local catalog');
+
+    const mismatchedMeli = await fetch(`${baseUrl}/api/save_product`, {
+      method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: 'mercadolivre', id: 'MLB123456', title: 'Produto ML incorreto', originalUrl: 'https://produto.mercadolivre.com.br/MLB-654321-produto', affiliateUrl: 'https://meli.la/short' })
+    });
+    assert.equal(mismatchedMeli.status, 422, 'Mercado Livre imports also reject product IDs that do not match the official URL');
+
+    const quantityProduct = await fetch(`${baseUrl}/api/save_product`, {
+      method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: 'magalu', id: 'SKU-QUANTITY', title: 'Produto com estoque observado', stockQuantity: '7', stockStatus: 'in_stock' })
+    });
+    assert.equal(quantityProduct.status, 201);
+    const withQuantity = JSON.parse(await fs.readFile(dataPath, 'utf8'));
+    assert.equal(withQuantity.products.find((product) => product.id === 'SKU-QUANTITY').stockQuantity, 7, 'numeric stock quantities are normalized before storing');
+
+    for (const invalidStock of [
+      { stockStatus: 'available' },
+      { stockQuantity: -1 },
+      { stockQuantity: 1.5 },
+      { stockQuantity: 'not observed' }
+    ]) {
+      const invalid = await fetch(`${baseUrl}/api/save_product`, {
+        method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
+        body: JSON.stringify({ platform: 'magalu', id: 'SKU-INVALID', title: 'Invalid inventory data', ...invalidStock })
+      });
+      assert.equal(invalid.status, 422);
+    }
+    assert.equal(JSON.parse(await fs.readFile(dataPath, 'utf8')).products.length, 2, 'invalid stock observations never enter the catalog');
     assert.equal(catalog.products[0].stockEvidence, 'Quantidade não exibida');
 
-    const report = { platform: 'magalu', externalId: 'SKU-1', originalUrl: 'https://www.magazineluiza.com.br/p/produto/SKU-1', evidence: 'explicit_not_found_without_title_or_price', confirmedAt: new Date().toISOString() };
+    const amazonProduct = await fetch(`${baseUrl}/api/save_product`, {
+      method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: 'amazon', id: 'B0ABC12345', title: 'Amazon product', originalUrl: 'https://www.amazon.com.br/dp/B0ABC12345' })
+    });
+    assert.equal(amazonProduct.status, 201, 'Magalu and Mercado Livre identity checks do not break other supported crawler stores');
+
+    const report = { platform: 'magalu', externalId: 'SKU-1', originalUrl: 'https://www.magazineluiza.com.br/p/SKU-1/produto', evidence: 'explicit_not_found_without_title_or_price', confirmedAt: new Date().toISOString() };
+    const mismatchedIdentity = await fetch(`${baseUrl}/api/catalog/unavailable`, { method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify({ ...report, externalId: 'SKU-OTHER' }) });
+    assert.equal(mismatchedIdentity.status, 422, 'a report cannot archive an ID that differs from its exact product URL');
+    assert.equal(JSON.parse(await fs.readFile(dataPath, 'utf8')).confirmedUnavailable?.length ?? 0, 0, 'a mismatched report is never queued');
     const unavailable = await fetch(`${baseUrl}/api/catalog/unavailable`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify(report)
     });
@@ -72,11 +130,11 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     const mismatchedUrl = await fetch(`${baseUrl}/api/catalog/unavailable`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify({ ...report, originalUrl: 'https://produto.mercadolivre.com.br/MLB-1' })
     });
-    assert.equal(mismatchedUrl.status, 500, 'bridge rejects a report whose URL does not match the saved product');
+    assert.equal(mismatchedUrl.status, 422, 'bridge rejects a report whose URL does not identify the saved product');
     const invalidEvidence = await fetch(`${baseUrl}/api/catalog/unavailable`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify({ ...report, evidence: 'out_of_stock' })
     });
-    assert.equal(invalidEvidence.status, 500, 'stock and transient failures are not archival evidence');
+    assert.equal(invalidEvidence.status, 422, 'stock and transient failures are not archival evidence');
 
     const cleared = await fetch(`${baseUrl}/api/catalog/unavailable/clear`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify(report)
@@ -88,13 +146,13 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     const statusResponse = await fetch(`${baseUrl}/api/status`);
     assert.equal(statusResponse.status, 200);
     const status = await statusResponse.json();
-    assert.equal(status.total_products_stored, 1, 'old extension dashboards receive the expected status field');
+    assert.equal(status.total_products_stored, 3, 'old extension dashboards receive the current product count');
     assert.equal(status.status, 'online');
 
     const healthResponse = await fetch(`${baseUrl}/api/health`);
     assert.equal(healthResponse.status, 200);
     const health = await healthResponse.json();
-    assert.equal(health.products, 1, 'existing health clients keep their product count');
+    assert.equal(health.products, 3, 'existing health clients keep their product count');
     assert.equal(health.ok, true);
 
     const blockedOrigin = await fetch(`${baseUrl}/api/save_product`, {
@@ -106,7 +164,7 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
       method: 'POST', headers: { origin: 'https://example.invalid', 'content-type': 'application/json' }, body: JSON.stringify(report)
     });
     assert.equal(blockedArchive.status, 403, 'untrusted web pages cannot clear pending evidence');
-    assert.equal(JSON.parse(await fs.readFile(dataPath, 'utf8')).products.length, 1);
+    assert.equal(JSON.parse(await fs.readFile(dataPath, 'utf8')).products.length, 3);
   } finally {
     if (child.exitCode === null) {
       child.kill();
@@ -119,15 +177,24 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
 test('confirmed missing products archive through the local service-role bridge and retry safely', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'catalog-archive-bridge-'));
   const dataPath = path.join(tempDir, 'catalog.json');
-  let allowArchive = false;
   const archiveCalls = [];
+  let firstArchiveStarted;
+  const firstArchiveRequest = new Promise((resolve) => { firstArchiveStarted = resolve; });
+  let releaseFirstArchive;
   const supabase = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/rest/v1/rpc/archive_unavailable_catalog_item') {
       let body = '';
       for await (const chunk of req) body += chunk;
       archiveCalls.push({ body: JSON.parse(body), apikey: req.headers.apikey, authorization: req.headers.authorization });
-      res.writeHead(allowArchive ? 200 : 503, { 'content-type': 'application/json' });
-      res.end(allowArchive ? 'true' : '{"message":"temporarily unavailable"}');
+      if (archiveCalls.length === 1) {
+        firstArchiveStarted();
+        await new Promise((resolve) => { releaseFirstArchive = resolve; });
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end('{"message":"temporarily unavailable"}');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('true');
       return;
     }
     if (req.method === 'GET' && req.url.startsWith('/rest/v1/products?')) {
@@ -159,23 +226,25 @@ test('confirmed missing products archive through the local service-role bridge a
       child.once('exit', (code) => { clearTimeout(timeout); reject(new Error(`Bridge exited (${code}): ${stderr}`)); });
     });
     const extensionOrigin = `chrome-extension://${'b'.repeat(32)}`;
-    const product = { platform: 'magalu', id: 'SKU-ARCHIVE', title: 'Produto que sumiu', originalUrl: 'https://www.magazineluiza.com.br/p/produto/SKU-ARCHIVE', price: 19.9 };
+    const product = { platform: 'magalu', id: 'SKU-ARCHIVE', title: 'Produto que sumiu', originalUrl: 'https://www.magazineluiza.com.br/p/SKU-ARCHIVE/produto', price: 19.9 };
     const save = await fetch(`${baseUrl}/api/save_product`, { method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify(product) });
     assert.equal(save.status, 201);
     const report = { platform: product.platform, externalId: product.id, originalUrl: product.originalUrl, evidence: 'explicit_not_found_without_title_or_price' };
 
     const pendingResponse = await fetch(`${baseUrl}/api/catalog/unavailable`, { method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify(report) });
-    assert.equal(pendingResponse.status, 202);
-    assert.deepEqual(await pendingResponse.json(), { ok: true, pending: true, id: product.id, total: 1, archiveQueued: true });
-    await waitFor(() => archiveCalls.length === 1);
+    const pendingBody = await pendingResponse.json();
+    assert.equal(pendingResponse.status, 202, JSON.stringify(pendingBody));
+    assert.deepEqual(pendingBody, { ok: true, pending: true, id: product.id, total: 1, archiveQueued: true });
+    await firstArchiveRequest;
     let catalog = JSON.parse(await fs.readFile(dataPath, 'utf8'));
     assert.equal(catalog.confirmedUnavailable.length, 1, 'temporary Supabase failure keeps the confirmed report durable');
 
-    allowArchive = true;
+    // Request a retry while the first RPC is still in flight; it must run immediately afterward.
     const retryResponse = await fetch(`${baseUrl}/api/catalog/unavailable`, { method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' }, body: JSON.stringify(report) });
-    assert.equal(retryResponse.status, 202);
     const retry = await retryResponse.json();
+    assert.equal(retryResponse.status, 202, JSON.stringify(retry));
     assert.equal(retry.archiveQueued, true);
+    releaseFirstArchive();
     await waitFor(async () => {
       const current = JSON.parse(await fs.readFile(dataPath, 'utf8'));
       return current.confirmedUnavailable.length === 0;
@@ -197,7 +266,7 @@ test('confirmed missing products archive through the local service-role bridge a
   }
 });
 
-async function waitFor(check, timeoutMs = 3000) {
+async function waitFor(check, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await check()) return;

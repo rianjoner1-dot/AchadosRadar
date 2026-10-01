@@ -9,13 +9,19 @@ import { resolveChromeExecutable } from './chrome-executable.mjs';
 const args = process.argv.slice(2);
 const option = (name) => args.find((argument) => argument.startsWith(`--${name}=`))?.slice(name.length + 3);
 if (args.includes('--help')) {
+  console.log('Optional flow: --smoke-admin-guest asserts anonymous visitors cannot see admin metrics.');
   console.log('Uso: node scripts/verify-responsive.mjs [URL] [--routes=/,/conta] [--viewports=390,1440]');
+  console.log('Fluxos opcionais: --smoke-search valida busca, loja, precos minimo/maximo e ordenacao sem registrar eventos.');
+  console.log('Fluxos opcionais: --smoke-related-feed percorre as paginas relacionadas disponiveis sem abrir ofertas.');
+  console.log('Fluxos opcionais: --smoke-guest-cart valida salvar/remover um produto de demonstração sem sair para o marketplace.');
   console.log('Rotas: caminhos separados por vírgula; use @first-live-product junto com /.');
   process.exit(0);
 }
 const baseUrl = args.find((argument) => !argument.startsWith('--')) ?? 'http://127.0.0.1:4323';
 const defaultRoutes = ['/', '/produto/MLB3299039091', '@first-live-product', '/carrinho', '/conta', '/privacidade'];
 const routes = option('routes')?.split(',').map((route) => route.trim()).filter(Boolean) ?? defaultRoutes;
+const smokeAdminGuest = args.includes('--smoke-admin-guest');
+if (smokeAdminGuest && !routes.includes('/painel-admin')) throw new Error('--smoke-admin-guest requires --routes=/painel-admin.');
 const rawViewports = option('viewports')?.split(',').map((value) => Number(value.trim())) ?? [390, 1440];
 const viewports = [...new Set(rawViewports)];
 if (!routes.length) throw new Error('--routes deve conter ao menos uma rota.');
@@ -111,11 +117,16 @@ try {
   // Keep an accessibility audit from creating synthetic anonymous product-view metrics.
   await command('Network.setBlockedURLs', { urls: [
     '*rest/v1/rpc/record_product_metric*',
-    '*rest/v1/rpc/report_product_image_failure*'
+    '*rest/v1/rpc/report_product_image_failure*',
+    '*/api/out/*'
   ] });
 
   const results = [];
   const skipped = [];
+  let guestCartSmoke = null;
+  let adminGuestSmoke = null;
+  let catalogSearchSmoke = null;
+  let relatedFeedSmoke = null;
   let isStaticArtifact = false;
   try {
     const probe = await fetch(new URL('/_vercel/speed-insights/script.js', baseUrl), { signal: AbortSignal.timeout(3000) });
@@ -150,6 +161,16 @@ try {
         await delay(100);
       }
       if (!ready) throw new Error(`Page load timed out: ${route}`);
+      if (smokeAdminGuest && route === '/painel-admin') {
+        for (let attempt = 0; attempt < 50; attempt += 1) {
+          const gate = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `document.querySelector('#adminStatus')?.textContent?.includes('Entre na conta administrativa') === true`
+          });
+          if (gate.result.value) break;
+          await delay(100);
+        }
+      }
       if (route === '/') {
         for (let attempt = 0; attempt < 80; attempt += 1) {
           const link = await command('Runtime.evaluate', {
@@ -181,7 +202,7 @@ try {
           await delay(100);
         }
       }
-      await delay(200);
+      await delay(route === '/' ? 1_200 : 200);
       const evaluation = await command('Runtime.evaluate', {
         returnByValue: true,
         expression: `(() => {
@@ -200,6 +221,18 @@ try {
             liveProduct: location.pathname === '/produto' && Boolean(new URLSearchParams(location.search).get('id')),
             productContentVisible: Boolean(document.querySelector('#productContent') && !document.querySelector('#productContent').hidden),
             productTitlePresent: Boolean(document.querySelector('#productTitle')?.textContent?.trim()),
+          productGalleryImageCount: document.querySelectorAll('#productThumbnails .gallery-thumb img').length,
+          productGalleryShowsUnavailable: (document.querySelector('#productMainImage')?.textContent || '').includes('Foto indisponível'),
+          purchaseAction: (() => {
+            const button = document.querySelector('#buyProduct, .buy-now-btn');
+            return button ? {
+              text: button.textContent?.trim() ?? '',
+              disabled: button instanceof HTMLButtonElement
+                ? button.disabled || button.getAttribute('aria-disabled') === 'true'
+                : button.getAttribute('aria-disabled') === 'true',
+              href: button.getAttribute('href')
+            } : null;
+          })(),
             spotlightHidden: document.querySelector('#spotlightSection')?.hidden ?? null,
             spotlightCards: [...document.querySelectorAll('#spotlightGrid .spotlight-card')].map((card) => ({
               id: card.dataset.productId,
@@ -211,7 +244,11 @@ try {
             })),
             relatedCardCount: document.querySelectorAll('#relatedGrid .related-card').length,
             firstRelatedCardDisplay: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).display : null,
-            firstRelatedCardBorder: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).borderTopWidth : null };
+            firstRelatedCardBorder: document.querySelector('#relatedGrid .related-card') ? getComputedStyle(document.querySelector('#relatedGrid .related-card')).borderTopWidth : null,
+            adminGuestAccess: location.pathname === '/painel-admin' ? {
+              statusText: document.querySelector('#adminStatus')?.textContent?.trim() || '',
+              metricsHidden: document.querySelector('#metricsPanel')?.hidden === true
+            } : null };
         })()`
       });
       const accessibilityTree = await command('Accessibility.getFullAXTree');
@@ -243,7 +280,16 @@ try {
         }
       }
       results.push({ ...evaluation.result.value, accessibility, keyboard });
+      if (smokeAdminGuest && route === '/painel-admin') adminGuestSmoke = evaluation.result.value.adminGuestAccess;
       if (width === 390 && (route === '/' || route === '/produto/MLB3299039091')) {
+        await delay(route === '/' ? 1_500 : 0);
+        if (route === '/') {
+          const settledSpotlights = await command('Runtime.evaluate', {
+            returnByValue: true,
+            expression: `({cards: [...document.querySelectorAll('#spotlightGrid .spotlight-card')].map((card) => ({id: card.dataset.productId, title: card.querySelector('h3')?.textContent?.trim(), imageSrc: card.querySelector('img')?.currentSrc || null, imageWidth: card.querySelector('img')?.naturalWidth ?? null, imageFallback: card.querySelector('img')?.dataset.imageFallback === 'true', placeholder: Boolean(card.querySelector('.spotlight-image-placeholder'))})), hidden: document.querySelector('#spotlightSection')?.hidden ?? null})`
+          });
+          results.at(-1).spotlightAfterImageSettle = settledSpotlights.result.value;
+        }
         await command('Runtime.evaluate', { expression: 'window.scrollTo(0, 0)' });
         const screenshot = await command('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
         const name = route === '/' ? 'home' : 'produto';
@@ -254,11 +300,233 @@ try {
     }
   }
 
+  if (args.includes('--smoke-guest-cart')) {
+    currentCheck = 'guest cart save/remove smoke';
+    const demoRoute = '/produto/MLB3299039091';
+    await command('Page.navigate', { url: new URL(demoRoute, baseUrl).href });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const ready = await command('Runtime.evaluate', { expression: 'document.readyState === "complete"', returnByValue: true });
+      if (ready.result.value) break;
+      if (attempt === 99) throw new Error('Demo product page did not finish loading for guest cart smoke.');
+      await delay(100);
+    }
+    const productState = await command('Runtime.evaluate', {
+      returnByValue: true,
+      expression: `(() => {
+        const save = document.querySelector('[data-action="save-item"]');
+        return { hasSaveButton: Boolean(save), purchaseDisabled: document.querySelector('.buy-now-btn')?.disabled === true,
+          title: document.querySelector('#productTitle')?.textContent?.trim() || document.querySelector('h1')?.textContent?.trim() || '' };
+      })()`
+    });
+    if (!productState.result.value.hasSaveButton || !productState.result.value.purchaseDisabled) {
+      throw new Error('Guest cart smoke requires the explicit demo product with purchase disabled.');
+    }
+    const saved = await command('Runtime.evaluate', {
+      returnByValue: true,
+      expression: `(() => { const button = document.querySelector('[data-action="save-item"]'); button.click();
+        return JSON.parse(localStorage.getItem('achados_radar_cart') || '[]').length; })()`
+    });
+    if (saved.result.value !== 1) throw new Error('Demo product was not saved exactly once to the guest cart.');
+    await command('Page.navigate', { url: new URL('/carrinho', baseUrl).href });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const count = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: 'document.querySelectorAll("#cartItems .saved-item").length'
+      });
+      if (count.result.value === 1) break;
+      if (attempt === 99) throw new Error('Saved demo product did not appear in the cart page.');
+      await delay(100);
+    }
+    await command('Runtime.evaluate', { expression: 'document.querySelector("#cartItems [data-remove]")?.click()' });
+    let remaining = 1;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `({ rows: document.querySelectorAll('#cartItems .saved-item').length,
+          stored: JSON.parse(localStorage.getItem('achados_radar_cart') || '[]').length,
+          emptyVisible: document.querySelector('#cartEmpty')?.hidden === false })`
+      });
+      remaining = state.result.value.rows;
+      if (remaining === 0 && state.result.value.stored === 0 && state.result.value.emptyVisible) {
+        guestCartSmoke = { productId: 'MLB3299039091', savedOnce: true, visibleInCart: true, removed: true, purchaseDisabled: true };
+        break;
+      }
+      if (attempt === 99) throw new Error(`Guest cart removal did not settle; ${remaining} rendered item(s) remain.`);
+      await delay(100);
+    }
+  }
+
+  if (args.includes('--smoke-search')) {
+    currentCheck = 'catalog search, store filter and sorting smoke';
+    await command('Page.navigate', { url: new URL('/', baseUrl).href });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const ready = await command('Runtime.evaluate', { expression: 'document.readyState === "complete"', returnByValue: true });
+      if (ready.result.value) break;
+      if (attempt === 99) throw new Error('Catalog page did not finish loading for search smoke.');
+      await delay(100);
+    }
+    const search = await command('Runtime.evaluate', {
+      returnByValue: true,
+      expression: `(() => { const input = document.querySelector('#catalogSearch'); if (!input) return false;
+        input.value = 'fone'; input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`
+    });
+    if (!search.result.value) throw new Error('Catalog search field was not found.');
+    let searchState = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => ({ query: new URLSearchParams(location.search).get('q'), status: document.querySelector('#catalogStatus')?.textContent || '',
+          cards: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton])')].map(card => ({
+            title: card.querySelector('h3')?.textContent?.trim() || '', store: card.querySelector('.store-label')?.textContent?.trim() || '',
+            price: Number((card.querySelector('.catalog-price')?.textContent || '').match(/[0-9][0-9.]*,[0-9]{2}/)?.[0]?.replaceAll('.', '').replace(',', '.') || 0)
+          })) }))()`
+      });
+      searchState = state.result.value;
+      if (searchState.query === 'fone' && !searchState.status.includes('Buscando')) break;
+      await delay(100);
+    }
+    if (searchState?.query !== 'fone' || !searchState.cards.length || !searchState.cards.some((card) => /fone/i.test(card.title))) {
+      throw new Error(`Catalog search did not return matching offers: ${JSON.stringify(searchState)}`);
+    }
+    const selectedStore = /magalu/i.test(searchState.cards[0].store) ? 'magalu' : 'mercadolivre';
+    await command('Runtime.evaluate', {
+      expression: `(() => { const field = document.querySelector('#platformFilter'); field.value = '${selectedStore}'; field.dispatchEvent(new Event('change', { bubbles: true })); })()`
+    });
+    let filteredState = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => ({ store: new URLSearchParams(location.search).get('loja'), status: document.querySelector('#catalogStatus')?.textContent || '',
+          cards: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton])')].map(card => card.querySelector('.store-label')?.textContent?.trim() || '') }))()`
+      });
+      filteredState = state.result.value;
+      if (filteredState.store === selectedStore && !filteredState.status.includes('Buscando')) break;
+      await delay(100);
+    }
+    if (filteredState?.store !== selectedStore || !filteredState.cards.length || filteredState.cards.some((store) =>
+      selectedStore === 'magalu' ? !/magalu/i.test(store) : !/mercado livre/i.test(store))) {
+      throw new Error(`Store filter returned a mismatched result: ${JSON.stringify(filteredState)}`);
+    }
+    await command('Runtime.evaluate', {
+      expression: `(() => { const field = document.querySelector('#sortFilter'); field.value = 'price_asc'; field.dispatchEvent(new Event('change', { bubbles: true })); })()`
+    });
+    let sortedState = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => ({ sort: new URLSearchParams(location.search).get('ordem'), status: document.querySelector('#catalogStatus')?.textContent || '',
+          priceTexts: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]) .catalog-price')].map(el => el.textContent?.trim() || ''),
+          prices: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]) .catalog-price')].map(el => Number((el.textContent || '').match(/[0-9][0-9.]*,[0-9]{2}/)?.[0]?.replaceAll('.', '').replace(',', '.') || 0)) }))()`
+      });
+      sortedState = state.result.value;
+      if (sortedState.sort === 'price_asc' && !sortedState.status.includes('Buscando')) break;
+      await delay(100);
+    }
+    if (sortedState?.sort !== 'price_asc' || !sortedState.prices.length ||
+        sortedState.prices.some((price, index) => !Number.isFinite(price) || price <= 0 || (index > 0 && price < sortedState.prices[index - 1]))) {
+      throw new Error(`Price sorting did not produce ascending results: ${JSON.stringify(sortedState)}`);
+    }
+    const readPriceFilterState = async (parameter, value) => {
+      let state = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        const response = await command('Runtime.evaluate', {
+          returnByValue: true,
+          expression: `(() => ({ value: new URLSearchParams(location.search).get('${parameter}'), status: document.querySelector('#catalogStatus')?.textContent || '',
+            count: document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton])').length }))()`
+        });
+        state = response.result.value;
+        if (state.value === value && !state.status.includes('Buscando')) break;
+        await delay(100);
+      }
+      return state;
+    };
+    const setPriceFilter = async (inputId, parameter, value) => {
+      await command('Runtime.evaluate', {
+        expression: `(() => { const field = document.querySelector('#${inputId}'); field.value = '${value}'; field.dispatchEvent(new Event('change', { bubbles: true })); })()`
+      });
+      return readPriceFilterState(parameter, value || null);
+    };
+    const lowestPrice = Math.min(...sortedState.prices);
+    const highestPrice = Math.max(...sortedState.prices);
+    const minimumAboveResults = (highestPrice + 0.01).toFixed(2);
+    const minFilterState = await setPriceFilter('minPrice', 'min', minimumAboveResults);
+    if (minFilterState?.count !== 0) throw new Error(`Minimum price filter retained offers below its threshold: ${JSON.stringify(minFilterState)}`);
+    await setPriceFilter('minPrice', 'min', '');
+    const maximumBelowResults = Math.max(0, lowestPrice - 0.01).toFixed(2);
+    const maxFilterState = await setPriceFilter('maxPrice', 'max', maximumBelowResults);
+    if (maxFilterState?.count !== 0) throw new Error(`Maximum price filter retained offers above its threshold: ${JSON.stringify(maxFilterState)}`);
+    const resetPriceState = await setPriceFilter('maxPrice', 'max', '');
+    if (resetPriceState?.count === 0) throw new Error(`Clearing price filters did not restore the matching offer: ${JSON.stringify(resetPriceState)}`);
+    catalogSearchSmoke = { query: 'fone', matchingResults: searchState.cards.length, store: selectedStore,
+      filteredResults: filteredState.cards.length, priceAscending: true, sortedResults: sortedState.prices.length,
+      minPriceExcludesHigherOffers: minFilterState.count === 0, maxPriceExcludesLowerOffers: maxFilterState.count === 0,
+      clearingPriceFiltersRestoresResults: resetPriceState.count > 0 };
+  }
+
+  if (args.includes('--smoke-related-feed')) {
+    currentCheck = 'live related feed pagination smoke';
+    await command('Page.navigate', { url: new URL('/', baseUrl).href });
+    let productRoute = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `document.querySelector('#catalogGrid a[href^="/produto?id="]')?.getAttribute('href') || null`
+      });
+      if (state.result.value) { productRoute = state.result.value; break; }
+      await delay(100);
+    }
+    if (!productRoute) throw new Error('No live catalog product link was available for the related feed smoke.');
+    await command('Page.navigate', { url: new URL(productRoute, baseUrl).href });
+    let feedState = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => { const grid = document.querySelector('#relatedGrid'); const button = document.querySelector('#relatedMore');
+          return { ready: Boolean(document.querySelector('#productContent') && !document.querySelector('#productContent').hidden),
+            currentId: new URLSearchParams(location.search).get('id'), ids: [...(grid?.querySelectorAll('.related-card') || [])].map(card => card.dataset.productId),
+            hidden: button?.hidden ?? true, disabled: button?.disabled ?? true, label: button?.textContent?.trim() || '' }; })()`
+      });
+      feedState = state.result.value;
+      if (feedState.ready && (feedState.ids.length || !feedState.hidden || feedState.label.includes('Falha'))) break;
+      await delay(100);
+    }
+    if (!feedState?.ready) throw new Error('Live product details did not load for the related feed smoke.');
+    let pageRequests = 1;
+    while (!feedState.hidden && pageRequests < 5) {
+      if (feedState.label.includes('Falha')) throw new Error('Related feed is waiting for a manual retry.');
+      const previousCount = feedState.ids.length;
+      await command('Runtime.evaluate', { expression: `document.querySelector('#relatedMore')?.click()` });
+      let settled = false;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        const state = await command('Runtime.evaluate', {
+          returnByValue: true,
+          expression: `(() => { const grid = document.querySelector('#relatedGrid'); const button = document.querySelector('#relatedMore');
+            return { ids: [...(grid?.querySelectorAll('.related-card') || [])].map(card => card.dataset.productId),
+              hidden: button?.hidden ?? true, disabled: button?.disabled ?? true, label: button?.textContent?.trim() || '' }; })()`
+        });
+        feedState = { ...feedState, ...state.result.value };
+        if (!feedState.disabled && (feedState.hidden || feedState.ids.length > previousCount || feedState.label.includes('Falha'))) { settled = true; break; }
+        await delay(100);
+      }
+      if (!settled) throw new Error('Related feed page did not settle after requesting more offers.');
+      if (feedState.label.includes('Falha')) throw new Error('Related feed request failed while loading another page.');
+      pageRequests += 1;
+    }
+    const duplicates = feedState.ids.length - new Set(feedState.ids).size;
+    if (!feedState.ids.length || duplicates || feedState.ids.includes(feedState.currentId) || (!feedState.hidden && pageRequests < 5)) {
+      throw new Error(`Related feed integrity/end state failed: ${JSON.stringify({ ...feedState, duplicates })}`);
+    }
+    relatedFeedSmoke = { currentProductExcluded: true, duplicateCards: duplicates, uniqueRelatedCards: feedState.ids.length,
+      pagesRequested: pageRequests, reachedCatalogEnd: feedState.hidden, pageLimitReached: pageRequests === 5 && !feedState.hidden };
+  }
+
   const failures = results.filter((result) => result.overflowElements.length > 0 || result.bodyScroll > result.viewport + 1 ||
     result.rootScroll > result.rootClient + 1 || !result.accessibility.mainLandmark ||
     result.accessibility.unnamedHeadings > 0 || result.accessibility.unnamedControls > 0 ||
     (result.keyboard && (result.keyboard[0]?.visible !== true || !result.keyboard[0]?.className.includes('skip-link') ||
       result.keyboard.some((focus, index) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link')) || (index > 0 && focus.className.includes('skip-link'))))) ||
+    (smokeAdminGuest && result.route === '/painel-admin' &&
+      (!result.adminGuestAccess?.metricsHidden || !result.adminGuestAccess.statusText.includes('Entre na conta administrativa'))) ||
     (result.liveProduct && (!result.productContentVisible || !result.productTitlePresent || !result.relatedCardCount ||
       result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px')));
   const failureDetails = failures.map((result) => {
@@ -267,13 +535,15 @@ try {
     if (!result.accessibility.mainLandmark) issues.push('main_landmark_missing');
     if (result.accessibility.unnamedHeadings) issues.push('unnamed_heading');
     if (result.accessibility.unnamedControls) issues.push('unnamed_control');
+    if (smokeAdminGuest && result.route === '/painel-admin' &&
+      (!result.adminGuestAccess?.metricsHidden || !result.adminGuestAccess.statusText.includes('Entre na conta administrativa'))) issues.push('anonymous_admin_metrics_visible_or_unexpected_status');
     if (result.keyboard && (result.keyboard[0]?.visible !== true || !result.keyboard[0]?.className.includes('skip-link') ||
       result.keyboard.some((focus, index) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link')) || (index > 0 && focus.className.includes('skip-link'))))) issues.push('keyboard_focus_visibility');
     if (result.liveProduct && (!result.productContentVisible || !result.productTitlePresent || !result.relatedCardCount)) issues.push('product_detail_content_missing');
     if (result.liveProduct && (result.firstRelatedCardDisplay !== 'flex' || result.firstRelatedCardBorder !== '1px')) issues.push('related_cards_unstyled');
     return { route: result.route, viewport: result.viewport, issues, relatedCardCount: result.relatedCardCount, firstRelatedCardDisplay: result.firstRelatedCardDisplay, firstRelatedCardBorder: result.firstRelatedCardBorder };
   });
-  console.log(JSON.stringify({ checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, results }, null, 2));
+  console.log(JSON.stringify({ checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, guestCartSmoke, adminGuestSmoke, catalogSearchSmoke, relatedFeedSmoke, results }, null, 2));
   if (failures.length) process.exitCode = 1;
 } finally {
   for (const item of pending.values()) clearTimeout(item.timeout);

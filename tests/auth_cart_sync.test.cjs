@@ -16,7 +16,7 @@ const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 
-function createAuthClient({ activeUserId = userA, remoteByUser = {}, remoteResponse, localEntries = [], queryError = null, insertError = null, deleteError = null, deleteRows = null, userOnCall = null } = {}) {
+function createAuthClient({ activeUserId = userA, remoteByUser = {}, remoteResponse, localEntries = [], queryError = null, insertError = null, deleteError = null, deleteRows = null, userOnCall = null, onRemoteRead = null } = {}) {
   const values = new Map(localEntries);
   const insertedByUser = new Map();
   const deletedRows = [];
@@ -44,6 +44,7 @@ function createAuthClient({ activeUserId = userA, remoteByUser = {}, remoteRespo
         select() {
           return { async eq(column, ownerId) {
             assert.equal(column, 'user_id');
+            onRemoteRead?.(values, ownerId);
             return { data: remoteResponse === undefined ? remoteByUser[ownerId] ?? [] : remoteResponse, error: queryError };
           } };
         },
@@ -51,7 +52,7 @@ function createAuthClient({ activeUserId = userA, remoteByUser = {}, remoteRespo
           assert.equal(JSON.stringify(options), JSON.stringify({ onConflict: 'user_id,product_id', ignoreDuplicates: true }));
           const ownerId = rows[0]?.user_id;
           insertedByUser.set(ownerId, [...(insertedByUser.get(ownerId) ?? []), ...rows]);
-          return { error: insertError };
+          return { error: typeof insertError === 'function' ? insertError(rows, ownerId) : insertError };
         },
         delete() {
           const filters = [];
@@ -199,7 +200,39 @@ test('G1.6: remote read failure preserves the guest cart for a later retry', asy
   await assert.rejects(app.client.syncCartForUser(userA), /network unavailable/);
   assert.equal(app.values.has('achados_radar_cart'), true);
   assert.equal(app.values.has('achados_radar_cart_owner'), false, 'failed sync does not switch the active cart owner');
+  assert.equal(app.values.has(`achados_radar_cart:${userA}`), false, 'failed sync never commits an incomplete account snapshot');
+});
+
+test('G1.6: remote upsert failure keeps the merged local cart and retries safely', async () => {
+  let attempts = 0;
+  const app = createAuthClient({
+    localEntries: [['achados_radar_cart', JSON.stringify([localItem(productGuest)])]],
+    remoteByUser: { [userA]: [] },
+    insertError() { attempts += 1; return attempts === 1 ? new Error('temporary write failure') : null; }
+  });
+
+  await assert.rejects(app.client.syncCartForUser(userA), /temporary write failure/);
   assert.deepEqual(JSON.parse(app.values.get(`achados_radar_cart:${userA}`)).map(({ id }) => id), [productGuest]);
+  assert.equal(app.values.has('achados_radar_cart'), false, 'the visitor copy is removed only after its full local snapshot is committed');
+  assert.equal(app.values.get('achados_radar_cart_owner'), userA);
+
+  await app.client.syncCartForUser(userA);
+  assert.equal(attempts, 2, 'the next sync retries the same missing remote product');
+  assert.deepEqual(JSON.parse(app.values.get(`achados_radar_cart:${userA}`)).map(({ id }) => id), [productGuest]);
+});
+
+test('G1.6: guest cart changes during remote read are picked up by a bounded retry', async () => {
+  const changedGuestCart = [localItem(productGuest), localItem(productAccount, 'Adicionado em outra aba')];
+  const app = createAuthClient({
+    localEntries: [['achados_radar_cart', JSON.stringify([localItem(productGuest)])]],
+    onRemoteRead(values) { values.set('achados_radar_cart', JSON.stringify(changedGuestCart)); }
+  });
+
+  await app.client.syncCartForUser(userA);
+  assert.deepEqual(JSON.parse(app.values.get(`achados_radar_cart:${userA}`)).map(({ id }) => id), [productGuest, productAccount]);
+  assert.equal(app.values.has('achados_radar_cart'), false, 'guest cart is cleared only after the fresh snapshot is committed');
+  assert.equal(app.values.get('achados_radar_cart_owner'), userA);
+  assert.deepEqual(app.insertedByUser.get(userA).map(({ product_id }) => product_id), [productGuest, productAccount]);
 });
 
 test('G1.7: a session change during remote read stops the old user sync without consuming guest items', async () => {
@@ -221,7 +254,7 @@ test('G1.6: malformed remote response leaves local and guest carts available for
   await assert.rejects(app.client.syncCartForUser(userA), /Resposta inválida ao sincronizar o carrinho/);
   assert.equal(app.values.has('achados_radar_cart'), true);
   assert.equal(app.values.has('achados_radar_cart_owner'), false);
-  assert.deepEqual(JSON.parse(app.values.get(`achados_radar_cart:${userA}`)).map(({ id }) => id), [productGuest]);
+  assert.equal(app.values.has(`achados_radar_cart:${userA}`), false, 'malformed sync never commits an incomplete account snapshot');
   assert.equal(app.insertedByUser.size, 0);
 });
 

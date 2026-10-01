@@ -5,18 +5,14 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolveChromeExecutable } from './chrome-executable.mjs';
 import { isAllowedMarketplaceImageUrl } from '../src/modules/shared/marketplace-image-url.mjs';
+import { classifyProductImageIdentity } from '../src/modules/catalog/image-identity.mjs';
 
 export function isAllowedMarketplaceImage(image) {
   return Boolean(image && isAllowedMarketplaceImageUrl(image.platform, image.url));
 }
 
 export function classifyImageIdentity(image) {
-  if (image?.platform !== 'mercadolivre' || !image?.externalId || !image?.url) return 'unverifiable';
-  let imageProductId;
-  try { imageProductId = new URL(image.url).pathname.match(/MLB-?(\d+)/i)?.[0]?.replace('-', '').toUpperCase(); }
-  catch { return 'unverifiable'; }
-  if (!imageProductId) return 'unverifiable';
-  return imageProductId === String(image.externalId).replace('-', '').toUpperCase() ? 'match' : 'mismatch';
+  return classifyProductImageIdentity(image?.platform, image?.externalId, image?.url);
 }
 
 export function describeImageResult(imageResult, response, networkFailure) {
@@ -187,6 +183,9 @@ export async function checkImagesInChrome(images) {
       else chrome.kill();
       await Promise.race([new Promise((resolve) => chrome.once('exit', resolve)), delay(3000)]);
     }
-    await rm(profilePath, { recursive: true, force: true }).catch(() => {});
+    const temporaryRoot = path.resolve(os.tmpdir());
+    if (path.dirname(path.resolve(profilePath)) === temporaryRoot) {
+      await rm(profilePath, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }

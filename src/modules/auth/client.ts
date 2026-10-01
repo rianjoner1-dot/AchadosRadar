@@ -1,7 +1,7 @@
 import { createClient, type User } from '@supabase/supabase-js';
 import type { CartItem } from '../catalog/types';
-import { cartStorageKey, readLocalCart } from '../cart/store';
-import { prepareAvatarBlob } from './avatar.mjs';
+import { cartStorageKey } from '../cart/store';
+import { prepareAvatarBlob, versionAvatarUrl } from './avatar.mjs';
 
 import { getPublicSupabaseConfig } from '../shared/config';
 
@@ -38,23 +38,41 @@ function validateRemoteCartRows(value: unknown): Array<{ product_id: string; pro
 }
 
 export async function syncCartForUser(userId: string): Promise<void> {
+  return syncCartForUserAttempt(userId, 1);
+}
+
+async function syncCartForUserAttempt(userId: string, retriesOnLocalChange: number): Promise<void> {
   if (!supabase) return;
   const { data: { user: sessionUser }, error: sessionError } = await supabase.auth.getUser();
   if (sessionError) throw sessionError;
   if (sessionUser?.id !== userId) return;
   const accountKey = cartStorageKey(userId);
-  const currentOwner = localStorage.getItem('achados_radar_cart_owner');
-  const incomingLocalItems = !currentOwner || currentOwner === userId ? readLocalCart() : [];
-  let accountItems: CartItem[] = [];
-  try { accountItems = JSON.parse(localStorage.getItem(accountKey) || '[]'); } catch { accountItems = []; }
+  const ownerKey = 'achados_radar_cart_owner';
+  const guestCartKey = 'achados_radar_cart';
+  const guestCartSnapshot = localStorage.getItem(guestCartKey);
+  const accountCartSnapshot = localStorage.getItem(accountKey);
+  const currentOwner = localStorage.getItem(ownerKey);
+  const parseCart = (raw: string | null): CartItem[] => {
+    try {
+      const parsed = JSON.parse(raw || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  };
+  const accountItems = parseCart(accountCartSnapshot);
+  const incomingLocalItems = currentOwner ? [] : parseCart(guestCartSnapshot);
   const merged = new Map<string, CartItem>();
   for (const item of [...accountItems, ...incomingLocalItems]) if (item.id) merged.set(item.id, item);
-  localStorage.setItem(accountKey, JSON.stringify([...merged.values()]));
   const { data: remote, error } = await supabase.from('cart_items').select('product_id,products(id,platform,title,product_images(url,display_order),offers(price,seller_name,installments_text,observed_at))').eq('user_id', userId);
   if (error) throw error;
   const remoteRows = validateRemoteCartRows(remote);
   const { data: { user: latestUser }, error: latestSessionError } = await supabase.auth.getUser();
   if (latestSessionError || latestUser?.id !== userId) return;
+  if (localStorage.getItem(ownerKey) !== currentOwner
+      || localStorage.getItem(guestCartKey) !== guestCartSnapshot
+      || localStorage.getItem(accountKey) !== accountCartSnapshot) {
+    if (retriesOnLocalChange > 0) return syncCartForUserAttempt(userId, retriesOnLocalChange - 1);
+    return;
+  }
   for (const row of remoteRows) {
     const product = Array.isArray(row.products) ? row.products[0] : row.products;
     if (!product || merged.has(row.product_id)) continue;
@@ -63,8 +81,8 @@ export async function syncCartForUser(userId: string): Promise<void> {
     merged.set(row.product_id, { id: row.product_id, platform: product.platform, title: product.title, price: offer?.price ?? null, priceFormatted: typeof offer?.price === 'number' ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(offer.price) : 'Preço indisponível', image: image ?? '', sellerName: offer?.seller_name ?? '', installments: offer?.installments_text ?? '' });
   }
   localStorage.setItem(accountKey, JSON.stringify([...merged.values()]));
-  if (!currentOwner || currentOwner === userId) localStorage.removeItem('achados_radar_cart');
-  localStorage.setItem('achados_radar_cart_owner', userId);
+  if (!currentOwner) localStorage.removeItem(guestCartKey);
+  localStorage.setItem(ownerKey, userId);
 
   const productIds = [...merged.keys()].filter((id) => /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id));
   if (!productIds.length) return;
@@ -114,8 +132,8 @@ export async function uploadAvatar(user: User, file: File): Promise<string> {
   if (!supabase) throw new Error('Supabase não está configurado.');
   const blob = await prepareAvatarBlob(file);
   const path = `${user.id}/avatar.webp`;
-  const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', upsert: true });
+  const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', cacheControl: '0', upsert: true });
   if (error) throw error;
   const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-  return data.publicUrl;
+  return versionAvatarUrl(data.publicUrl);
 }

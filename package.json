@@ -7,13 +7,16 @@
     "dev": "astro dev",
     "start": "astro dev",
     "bridge": "node --env-file-if-exists=.env scripts/local-catalog-bridge.mjs",
+    "verify:bridge-default": "node scripts/verify-bridge-default-port.mjs",
+    "verify:extension-load": "node scripts/verify-extension-chromium-load.mjs",
+    "verify:extension-products": "node scripts/verify-extension-product-extraction.mjs",
     "build": "astro build",
     "check": "astro check",
     "test:budget": "node scripts/verify-functions.cjs && node scripts/verify-payload.cjs",
     "audit:catalog-pages": "node scripts/audit-public-catalog-pages.mjs",
     "audit:catalog-images": "node scripts/audit-live-product-images.mjs",
     "test": "node --test tests/*.test.cjs",
-    "validate:local": "npm test && npm run check && npm run build && npm run test:budget"
+    "validate:local": "npm run check && npm run build && npm test && npm run test:budget"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.11",

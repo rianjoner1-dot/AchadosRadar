@@ -12,7 +12,7 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 <script>
   import { escapeHtml } from '../modules/catalog/client';
-  import { readLocalCart, removeCartItem, clearLocalCart, updateCartBadge } from '../modules/cart/store';
+  import { readLocalCart, removeCartItemSnapshot, removeCartItems, updateCartBadge } from '../modules/cart/store';
   import { formatLinkTiming, hasElapsedLinkDeadline } from '../modules/outbound/readiness.mjs';
   import type { CartItem } from '../modules/catalog/types';
 
@@ -42,12 +42,15 @@ import Layout from '../layouts/Layout.astro';
     list.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
       const id = button.dataset.remove!;
       const ownerId = list.dataset.cartOwner || null;
+      const itemSnapshot = readLocalCart(ownerId).find((saved) => saved.id === id);
+      if (!itemSnapshot) { void render(); return; }
+      const removalSnapshot = { id: itemSnapshot.id, savedAt: itemSnapshot.savedAt };
       button.disabled = true;
       try {
         const auth = await import('../modules/auth/client').catch(() => null);
         if (ownerId && !auth) throw new Error('A sessão da conta não pôde ser confirmada.');
         if (auth) await auth.removeRemoteCartItem(id, ownerId);
-        removeCartItem(id, ownerId);
+        removeCartItemSnapshot(removalSnapshot, ownerId);
       }
       catch { status.textContent = 'Não foi possível sincronizar a remoção. Tente novamente; o produto continua salvo.'; button.disabled = false; }
     }));
@@ -77,6 +80,13 @@ import Layout from '../layouts/Layout.astro';
       if (!row || version !== renderVersion) return;
       const state = row.querySelector<HTMLElement>('[data-state]')!;
       const buy = row.querySelector<HTMLAnchorElement>('[data-buy]')!;
+      const disableBuy = () => {
+        buy.removeAttribute('href');
+        buy.removeAttribute('target');
+        buy.removeAttribute('rel');
+        buy.setAttribute('aria-disabled', 'true');
+        buy.textContent = 'Link em verificação';
+      };
       if (!catalogReady || !validUuid(item.id)) { state.textContent = 'Exemplo local: esta amostra não tem link de compra ativo.'; return; }
       try {
         const latest = await getCatalogProduct(item.id);
@@ -128,8 +138,13 @@ import Layout from '../layouts/Layout.astro';
         row.dataset.offerReady = String(readiness.ready);
         state.textContent = readiness.ready ? readiness.reason : readiness.reason + ' O item continua salvo.';
         if (readiness.ready) { buy.href = `/api/out/${encodeURIComponent(item.id)}`; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.textContent = `Continuar na ${storeName(latest.platform)}`; buy.removeAttribute('aria-disabled'); }
-        else { buy.textContent = 'Link em verificação'; buy.setAttribute('aria-disabled', 'true'); }
-      } catch { if (version === renderVersion) state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.'; }
+        else { disableBuy(); }
+      } catch {
+        if (version === renderVersion) {
+          disableBuy();
+          state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.';
+        }
+      }
     };
     const pending = [...items];
     const workerCount = Math.min(3, pending.length);
@@ -156,6 +171,8 @@ import Layout from '../layouts/Layout.astro';
       if (hasElapsedLinkDeadline(link) && row.dataset.offerReady === 'true') {
         const buy = row.querySelector<HTMLAnchorElement>('[data-buy]');
         buy?.removeAttribute('href');
+        buy?.removeAttribute('target');
+        buy?.removeAttribute('rel');
         buy?.setAttribute('aria-disabled', 'true');
         if (buy) buy.textContent = 'Link em verificação';
         const state = row.querySelector<HTMLElement>('[data-state]');
@@ -171,7 +188,13 @@ import Layout from '../layouts/Layout.astro';
     let auth: typeof import('../modules/auth/client');
     status.textContent = 'Carregando sua lista...';
     try { auth = await import('../modules/auth/client'); }
-    catch { status.textContent = 'Não foi possível carregar sua lista agora.'; renderLocalCart(null); return; }
+    catch {
+      const localItems = renderLocalCart(null);
+      status.textContent = localItems.length
+        ? 'Os itens continuam salvos neste navegador. A sincronização da conta não está disponível agora.'
+        : 'A conta não pôde ser carregada. Você ainda pode salvar produtos neste navegador.';
+      return;
+    }
     if (auth.supabase && !authSubscriptionReady) {
       auth.supabase.auth.onAuthStateChange(() => { void render(); });
       authSubscriptionReady = true;
@@ -200,11 +223,12 @@ import Layout from '../layouts/Layout.astro';
       const button = document.querySelector<HTMLButtonElement>('#clearCart')!;
       button.disabled = true;
       const ownerId = list.dataset.cartOwner || null;
+      const clearSnapshot = readLocalCart(ownerId).map(({ id, savedAt }) => ({ id, savedAt }));
       try {
         const auth = await import('../modules/auth/client').catch(() => null);
         if (ownerId && !auth) throw new Error('A sessão da conta não pôde ser confirmada.');
         if (auth) await auth.clearRemoteCart(ownerId);
-        clearLocalCart(ownerId);
+        removeCartItems(clearSnapshot, ownerId);
       }
       catch { status.textContent = 'Não foi possível sincronizar a limpeza. Os itens continuam salvos.'; }
       finally { button.disabled = false; }

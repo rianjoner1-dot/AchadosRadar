@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import { authReady } from '../modules/auth/client';
 ---
-<Layout title="Minha conta | Achados Radar" description="Entre por código enviado ao seu email e edite seu perfil.">
+<Layout title="Minha conta | Achados Radar" description="Entre pelo link enviado ao seu email e edite seu perfil.">
   <div class="container account-page">
     <h1>Minha conta</h1>
     <p class="account-intro">Acesse sua lista e mantenha seus dados atualizados. O acesso é por email, sem senha obrigatória.</p>
@@ -10,13 +10,16 @@ import { authReady } from '../modules/auth/client';
     <section id="loginPanel" class="account-panel">
       <h2>Entrar ou criar conta</h2>
       <form id="requestOtpForm">
+        <label for="newAccountName">Seu nome (para o perfil da primeira conta)</label><input id="newAccountName" type="text" autocomplete="name" maxlength="80" placeholder="Ex.: Rian Joner" disabled={!authReady} />
+        <small class="field-hint">Se você já tem conta, pode deixar em branco. O nome também pode ser editado depois.</small>
         <label for="emailInput">Email</label><input id="emailInput" type="email" autocomplete="email" required maxlength="254" disabled={!authReady} />
-        <button type="submit" class="btn-primary" disabled={!authReady}>Enviar código de acesso</button>
+        <button type="submit" class="btn-primary" disabled={!authReady}>Enviar link de acesso</button>
       </form>
       <form id="verifyOtpForm" hidden>
-        <label for="otpInput">Código recebido por email</label><input id="otpInput" inputmode="numeric" autocomplete="one-time-code" required minlength="6" maxlength="8" disabled={!authReady} />
-        <button type="submit" class="btn-primary" disabled={!authReady}>Confirmar e entrar</button>
-        <button id="resendOtp" type="button" class="text-button" disabled={!authReady}>Enviar outro código</button>
+        <p>Abra o link recebido por email neste navegador para entrar. Se a mensagem também mostrar um código, você pode digitá-lo abaixo.</p>
+        <label for="otpInput">Código de acesso (se exibido no email)</label><input id="otpInput" inputmode="numeric" autocomplete="one-time-code" required minlength="6" maxlength="8" disabled={!authReady} />
+        <button type="submit" class="btn-primary" disabled={!authReady}>Confirmar com código</button>
+        <button id="resendOtp" type="button" class="text-button" disabled={!authReady}>Enviar outro link</button>
       </form>
       <details class="password-access">
         <summary>Acessar com senha (opcional)</summary>
@@ -35,12 +38,19 @@ import { authReady } from '../modules/auth/client';
     </section>
     <section id="profilePanel" class="account-panel" hidden>
       <h2>Perfil</h2>
+      <p id="profileGreeting" class="profile-greeting" aria-live="polite"></p>
       <p id="accountEmail" class="profile-email"></p>
       <img id="avatarPreview" class="avatar-preview" alt="Foto do perfil" width="96" height="96" hidden />
       <form id="profileForm">
         <label for="displayName">Nome</label><input id="displayName" type="text" maxlength="80" autocomplete="name" />
         <label for="phoneNumber">Telefone (opcional)</label><input id="phoneNumber" type="tel" maxlength="20" autocomplete="tel" placeholder="(00) 00000-0000" />
-        <label for="avatarFile">Foto do perfil (JPEG, PNG ou WebP)</label><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp" />
+        <span class="field-label">Foto do perfil</span>
+        <label class="avatar-upload-card">
+          <input id="avatarFile" class="avatar-file-input" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="avatarFileName avatarFileHelp" />
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14.5v3A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="upload-copy"><strong>Clique para adicionar uma foto</strong><span id="avatarFileName" class="upload-filename" aria-live="polite">Nenhum arquivo selecionado</span></span>
+        </label>
+        <small id="avatarFileHelp" class="field-hint">JPEG, PNG ou WebP. A imagem será ajustada para caber no perfil.</small>
         <button type="submit" class="btn-primary">Salvar alterações</button>
       </form>
       <div class="profile-actions"><a href="/carrinho" class="btn-secondary">Minha lista</a><a id="adminPanelLink" href="/painel-admin" class="btn-secondary" hidden>Painel administrativo</a><button id="signOutButton" type="button" class="btn-secondary">Sair da conta</button></div>
@@ -54,6 +64,7 @@ import { authReady } from '../modules/auth/client';
   import { deleteLocalCartForUser, setCartOwner } from '../modules/cart/store';
   import { normalizeBrazilianPhone } from '../modules/auth/phone.mjs';
   import { runAuthAction } from '../modules/auth/run-action.mjs';
+  import { buildOtpOptions } from '../modules/auth/otp-options.mjs';
   const login = document.querySelector<HTMLElement>('#loginPanel')!;
   const profile = document.querySelector<HTMLElement>('#profilePanel')!;
   const requestForm = document.querySelector<HTMLFormElement>('#requestOtpForm')!;
@@ -63,12 +74,21 @@ import { authReady } from '../modules/auth/client';
   const status = document.querySelector<HTMLElement>('#authStatus')!;
   const profileStatus = document.querySelector<HTMLElement>('#profileStatus')!;
   const emailInput = document.querySelector<HTMLInputElement>('#emailInput')!;
+  const avatarFileInput = document.querySelector<HTMLInputElement>('#avatarFile')!;
+  const avatarFileName = document.querySelector<HTMLElement>('#avatarFileName')!;
   let sessionRenderVersion = 0;
   let renderedUserId: string | null = null;
   let lastEmail = '';
 
+  avatarFileInput.addEventListener('change', () => {
+    avatarFileName.textContent = avatarFileInput.files?.[0]?.name ?? 'Nenhum arquivo selecionado';
+  });
+
   function clearPrivateProfile() {
     (document.querySelector<HTMLInputElement>('#displayName')!).value = '';
+    document.querySelector<HTMLElement>('#profileGreeting')!.textContent = '';
+    avatarFileInput.value = '';
+    avatarFileName.textContent = 'Nenhum arquivo selecionado';
     (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = '';
     (document.querySelector<HTMLImageElement>('#avatarPreview')!).removeAttribute('src');
     (document.querySelector<HTMLImageElement>('#avatarPreview')!).hidden = true;
@@ -102,6 +122,9 @@ import { authReady } from '../modules/auth/client';
     clearPrivateProfile();
     login.hidden = true; profile.hidden = false;
     status.textContent = '';
+    if (window.location.search || window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     document.querySelector('#accountEmail')!.textContent = user.email ?? '';
     try { await syncCartForUser(user.id); }
     catch { if (version === sessionRenderVersion) profileStatus.textContent = 'Não foi possível sincronizar a lista agora; seu perfil continua disponível.'; }
@@ -111,6 +134,9 @@ import { authReady } from '../modules/auth/client';
     if (profileError) { profileStatus.textContent = 'Não foi possível carregar os dados do perfil agora.'; return; }
     document.querySelector<HTMLAnchorElement>('#adminPanelLink')!.hidden = data?.role !== 'admin';
     (document.querySelector<HTMLInputElement>('#displayName')!).value = data?.full_name ?? '';
+    document.querySelector<HTMLElement>('#profileGreeting')!.textContent = data?.full_name
+      ? `Olá, ${data.full_name}!`
+      : 'Complete seu perfil com seu nome.';
     (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = data?.phone_e164 ?? '';
     const avatar = document.querySelector<HTMLImageElement>('#avatarPreview')!;
     avatar.hidden = !data?.avatar_url;
@@ -141,9 +167,15 @@ import { authReady } from '../modules/auth/client';
     const client = supabase;
     if (!client) { status.textContent = 'O acesso ainda não está configurado.'; return; }
     lastEmail = emailInput.value.trim().toLowerCase();
+    const accountName = document.querySelector<HTMLInputElement>('#newAccountName')!.value.trim();
+    if (accountName && accountName.length < 2) {
+      status.textContent = 'Digite pelo menos dois caracteres para o nome, ou deixe o campo vazio.';
+      return;
+    }
     status.textContent = 'Enviando código...';
-    const sent = await runAuthAction(() => client.auth.signInWithOtp({ email: lastEmail, options: { shouldCreateUser: true, emailRedirectTo: `${location.origin}/conta` } }));
-    status.textContent = sent ? 'Código enviado. Confira sua caixa de entrada e o spam.' : 'Não foi possível enviar agora. Confira o email e tente novamente.';
+    const otpOptions = buildOtpOptions(location.origin, accountName);
+    const sent = await runAuthAction(() => client.auth.signInWithOtp({ email: lastEmail, options: otpOptions }));
+    status.textContent = sent ? 'Link de acesso enviado. Abra o email neste navegador; se ele também mostrar um código, digite-o abaixo.' : 'Não foi possível enviar agora. Confira o email e tente novamente.';
     verifyForm.hidden = !sent;
   });
   document.querySelector<HTMLButtonElement>('#resendOtp')!.addEventListener('click', () => requestForm.requestSubmit());
@@ -206,7 +238,10 @@ import { authReady } from '../modules/auth/client';
       if (avatarUrl) patch.avatar_url = avatarUrl;
       const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
       if (error) throw error;
+      document.querySelector<HTMLElement>('#profileGreeting')!.textContent = name ? `Olá, ${name}!` : 'Complete seu perfil com seu nome.';
       if (avatarUrl) { const preview = document.querySelector<HTMLImageElement>('#avatarPreview')!; preview.src = avatarUrl; preview.hidden = false; }
+      avatarFileInput.value = '';
+      avatarFileName.textContent = 'Nenhum arquivo selecionado';
       profileStatus.textContent = 'Perfil atualizado.';
     } catch (error) { profileStatus.textContent = error instanceof Error ? error.message : 'Não foi possível salvar o perfil.'; }
   });
@@ -253,6 +288,17 @@ import { authReady } from '../modules/auth/client';
   .account-panel .btn-primary { margin-top:10px; }
   .account-notice { padding:12px; background:#fff8e5; margin-top:18px; }
   .profile-email { color:#555; margin-bottom:12px; }
+  .field-hint { color:#666; font-size:.82rem; line-height:1.45; }
+  .field-label { color:#444; font-size:.85rem; font-weight:600; margin-top:8px; }
+  .avatar-upload-card { position:relative; display:flex; align-items:center; gap:14px; min-height:104px; padding:18px; border:1px dashed #bcb7ad; border-radius:8px; background:#faf9f6; color:#333; cursor:pointer; transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
+  .avatar-upload-card:hover { border-color:#777064; background:#f4f2ec; }
+  .avatar-upload-card:focus-within { outline:3px solid #e5b94c; outline-offset:2px; border-color:#514a3c; }
+  .avatar-file-input { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; clip-path:inset(50%); border:0; }
+  .upload-icon { width:30px; height:30px; flex:0 0 30px; color:#655e51; }
+  .upload-copy { display:grid; gap:5px; }
+  .upload-copy strong { font-size:.92rem; font-weight:650; }
+  .upload-filename { color:#666; font-size:.82rem; overflow-wrap:anywhere; }
+  .profile-greeting { color:#333; font-size:1rem; font-weight:600; margin:0 0 4px; }
   .avatar-preview { width:96px;height:96px;object-fit:cover;border-radius:50%;border:1px solid #ddd;margin:0 0 12px; }
   .profile-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
   .text-button { color:#444; text-decoration:underline; padding:8px; }

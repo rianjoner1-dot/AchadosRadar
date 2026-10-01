@@ -3,10 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isAllowedMarketplaceImageUrl } from '../src/modules/shared/marketplace-image-url.mjs';
+import { matchesMarketplaceProductIdentity } from '../src/modules/catalog/product-identity.mjs';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const dataPath = path.resolve(process.env.LOCAL_CATALOG_BRIDGE_DATA || path.join(projectRoot, 'data', 'catalogo_macro.json'));
-const requestedPort = Number(process.env.LOCAL_CATALOG_BRIDGE_PORT || 6875);
+// The legacy Python archive server remains on 6875; keep the site bridge separate.
+const requestedPort = Number(process.env.LOCAL_CATALOG_BRIDGE_PORT || 6876);
 const maxBodyBytes = 1024 * 1024;
 const supportedPlatforms = new Set(['magalu', 'mercadolivre', 'amazon', 'shopee']);
 const supabaseUrl = String(process.env.PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
@@ -42,6 +44,7 @@ const fieldAliases = {
 };
 let writeQueue = Promise.resolve();
 let archiveQueueInFlight = false;
+let archiveQueueRetryRequested = false;
 
 const respond = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -72,11 +75,40 @@ function normalizeIncoming(input) {
   const title = String(valueOf(input, fieldAliases.title) ?? '').trim();
   if (!id || id.length > 200 || !title || title.length > 500) throw new Error('Produto precisa de ID e título válidos.');
 
+  const originalUrl = valueOf(input, fieldAliases.originalUrl);
+  if (originalUrl !== undefined && ['magalu', 'mercadolivre'].includes(platform)
+    && !matchesMarketplaceProductIdentity(platform, id, originalUrl)) {
+    throw new Error('invalid_catalog_identity: original URL does not match product ID.');
+  }
+  const affiliateUrl = valueOf(input, fieldAliases.affiliateUrl);
+  if (platform === 'magalu' && affiliateUrl !== undefined) {
+    try {
+      const affiliateHost = new URL(String(affiliateUrl)).hostname.toLowerCase();
+      if ((affiliateHost === 'magazinevoce.com.br' || affiliateHost.endsWith('.magazinevoce.com.br'))
+        && !matchesMarketplaceProductIdentity(platform, id, affiliateUrl)) {
+        throw new Error('invalid_catalog_identity: affiliate URL does not match product ID.');
+      }
+    } catch (error) {
+      if (error.message?.includes('invalid_catalog_identity')) throw error;
+    }
+  }
+
   const result = { platform, id, title };
   for (const [field, aliases] of Object.entries(fieldAliases)) {
     if (['id', 'title'].includes(field)) continue;
     const value = valueOf(input, aliases);
     if (value === undefined) continue;
+    if (field === 'stockStatus' && !['in_stock', 'out_of_stock', 'unknown'].includes(value)) {
+      throw new Error('Estoque precisa usar in_stock, out_of_stock ou unknown.');
+    }
+    if (field === 'stockQuantity' && value !== null) {
+      const quantity = typeof value === 'string' && value.trim() ? Number(value) : value;
+      if (!Number.isSafeInteger(quantity) || quantity < 0) {
+        throw new Error('Quantidade em estoque precisa ser um inteiro não negativo ou null.');
+      }
+      result[field] = quantity;
+      continue;
+    }
     result[field] = typeof value === 'string' ? value.trim().slice(0, 2000) : value;
   }
   const imageValues = valueOf(input, ['images', 'photos', 'pictures', 'fotos']) ?? [valueOf(input, ['image', 'thumbnail', 'imagem'])].filter(Boolean);
@@ -125,7 +157,8 @@ function normalizeUnavailableReport(input) {
   const allowedHosts = platform === 'magalu' ? ['magazineluiza.com.br', 'magazinevoce.com.br'] : platform === 'mercadolivre' ? ['mercadolivre.com.br', 'mercadolivre.com'] : [];
   let url;
   try { url = new URL(String(input.originalUrl || '')); } catch { throw new Error('invalid_marketplace_url'); }
-  if (!id || id.length > 200 || url.protocol !== 'https:' || !allowedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) throw new Error('invalid_catalog_identity');
+  if (!id || id.length > 200 || url.protocol !== 'https:' || !allowedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+    || !matchesMarketplaceProductIdentity(platform, id, url.href)) throw new Error('invalid_catalog_identity');
   if (input.evidence !== 'explicit_not_found_without_title_or_price') throw new Error('missing_explicit_unavailable_evidence');
   return { platform, externalId: id, originalUrl: url.href, marketplaceUnavailable: true, marketplaceUnavailableEvidence: input.evidence, evidence: input.evidence, confirmedAt: String(input.confirmedAt || new Date().toISOString()).slice(0, 40) };
 }
@@ -194,7 +227,12 @@ async function archiveUnavailableReport(report) {
 }
 
 async function processUnavailableReports() {
-  if (!canArchiveRemotely || archiveQueueInFlight) {
+  if (!canArchiveRemotely) {
+    const catalog = await readCatalog();
+    return { archivedIds: [], pending: Array.isArray(catalog.confirmedUnavailable) ? catalog.confirmedUnavailable.length : 0 };
+  }
+  if (archiveQueueInFlight) {
+    archiveQueueRetryRequested = true;
     const catalog = await readCatalog();
     return { archivedIds: [], pending: Array.isArray(catalog.confirmedUnavailable) ? catalog.confirmedUnavailable.length : 0 };
   }
@@ -213,6 +251,10 @@ async function processUnavailableReports() {
     return { archivedIds, pending: Array.isArray(refreshed.confirmedUnavailable) ? refreshed.confirmedUnavailable.length : 0 };
   } finally {
     archiveQueueInFlight = false;
+    if (archiveQueueRetryRequested) {
+      archiveQueueRetryRequested = false;
+      processUnavailableReports().catch((error) => console.warn(`[catalog-bridge] Fila de arquivamento pendente: ${String(error.message || error).slice(0, 100)}`));
+    }
   }
 }
 
@@ -274,7 +316,7 @@ const server = http.createServer(async (req, res) => {
     const result = await saveTask;
     return respond(res, result.created ? 201 : 200, { ok: true, created: result.created, total: result.total, id: product.id, platform: product.platform });
   } catch (error) {
-    const status = error instanceof SyntaxError ? 400 : error.message?.includes('ID e título') || error.message?.includes('Plataforma') || error.message?.includes('objeto') ? 422 : 500;
+    const status = error instanceof SyntaxError ? 400 : error.message?.includes('ID e título') || error.message?.includes('Plataforma') || error.message?.includes('objeto') || error.message?.includes('Estoque') || error.message?.includes('Quantidade em estoque') || error.message?.includes('catalog_identity') || error.message?.includes('marketplace_url') || error.message?.includes('missing_explicit_unavailable_evidence') ? 422 : 500;
     return respond(res, status, { ok: false, error: status === 500 ? 'Falha ao salvar no catálogo local.' : error.message });
   }
 });

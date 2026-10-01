@@ -28,6 +28,7 @@ export interface CatalogProduct {
 
 import { getPublicSupabaseConfig } from '../shared/config';
 import { canReportCatalogImageFailure, markCatalogImageFailureReport } from './image-health.js';
+import { sanitizeCatalogProductImages } from './image-identity.mjs';
 
 const supabaseConfig = getPublicSupabaseConfig();
 const config = {
@@ -37,6 +38,12 @@ const config = {
 
 export const catalogReady = supabaseConfig.isReady;
 const imageFailureReports = new Map<string, number>();
+
+function sanitizeProductImages<T extends CatalogProduct>(product: T): T {
+  return sanitizeCatalogProductImages(product, (productId, imageUrl) => {
+    void reportCatalogImageFailure(productId, imageUrl);
+  }) as T;
+}
 
 function headers(token?: string): HeadersInit {
   return {
@@ -61,7 +68,9 @@ export async function searchCatalog(input: {
     })
   });
   if (!response.ok) throw new Error(`Falha ao buscar catálogo (${response.status}).`);
-  return response.json();
+  const products = await response.json();
+  if (!Array.isArray(products)) throw new Error('Resposta invÃ¡lida ao buscar catÃ¡logo.');
+  return products.map((product) => sanitizeProductImages(product));
 }
 
 export async function getCatalogProduct(id: string, signal?: AbortSignal): Promise<CatalogProduct | null> {
@@ -79,7 +88,7 @@ export async function getCatalogProduct(id: string, signal?: AbortSignal): Promi
   ]);
   if (![imagesResponse, offersResponse, linkResponse].every((result) => result.ok)) throw new Error('Não foi possível carregar todos os dados da oferta.');
   const [images, offers, link] = await Promise.all([imagesResponse.json(), offersResponse.json(), linkResponse.json()]);
-  return { ...product, images, offer: offers[0] ?? null, affiliate_link: link ?? null };
+  return sanitizeProductImages({ ...product, images, offer: offers[0] ?? null, affiliate_link: link ?? null });
 }
 
 export async function reportCatalogImageFailure(productId: string, imageUrl: string): Promise<void> {

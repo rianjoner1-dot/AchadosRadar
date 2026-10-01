@@ -3,6 +3,13 @@ export const MAX_AVATAR_OUTPUT_BYTES = 2 * 1024 * 1024;
 export const MAX_AVATAR_PIXELS = 20_000_000;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+export function versionAvatarUrl(publicUrl, version = Date.now()) {
+  const url = new URL(publicUrl);
+  if (url.protocol !== 'https:') throw new Error('A foto de perfil precisa usar HTTPS.');
+  url.searchParams.set('v', String(version));
+  return url.href;
+}
+
 export async function prepareAvatarBlob(file, {
   createImageBitmapImpl = globalThis.createImageBitmap?.bind(globalThis),
   createCanvas = () => document.createElement('canvas')

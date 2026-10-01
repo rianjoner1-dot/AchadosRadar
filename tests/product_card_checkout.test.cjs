@@ -23,19 +23,40 @@ test('H1.4: each saved cart item uses its own product ID and current offer readi
   assert.doesNotMatch(cartPage, /href="https?:\/\//);
 });
 
+test('H1.3: cart fail-closed path removes any stale checkout destination after readiness failure', () => {
+  assert.match(cartPage, /const disableBuy = \(\) => \{/);
+  assert.match(cartPage, /buy\.removeAttribute\('href'\)/);
+  assert.match(cartPage, /buy\.removeAttribute\('target'\)/);
+  assert.match(cartPage, /buy\.removeAttribute\('rel'\)/);
+  assert.match(cartPage, /else \{ disableBuy\(\); \}/);
+  assert.match(cartPage, /catch \{\s*if \(version === renderVersion\) \{\s*disableBuy\(\);/);
+});
+
 test('G1.8: cart mutations carry the rendered owner through local and remote deletion', () => {
   assert.match(cartPage, /const ownerId = list\.dataset\.cartOwner \|\| null/);
   assert.match(cartPage, /removeRemoteCartItem\(id, ownerId\)/);
-  assert.match(cartPage, /removeCartItem\(id, ownerId\)/);
+  assert.match(cartPage, /const itemSnapshot = readLocalCart\(ownerId\)\.find\(\(saved\) => saved\.id === id\)/);
+  assert.match(cartPage, /removeCartItemSnapshot\(removalSnapshot, ownerId\)/);
   assert.match(cartPage, /clearRemoteCart\(ownerId\)/);
-  assert.match(cartPage, /clearLocalCart\(ownerId\)/);
+  assert.match(cartPage, /const clearSnapshot = readLocalCart\(ownerId\)\.map\(\(\{ id, savedAt \}\) => \(\{ id, savedAt \}\)\)/);
+  assert.match(cartPage, /removeCartItems\(clearSnapshot, ownerId\)/);
+});
+
+test('G1.8: a local cart remains usable and gets an accurate status when account loading fails', () => {
+  assert.match(cartPage, /const localItems = renderLocalCart\(null\)/);
+  assert.match(cartPage, /Os itens continuam salvos neste navegador\. A sincronização da conta não está disponível agora\./);
+  assert.match(cartPage, /A conta não pôde ser carregada\. Você ainda pode salvar produtos neste navegador\./);
 });
 
 test('H1.3: an open product or cart page disables marketplace exit when a deadline passes', () => {
   assert.match(productPage, /const currentReadiness = evaluateOfferReadiness\(\{ link, offer \}\)/);
   assert.match(productPage, /buy\.removeAttribute\('href'\)/);
+  assert.match(productPage, /buy\.removeAttribute\('target'\)/);
+  assert.match(productPage, /buy\.removeAttribute\('rel'\)/);
   assert.match(productPage, /window\.setInterval\(updateTimer, 60_000\)/);
   assert.match(cartPage, /hasElapsedLinkDeadline\(link\)/);
   assert.match(cartPage, /buy\?\.removeAttribute\('href'\)/);
+  assert.match(cartPage, /buy\?\.removeAttribute\('target'\)/);
+  assert.match(cartPage, /buy\?\.removeAttribute\('rel'\)/);
   assert.match(cartPage, /window\.setInterval\(updateCartLinkTimes, 60_000\)/);
 });

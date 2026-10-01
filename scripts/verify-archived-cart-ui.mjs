@@ -10,9 +10,11 @@ import { resolveChromeExecutable } from './chrome-executable.mjs';
 const baseUrl = process.argv.find((argument) => argument.startsWith('http')) ?? 'http://127.0.0.1:4324';
 const productIdArg = process.argv.find((argument) => argument.startsWith('--product-id='))?.slice('--product-id='.length) ?? '';
 const platformArg = process.argv.find((argument) => argument.startsWith('--platform='))?.slice('--platform='.length) ?? 'magalu';
+const simulateCatalogReadFailure = process.argv.includes('--simulate-catalog-read-failure');
 const liveProduct = Boolean(productIdArg);
 if (liveProduct && !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(productIdArg)) throw new Error('--product-id must be a UUID from the public catalog.');
 if (!['magalu', 'mercadolivre'].includes(platformArg)) throw new Error('--platform must be magalu or mercadolivre.');
+if (simulateCatalogReadFailure && !liveProduct) throw new Error('--simulate-catalog-read-failure requires --product-id.');
 const healthResponse = await fetch(new URL('/', baseUrl), { signal: AbortSignal.timeout(3000) })
   .catch(() => null);
 if (!healthResponse?.ok) throw new Error(`Site is unavailable at ${baseUrl}; start Astro and pass its URL.`);
@@ -98,10 +100,11 @@ try {
   await command('Page.enable');
   await command('Runtime.enable');
   await command('Network.enable');
-  await command('Network.setBlockedURLs', { urls: [
+  const blockedUrls = [
     '*rest/v1/rpc/record_product_metric*',
     '*rest/v1/rpc/report_product_image_failure*'
-  ] });
+  ];
+  await command('Network.setBlockedURLs', { urls: blockedUrls });
 
   if (liveProduct) {
     const productNavigation = await command('Page.navigate', { url: new URL(`/produto?id=${encodeURIComponent(testId)}`, baseUrl).href });
@@ -121,6 +124,9 @@ try {
       await delay(100);
     }
     if (!savedFromProductPage) throw new Error('The product page did not save the real item to the guest cart.');
+    if (simulateCatalogReadFailure) {
+      await command('Network.setBlockedURLs', { urls: [...blockedUrls, '*rest/v1/products*'] });
+    }
   } else {
     await command('Page.navigate', { url: new URL('/', baseUrl).href });
     for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -148,6 +154,7 @@ try {
       if (!row) return null;
       const state = row.querySelector('[data-state]')?.textContent || '';
       const buy = row.querySelector('[data-buy]');
+      const price = row.querySelector('[data-price]')?.textContent || '';
       const productLinks = [...row.querySelectorAll('a.saved-image, .saved-info h2 a, a.saved-details')];
       return {
         state,
@@ -156,7 +163,7 @@ try {
         buyHasHref: buy?.hasAttribute('href') ?? false,
         buyHref: buy?.getAttribute('href') ?? '',
         buyDisabled: buy?.getAttribute('aria-disabled') === 'true',
-        priceText: row.querySelector('[data-price]')?.textContent || '',
+        priceText: price,
         offerFacts: row.querySelector('[data-offer-facts]')?.textContent || '',
         productLinks: productLinks.length,
         productLinksWithHref: productLinks.filter((link) => link.hasAttribute('href')).length
@@ -198,7 +205,7 @@ try {
     ? Boolean(result
       && result.saved
       && !result.state.includes('Verificando preço')
-      && liveCheckoutStateSafe
+      && (simulateCatalogReadFailure ? !result.buyHasHref && result.buyDisabled : liveCheckoutStateSafe)
       && result.priceText.toLocaleLowerCase('pt-BR').includes('preço'))
     : Boolean(result
       && result.saved
@@ -214,7 +221,7 @@ try {
     && !anonymousAccount?.status);
   console.log(JSON.stringify({
     passed,
-    mode: liveProduct ? 'live-catalog-read-only' : 'archived-product-guest-cart',
+    mode: simulateCatalogReadFailure ? 'live-catalog-read-failure' : liveProduct ? 'live-catalog-read-only' : 'archived-product-guest-cart',
     catalogConfigured: liveProduct ? Boolean(result && !result.state.includes('não está mais no catálogo')) : (result?.state.includes('não está mais no catálogo') ?? false),
     cartItemPreserved: result?.saved ?? false,
     checkoutStateSafe: liveProduct ? liveCheckoutStateSafe : Boolean(result && !result.buyHasHref && result.buyDisabled),

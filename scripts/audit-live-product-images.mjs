@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { checkImagesInChrome } from './check-images-in-chrome.mjs';
 
 function readEnv(name) {
+  const processValue = process.env[name]?.trim();
+  if (processValue) return processValue.replace(/^['"]|['"]$/g, '');
   const line = readFileSync('.env', 'utf8').split(/\r?\n/).find((entry) => entry.trim().startsWith(`${name}=`));
   return line?.slice(line.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '') ?? '';
 }

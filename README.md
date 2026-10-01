@@ -35,7 +35,7 @@ npm run build
 npm run test:budget
 ```
 
-Em outra janela, `npm run bridge` inicia a ponte local em `127.0.0.1:6875`. A extensão já usa esse endereço para enviar observações. A ponte grava/atualiza `data/catalogo_macro.json`; quando `PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` estão no `.env` local, também processa automaticamente confirmações explícitas de produto inexistente pelo RPC protegido de arquivamento. Se o Supabase falhar, a confirmação fica na fila local e é tentada novamente. A chave permanece no processo local e nunca é enviada à extensão.
+Em outra janela, `npm run bridge` inicia a ponte do site em `127.0.0.1:6876`, separada do servidor Python legado da macro, que continua em `127.0.0.1:6875`. A extensão envia as observações aos dois serviços: preserva o arquivo/catálogo local existente e grava/atualiza `data/catalogo_macro.json` para importação no site. Quando `PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` estão no `.env` local, a ponte do site também processa confirmações explícitas de produto inexistente pelo RPC protegido de arquivamento. Se o Supabase falhar, a confirmação fica na fila local e é tentada novamente. A chave permanece no processo local e nunca é enviada à extensão.
 
 Para conferir uma amostra sem rede nem escrita:
 

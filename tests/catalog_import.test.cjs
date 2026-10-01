@@ -13,9 +13,9 @@ test('E1: importer accepts macro fields, preserves image order and only publishe
   const sourcePath = path.join(tempDir, 'catalog.json');
   const now = new Date().toISOString();
   fs.writeFileSync(sourcePath, JSON.stringify([
-    { platform: 'magalu', id: 'sku-1', title: 'Brinco prata', price: 45.9, stockStatus: 'in_stock', stockQuantity: null, images: ['https://a-static.mlcdn.com.br/img/1.jpg', 'https://a-static.mlcdn.com.br/img/2.jpg'], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10', originalUrl: 'https://www.magazineluiza.com.br/p/produto/sku-1', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/sku-1', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now, refreshDueAt: new Date(Date.now() + 86400000).toISOString() },
+    { platform: 'magalu', id: 'sku-1', title: 'Brinco prata', price: 45.9, stockStatus: 'in_stock', stockQuantity: null, images: ['https://a-static.mlcdn.com.br/img/1.jpg', 'https://a-static.mlcdn.com.br/img/2.jpg'], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10', originalUrl: 'https://www.magazineluiza.com.br/p/sku-1/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/sku-1/produto', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now, refreshDueAt: new Date(Date.now() + 86400000).toISOString() },
     { platform: 'mercadolivre', id: 'MLB123', title: 'Fone bluetooth', price: 100, stockStatus: 'unknown', images: ['https://http2.mlstatic.com/img/1.jpg'], originalUrl: 'https://produto.mercadolivre.com.br/MLB-123', affiliateUrl: 'https://meli.la/aBc123', isOfficialShortLink: true, linkStatus: 'ready', lastCheckedAt: now },
-    { platform: 'magalu', id: 'sku-2', title: 'Produto com imagem invasiva', price: 1, stockStatus: 'in_stock', images: ['https://example.com/track.png'], originalUrl: 'https://magazineluiza.com.br/p/x', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/x', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now }
+    { platform: 'magalu', id: 'sku-2', title: 'Produto com imagem invasiva', price: 1, stockStatus: 'in_stock', images: ['https://example.com/track.png'], originalUrl: 'https://magazineluiza.com.br/p/sku-2', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/sku-2', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now }
   ]));
   const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run'], { encoding: 'utf8' });
   assert.equal(result.status, 1, result.stderr);
@@ -57,17 +57,38 @@ test('E1: importer accepts macro fields, preserves image order and only publishe
     'https://a-static.mlcdn.com.br:8443/custom-port.jpg',
     'http://a-static.mlcdn.com.br/insecure.jpg',
     'https://a-static.mlcdn.com.br.attacker.invalid/lookalike.jpg'
-  ], originalUrl: 'https://www.magazineluiza.com.br/p/produto/sku-image-guard', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/sku-image-guard', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now }]));
+  ], originalUrl: 'https://www.magazineluiza.com.br/p/sku-image-guard/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/sku-image-guard/produto', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now }]));
   const unsafeImages = spawnSync(process.execPath, [script, unsafeImagesPath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
   assert.equal(unsafeImages.status, 0, unsafeImages.stderr);
   assert.deepEqual(JSON.parse(unsafeImages.stdout).details[0].imageUrls, ['https://a-static.mlcdn.com.br/safe.jpg']);
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('E1: Magalu affiliate links must match the configured store slug', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-magalu-store-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  const now = new Date().toISOString();
+  fs.writeFileSync(sourcePath, JSON.stringify([{
+    platform: 'magalu', id: 'sku-wrong-store', title: 'Oferta de outra vitrine', price: 10,
+    stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'],
+    originalUrl: 'https://www.magazineluiza.com.br/p/sku-wrong-store/produto',
+    affiliateUrl: 'https://www.magazinevoce.com.br/outra-vitrine/p/sku-wrong-store',
+    storeAffiliateId: 'minha-vitrine', linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now
+  }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.valid, 1);
+  assert.equal(report.publishable, 0, 'a valid Magalu URL for a different store cannot be published');
+  assert.equal(report.notPublishableReasons.link_afiliado_nao_verificado, 1);
+  assert.equal(report.details[0].linkStatus, 'broken');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('E1a: importer preserves stock evidence and downgrades contradictory in-stock zero quantity', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-stock-'));
   const sourcePath = path.join(tempDir, 'catalog.json');
-  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'stock-1', title: 'Produto', price: 10, stockStatus: 'in_stock', stockQuantity: 0, stockEvidence: '0 unidades', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/produto/stock-1', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/stock-1', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString() }]));
+  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'stock-1', title: 'Produto', price: 10, stockStatus: 'in_stock', stockQuantity: 0, stockEvidence: '0 unidades', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/stock-1/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/stock-1/produto', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString() }]));
   const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const normalized = JSON.parse(result.stdout).details[0];
@@ -80,12 +101,16 @@ test('E1a: importer preserves stock evidence and downgrades contradictory in-sto
 test('E1c: missing or future offer observation time cannot make stock publishable or look fresh', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-observed-at-'));
   const sourcePath = path.join(tempDir, 'catalog.json');
-  const base = { platform: 'magalu', title: 'Produto sem horário', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/produto/time-guard', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/time-guard', storeAffiliateId: 'loja', linkStatus: 'ready' };
-  fs.writeFileSync(sourcePath, JSON.stringify([{ ...base, id: 'missing-time' }, { ...base, id: 'future-time', collectedAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }]));
+  const linkCheckedAt = new Date().toISOString();
+  const base = { platform: 'magalu', title: 'Produto sem horário', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/time-guard/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/time-guard/produto', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: linkCheckedAt, linkVerifiedAt: linkCheckedAt, verified_at: linkCheckedAt };
+  fs.writeFileSync(sourcePath, JSON.stringify([
+    { ...base, id: 'missing-time', originalUrl: 'https://www.magazineluiza.com.br/p/missing-time/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/missing-time/produto' },
+    { ...base, id: 'future-time', originalUrl: 'https://www.magazineluiza.com.br/p/future-time/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/future-time/produto', collectedAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }
+  ]));
   const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.publishable, 0, 'sem verificação do link e sem horário válido nenhum item pode ser publicado');
+  assert.equal(report.publishable, 0, `link checks are not offer observations: ${JSON.stringify(report)}`);
   assert.equal(report.notPublishableReasons.oferta_sem_horario_de_observacao, 2);
   assert.equal(report.details[0].stockStatus, 'unknown');
   assert.equal(report.details[0].offerObservedAt, '1970-01-01T00:00:00.000Z');
@@ -97,7 +122,7 @@ test('E1d: collectedAt is accepted as the actual offer observation timestamp', (
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-collected-at-'));
   const sourcePath = path.join(tempDir, 'catalog.json');
   const collectedAt = new Date(Date.now() - 60 * 1000).toISOString();
-  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'collected-time', title: 'Produto coletado', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/produto/collected-time', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/produto/collected-time', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString(), collectedAt }]));
+  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'collected-time', title: 'Produto coletado', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/collected-time/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/collected-time/produto', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString(), collectedAt }]));
   const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
@@ -106,12 +131,42 @@ test('E1d: collectedAt is accepted as the actual offer observation timestamp', (
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('E1e: normal product imports require matching IDs in original and Magalu affiliate URLs', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-identity-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  const now = new Date().toISOString();
+  const base = { platform: 'magalu', title: 'Produto com identidade', price: 10, stockStatus: 'in_stock', images: ['https://a-static.mlcdn.com.br/img/1.jpg'], storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now };
+  fs.writeFileSync(sourcePath, JSON.stringify([{ ...base, id: 'wrong-original', originalUrl: 'https://www.magazineluiza.com.br/p/another-product/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/wrong-original/produto' }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 1, result.stderr);
+  const mismatchedOriginal = JSON.parse(result.stdout);
+  assert.equal(mismatchedOriginal.valid, 0, 'the mismatched official product URL is rejected as an invalid row');
+  assert.ok(mismatchedOriginal.rejected[0].errors.includes('id_externo_nao_corresponde_url_original'));
+
+  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'mercadolivre', id: 'MLB123456', title: 'Produto ML com ID divergente', price: 10, stockStatus: 'in_stock', images: ['https://http2.mlstatic.com/D_Q_NP_2X_123456-MLB123456-O.webp'], originalUrl: 'https://produto.mercadolivre.com.br/MLB-654321-produto', affiliateUrl: 'https://meli.la/short', isOfficialShortLink: true, linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now }]));
+  const meliResult = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--verbose'], { encoding: 'utf8' });
+  assert.equal(meliResult.status, 1, meliResult.stderr);
+  const mismatchedMeli = JSON.parse(meliResult.stdout);
+  assert.equal(mismatchedMeli.valid, 0, 'Mercado Livre imports reject an external ID different from the official product URL');
+  assert.ok(mismatchedMeli.rejected[0].errors.includes('id_externo_nao_corresponde_url_original'));
+
+  fs.writeFileSync(sourcePath, JSON.stringify([{ ...base, id: 'wrong-affiliate', originalUrl: 'https://www.magazineluiza.com.br/p/wrong-affiliate/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/another-product/produto' }]));
+  const affiliateResult = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--verbose'], { encoding: 'utf8' });
+  assert.equal(affiliateResult.status, 0, affiliateResult.stderr);
+  const report = JSON.parse(affiliateResult.stdout);
+  assert.equal(report.valid, 1);
+  assert.equal(report.publishable, 0, 'the affiliate link cannot be marked ready when it points to another SKU');
+  assert.equal(report.details[0].linkStatus, 'broken');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('E1b: only explicit marketplace-unavailable evidence can archive a product', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-image-recheck-'));
   const sourcePath = path.join(tempDir, 'catalog.json');
   fs.writeFileSync(sourcePath, JSON.stringify({ products: [], confirmedUnavailable: [
     { platform: 'magalu', externalId: 'sku-gone', originalUrl: 'https://www.magazineluiza.com.br/p/sku-gone', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'explicit_not_found_without_title_or_price', evidence: 'explicit_not_found_without_title_or_price' },
-    { platform: 'mercadolivre', externalId: 'MLB-uncertain', originalUrl: 'https://produto.mercadolivre.com.br/MLB-uncertain', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'search_returned_no_results', evidence: 'search_returned_no_results' }
+    { platform: 'mercadolivre', externalId: 'MLB-uncertain', originalUrl: 'https://produto.mercadolivre.com.br/MLB-uncertain', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'search_returned_no_results', evidence: 'search_returned_no_results' },
+    { platform: 'magalu', externalId: 'sku-other', originalUrl: 'https://www.magazineluiza.com.br/p/sku-gone', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'explicit_not_found_without_title_or_price', evidence: 'explicit_not_found_without_title_or_price' }
   ] }));
   const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run'], { encoding: 'utf8' });
   assert.equal(result.status, 1, result.stderr);
@@ -119,6 +174,7 @@ test('E1b: only explicit marketplace-unavailable evidence can archive a product'
   assert.equal(report.archiveCandidates, 1);
   assert.equal(report.valid, 0, 'pending archival evidence is counted separately from publishable catalog products');
   assert.equal(report.rejected[0].errors[0], 'evidencia_de_indisponibilidade_ausente_ou_invalida');
+  assert.ok(report.rejected.some((entry) => entry.id === 'sku-other'), 'a valid not-found claim cannot archive an external ID that differs from its product URL');
   const pendingPath = path.join(tempDir, 'pending.json');
   fs.writeFileSync(pendingPath, JSON.stringify([
     { platform: 'magalu', externalId: 'sku-gone', originalUrl: 'https://www.magazineluiza.com.br/p/sku-gone', marketplaceUnavailable: true, marketplaceUnavailableEvidence: 'explicit_not_found_without_title_or_price' },
