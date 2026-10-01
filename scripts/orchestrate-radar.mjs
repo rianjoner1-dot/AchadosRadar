@@ -46,6 +46,12 @@ const browser = spawn(selectedBrowser.path, [
   'about:blank'
 ], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
 
+browser.on('exit', (code, signal) => {
+  console.error(`❌ [Falha Crítica] Navegador Chromium foi encerrado (Código: ${code}, Sinal: ${signal}).`);
+  bridge.kill();
+  process.exit(1);
+});
+
 let stderr = '';
 browser.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-5000); });
 
@@ -88,6 +94,35 @@ let commandId = 0;
 const pendingCommands = new Map();
 socket.addEventListener('message', (event) => {
   const message = JSON.parse(event.data);
+  
+  if (message.method === 'Runtime.consoleAPICalled') {
+    const args = message.params.args.map(a => a.value || a.description || '').join(' ');
+    const isError = message.params.type === 'error';
+    const isWarning = message.params.type === 'warning';
+    
+    if (isError) {
+      console.error(`\x1b[31m[Robô] ${args}\x1b[0m`); // Vermelho
+    } else if (isWarning) {
+      console.warn(`\x1b[33m[Robô] ${args}\x1b[0m`); // Amarelo
+    } else {
+      console.log(`\x1b[36m[Robô]\x1b[0m ${args}`); // Ciano (apenas o prefixo)
+    }
+    return;
+  }
+  
+  if (message.method === 'Runtime.exceptionThrown') {
+    const exception = message.params.exceptionDetails;
+    const text = exception.text || 'Exceção desconhecida';
+    const value = exception.exception?.description || exception.exception?.value || '';
+    console.error(`\x1b[41m\x1b[37m[Erro Fatal no Robô]\x1b[0m ${text} ${value}`);
+    return;
+  }
+
+  if (message.method === 'Inspector.detached') {
+    console.error('❌ [Falha Crítica] Conexão com o robô (DevTools) foi perdida!');
+    process.exit(1);
+  }
+
   if (!message.id) return;
   const pending = pendingCommands.get(message.id);
   if (!pending) return;
@@ -104,7 +139,7 @@ async function send(method, params = {}) {
 
 socket.addEventListener('open', async () => {
   await send('Runtime.enable');
-  const triggerScript = `chrome.runtime.sendMessage({ type: "START_ROBOT" }).then(() => true).catch(() => false)`;
+  const triggerScript = `runAutoPilot().catch(err => console.error(err))`;
   await send('Runtime.evaluate', { expression: triggerScript, awaitPromise: true });
   console.log('🟢 Orquestrador rodando! O robô agora está coletando e renovando produtos em background.');
   console.log('Pressione Ctrl+C para encerrar o radar e a ponte local.');
