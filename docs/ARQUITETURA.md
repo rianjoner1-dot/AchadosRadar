@@ -35,11 +35,13 @@ A ponte escuta somente em `127.0.0.1`, valida origem `chrome-extension://`, limi
 - Busca é normalizada para ignorar acentos e pontuação e usa similaridade trigramada com paginação por cursor.
 - A macro só deve permitir publicação quando link oficial, destino do produto e estoque estiverem comprovados. Status HTTP isolado não valida destino.
 - O ciclo atual do robô preserva o ID do produto e pode marcar revisão, falta de estoque ou conversão pendente. A sincronização antiga apontava à porta `6875`, que não tinha servidor ativo. A nova ponte foi implementada e passou em teste local sintético; o primeiro envio real pela extensão ainda está pendente. A importação para Supabase exige validar link oficial e estoque em amostra recente.
+- Fotos reportadas pelo site entram no início do ciclo autônomo. Erros temporários de abertura/extração tentam novamente após 15 minutos; produto reencontrado com foto válida ou inexistência explicitamente confirmada e registrada aguarda 12 horas antes de nova checagem. Só o sinal oficial de produto não encontrado, com ID exato e sem título/preço, aciona arquivamento; falha de imagem isolada nunca oculta o item. Arquivado sai da vitrine e continua no carrinho como indisponível, sem apagar o registro.
 
 ## Conta e lista salva
 
 - Login inicial: código por email (OTP), sem senha obrigatória. Telefone é opcional; CPF não é coletado neste MVP.
 - Perfil guarda nome, telefone E.164 e URL do avatar. O bucket valida formato/tamanho e políticas de proprietário.
+- O processamento local do avatar aceita JPEG/PNG/WebP até 5 MiB, limita a imagem decodificada a 20 megapixels, recorta ao centro e converte para WebP 320×320 ou menor; a saída não pode ultrapassar o limite de 2 MiB do bucket.
 - A lista salva funciona sem conta em `localStorage` e pode sincronizar em `cart_items` autenticado. Mudanças de preço/link não removem produtos. Remover/limpar uma lista autenticada deve atualizar tanto Supabase quanto o armazenamento local.
 - Cada item abre uma saída própria para o marketplace correspondente. Não há pagamento nem pedido no Achados Radar.
 
