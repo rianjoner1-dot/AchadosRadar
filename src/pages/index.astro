@@ -94,6 +94,8 @@ const demo = demoProducts.map((product) => ({
   const spotlightSection = document.querySelector<HTMLElement>('#spotlightSection')!;
   const spotlightGrid = document.querySelector<HTMLElement>('#spotlightGrid')!;
   const spotlightCount = document.querySelector<HTMLElement>('#spotlightCount')!;
+  let spotlightProducts: CatalogProduct[] = [];
+  const failedSpotlightImages = new Set<string>();
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
   let cursor: { created_at: string; id: string; price?: number | null; score?: number | null } | null = null;
@@ -146,8 +148,13 @@ const demo = demoProducts.map((product) => ({
       <a class="spotlight-action" href="/produto?id=${id}">Conferir este achado <span aria-hidden="true">→</span></a></div></article>`;
   }
 
-  function renderSpotlights(products: CatalogProduct[]) {
-    const selected = selectSpotlightOffers(products);
+  function renderSpotlights(products: CatalogProduct[], resetFailedImages = false) {
+    if (resetFailedImages || products !== spotlightProducts) {
+      spotlightProducts = products;
+      failedSpotlightImages.clear();
+    }
+    const candidates = selectSpotlightOffers(products, products.length, failedSpotlightImages);
+    const selected = candidates.slice(0, 3);
     spotlightGrid.replaceChildren();
     if (!selected.length) { spotlightSection.hidden = true; return; }
     const [featured, ...secondary] = selected;
@@ -167,6 +174,16 @@ const demo = demoProducts.map((product) => ({
       reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
     });
   }
+
+  spotlightGrid.addEventListener('error', (event) => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.classList.contains('spotlight-image')) return;
+    const card = image.closest<HTMLElement>('[data-product-id]');
+    const productId = card?.dataset.productId;
+    if (!productId) return;
+    failedSpotlightImages.add(decodeURIComponent(productId));
+    renderSpotlights(spotlightProducts);
+  }, true);
 
   function renderCard(product: CatalogProduct) {
     const id = encodeURIComponent(product.id);
@@ -238,7 +255,7 @@ const demo = demoProducts.map((product) => ({
     try {
       const products = await searchCatalog({ ...currentFilters(), cursor, limit: 20, signal: controller?.signal });
       if (version !== requestVersion) return;
-      if (reset) { grid.replaceChildren(); renderSpotlights(products); }
+      if (reset) { grid.replaceChildren(); renderSpotlights(products, true); }
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
       grid.removeAttribute('data-loading');
       if (reset) {

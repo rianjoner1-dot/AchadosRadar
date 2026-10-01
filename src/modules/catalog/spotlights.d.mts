@@ -5,4 +5,4 @@ export interface SpotlightOffer {
   discountPercent: number | null;
 }
 
-export function selectSpotlightOffers(products: CatalogProduct[], limit?: number): SpotlightOffer[];
+export function selectSpotlightOffers(products: CatalogProduct[], limit?: number, excludedProductIds?: Iterable<string>): SpotlightOffer[];
