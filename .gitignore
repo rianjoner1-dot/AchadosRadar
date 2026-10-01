@@ -16,3 +16,7 @@ Thumbs.db
 .tempmediaStorage/
 .agents/
 
+
+# Extras / IDE
+.vscode/
+supabase/.temp/
