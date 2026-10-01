@@ -13,6 +13,7 @@ import Layout from '../layouts/Layout.astro';
 <script>
   import { escapeHtml } from '../modules/catalog/client';
   import { readLocalCart, removeCartItem, clearLocalCart, updateCartBadge } from '../modules/cart/store';
+  import { formatLinkTiming, hasElapsedLinkDeadline } from '../modules/outbound/readiness.mjs';
   import type { CartItem } from '../modules/catalog/types';
 
   const empty = document.querySelector<HTMLElement>('#cartEmpty')!;
@@ -22,27 +23,31 @@ import Layout from '../layouts/Layout.astro';
   const validUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id);
   const storeName = (platform: string) => platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
   let renderVersion = 0;
+  let authSubscriptionReady = false;
 
-  function renderLocalCart(): CartItem[] {
-    const items = readLocalCart();
-    updateCartBadge();
+  function renderLocalCart(ownerId?: string | null): CartItem[] {
+    const items = readLocalCart(ownerId);
+    updateCartBadge(ownerId);
     empty.hidden = items.length > 0;
     content.hidden = items.length === 0;
     if (!items.length) { list.replaceChildren(); return items; }
     document.querySelector('#cartCount')!.textContent = `${items.length} produto${items.length === 1 ? '' : 's'} salvo${items.length === 1 ? '' : 's'}`;
+    list.dataset.cartOwner = ownerId ?? '';
     list.innerHTML = items.map((item: CartItem) => `<article class="saved-item" data-id="${escapeHtml(item.id)}">
       <a class="saved-image" href="/produto?id=${encodeURIComponent(item.id)}">${item.image ? `<img src="${escapeHtml(item.image)}" alt="" width="120" height="120" loading="lazy">` : '<span>Imagem indisponível</span>'}</a>
-      <div class="saved-info"><span class="saved-store">${escapeHtml(item.platform === 'magalu' ? 'Magalu' : 'Mercado Livre')}</span><h2><a href="/produto?id=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h2><p class="saved-seller">${item.sellerName ? `Vendido por ${escapeHtml(item.sellerName)}` : ''}</p><p class="saved-price">${escapeHtml(item.priceFormatted || 'Preço atual indisponível')}</p><p class="saved-state" data-state>Verificando preço, estoque e link atuais...</p></div>
+      <div class="saved-info"><span class="saved-store">${escapeHtml(item.platform === 'magalu' ? 'Magalu' : 'Mercado Livre')}</span><h2><a href="/produto?id=${encodeURIComponent(item.id)}">${escapeHtml(item.title)}</a></h2><p class="saved-seller">${item.sellerName ? `Vendido por ${escapeHtml(item.sellerName)}` : ''}</p><p class="saved-price" data-price>Último preço salvo: ${escapeHtml(item.priceFormatted || 'indisponível')}</p><p class="saved-offer-facts" data-offer-facts hidden></p><p class="saved-expiry" data-expiry hidden></p><p class="saved-state" data-state>Verificando preço, estoque e link atuais...</p></div>
       <div class="saved-actions"><a class="btn-primary saved-buy" data-buy aria-disabled="true">Verificando link</a><a class="btn-secondary saved-details" href="/produto?id=${encodeURIComponent(item.id)}">Detalhes</a><button type="button" class="remove-saved" data-remove="${escapeHtml(item.id)}">Remover</button></div>
     </article>`).join('');
 
     list.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
       const id = button.dataset.remove!;
+      const ownerId = list.dataset.cartOwner || null;
       button.disabled = true;
       try {
         const auth = await import('../modules/auth/client').catch(() => null);
-        if (auth) await auth.removeRemoteCartItem(id);
-        removeCartItem(id);
+        if (ownerId && !auth) throw new Error('A sessão da conta não pôde ser confirmada.');
+        if (auth) await auth.removeRemoteCartItem(id, ownerId);
+        removeCartItem(id, ownerId);
       }
       catch { status.textContent = 'Não foi possível sincronizar a remoção. Tente novamente; o produto continua salvo.'; button.disabled = false; }
     }));
@@ -65,42 +70,128 @@ import Layout from '../layouts/Layout.astro';
       }
       return;
     }
-    const { catalogReady, getCatalogProduct } = catalog;
+    const { catalogReady, getCatalogProduct, formatPrice } = catalog;
     const { evaluateOfferReadiness } = outbound;
-    for (const item of items) {
+    const updateItem = async (item: CartItem) => {
       const row = [...list.querySelectorAll<HTMLElement>('.saved-item')].find((element) => element.dataset.id === item.id);
       if (!row || version !== renderVersion) return;
       const state = row.querySelector<HTMLElement>('[data-state]')!;
       const buy = row.querySelector<HTMLAnchorElement>('[data-buy]')!;
-      if (!catalogReady || !validUuid(item.id)) { state.textContent = 'Exemplo local: esta amostra não tem link de compra ativo.'; continue; }
+      if (!catalogReady || !validUuid(item.id)) { state.textContent = 'Exemplo local: esta amostra não tem link de compra ativo.'; return; }
       try {
         const latest = await getCatalogProduct(item.id);
-        if (!latest) { state.textContent = 'Produto não está publicado no catálogo; ele continua salvo nesta lista.'; continue; }
+        if (version !== renderVersion) return;
+        if (!latest) {
+          row.querySelector<HTMLElement>('[data-price]')!.textContent = `Último preço salvo: ${item.priceFormatted || 'indisponível'} (sem atualização atual)`;
+          state.textContent = 'Este produto não está mais no catálogo. Ele continua salvo na sua lista, mas não pode ser comprado por este link.';
+          buy.textContent = 'Produto indisponível';
+          buy.removeAttribute('href');
+          buy.setAttribute('aria-disabled', 'true');
+          const details = row.querySelector<HTMLAnchorElement>('.saved-details');
+          if (details) details.hidden = true;
+          row.querySelectorAll<HTMLAnchorElement>('a[href*="/produto?id="]').forEach((link) => {
+            link.removeAttribute('href');
+            link.setAttribute('aria-disabled', 'true');
+          });
+          return;
+        }
         const offer = latest.offer;
         const link = latest.affiliate_link;
+        row.dataset.linkExpiresAt = link?.expires_at ?? '';
+        row.dataset.linkRefreshDueAt = link?.refresh_due_at ?? '';
+        row.dataset.linkStatus = link?.status ?? '';
+        row.dataset.linkVerifiedAt = link?.verified_at ?? '';
+        const expiry = row.querySelector<HTMLElement>('[data-expiry]')!;
+        expiry.hidden = !link?.expires_at && !link?.refresh_due_at;
+        if (!expiry.hidden) expiry.textContent = formatLinkTiming(link);
+        const price = row.querySelector<HTMLElement>('[data-price]')!;
+        const facts = row.querySelector<HTMLElement>('[data-offer-facts]')!;
+        if (offer?.observed_at) {
+          price.textContent = `Preço observado: ${formatPrice(offer.price)}`;
+          const observedAt = new Date(offer.observed_at);
+          const factList = [
+            offer.installments_text,
+            offer.shipping_text,
+            offer.coupon_code ? `Cupom ${offer.coupon_code}` : '',
+            offer.stock_status === 'in_stock' ? 'Estoque confirmado' : offer.stock_status === 'out_of_stock' ? 'Sem estoque na última consulta' : 'Estoque não confirmado',
+            offer.stock_quantity !== null && offer.stock_quantity !== undefined ? `Quantidade: ${offer.stock_quantity}` : '',
+            Number.isFinite(observedAt.getTime()) ? `Consultado em ${observedAt.toLocaleString('pt-BR')}` : ''
+          ].filter(Boolean);
+          facts.textContent = factList.join(' · ');
+          facts.hidden = factList.length === 0;
+        } else {
+          price.textContent = `Último preço salvo: ${item.priceFormatted || 'indisponível'} (sem atualização atual)`;
+          facts.hidden = true;
+          facts.textContent = '';
+        }
         const readiness = evaluateOfferReadiness({ link, offer });
+        row.dataset.offerReady = String(readiness.ready);
         state.textContent = readiness.ready ? readiness.reason : readiness.reason + ' O item continua salvo.';
         if (readiness.ready) { buy.href = `/api/out/${encodeURIComponent(item.id)}`; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.textContent = `Continuar na ${storeName(latest.platform)}`; buy.removeAttribute('aria-disabled'); }
         else { buy.textContent = 'Link em verificação'; buy.setAttribute('aria-disabled', 'true'); }
-      } catch { state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.'; }
+      } catch { if (version === renderVersion) state.textContent = 'Não foi possível atualizar a oferta agora. Seu item continua salvo.'; }
+    };
+    const pending = [...items];
+    const workerCount = Math.min(3, pending.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (version === renderVersion) {
+        const item = pending.shift();
+        if (!item) return;
+        await updateItem(item);
+      }
+    }));
+  }
+
+  function updateCartLinkTimes() {
+    for (const row of list.querySelectorAll<HTMLElement>('.saved-item')) {
+      const timing = row.querySelector<HTMLElement>('[data-expiry]');
+      if (!timing || timing.hidden) continue;
+      timing.textContent = formatLinkTiming({
+        expires_at: row.dataset.linkExpiresAt,
+        refresh_due_at: row.dataset.linkRefreshDueAt,
+        status: row.dataset.linkStatus,
+        verified_at: row.dataset.linkVerifiedAt
+      });
+      const link = { expires_at: row.dataset.linkExpiresAt, refresh_due_at: row.dataset.linkRefreshDueAt };
+      if (hasElapsedLinkDeadline(link) && row.dataset.offerReady === 'true') {
+        const buy = row.querySelector<HTMLAnchorElement>('[data-buy]');
+        buy?.removeAttribute('href');
+        buy?.setAttribute('aria-disabled', 'true');
+        if (buy) buy.textContent = 'Link em verificação';
+        const state = row.querySelector<HTMLElement>('[data-state]');
+        if (state) state.textContent = link.expires_at && Date.parse(link.expires_at) <= Date.now()
+          ? 'O prazo oficial do link terminou. O item continua salvo.'
+          : 'A revisão interna do link venceu; a compra fica temporariamente indisponível. O item continua salvo.';
+      }
     }
   }
 
   async function render() {
     const version = ++renderVersion;
-    let items = renderLocalCart();
     let auth: typeof import('../modules/auth/client');
-    try { auth = await import('../modules/auth/client'); } catch { return; }
+    status.textContent = 'Carregando sua lista...';
+    try { auth = await import('../modules/auth/client'); }
+    catch { status.textContent = 'Não foi possível carregar sua lista agora.'; renderLocalCart(null); return; }
+    if (auth.supabase && !authSubscriptionReady) {
+      auth.supabase.auth.onAuthStateChange(() => { void render(); });
+      authSubscriptionReady = true;
+    }
     let user = null;
-    try { user = await auth.currentUser(); } catch { /* local list remains usable if session lookup is unavailable */ }
+    let sessionLookupFailed = false;
+    try { user = await auth.currentUser(); }
+    catch { sessionLookupFailed = true; status.textContent = 'Não foi possível confirmar a sessão; exibindo apenas a lista anônima.'; }
     if (version !== renderVersion) return;
     if (user) {
       try {
         await auth.syncCartForUser(user.id);
-        if (version !== renderVersion) return;
-        items = renderLocalCart();
       } catch { status.textContent = 'A sincronização não está disponível agora. Os itens salvos neste navegador continuam visíveis.'; }
+      const confirmedUser = await auth.currentUser().catch(() => null);
+      if (version !== renderVersion) return;
+      if (confirmedUser?.id !== user.id) { void render(); return; }
     }
+    if (version !== renderVersion) return;
+    const items = renderLocalCart(user?.id ?? null);
+    if (!sessionLookupFailed && !status.textContent.startsWith('A sincronização')) status.textContent = '';
     if (version === renderVersion) await updateOfferStates(items, version);
   }
 
@@ -108,16 +199,22 @@ import Layout from '../layouts/Layout.astro';
     if (confirm('Remover todos os itens salvos desta conta/dispositivo?')) {
       const button = document.querySelector<HTMLButtonElement>('#clearCart')!;
       button.disabled = true;
+      const ownerId = list.dataset.cartOwner || null;
       try {
         const auth = await import('../modules/auth/client').catch(() => null);
-        if (auth) await auth.clearRemoteCart();
-        clearLocalCart();
+        if (ownerId && !auth) throw new Error('A sessão da conta não pôde ser confirmada.');
+        if (auth) await auth.clearRemoteCart(ownerId);
+        clearLocalCart(ownerId);
       }
       catch { status.textContent = 'Não foi possível sincronizar a limpeza. Os itens continuam salvos.'; }
       finally { button.disabled = false; }
     }
   });
   document.addEventListener('cart:changed', () => void render());
+  window.setInterval(updateCartLinkTimes, 60_000);
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'achados_radar_cart_owner' || event.key === 'achados_radar_cart' || event.key?.startsWith('achados_radar_cart:')) void render();
+  });
   void render();
 </script>
 <style>

@@ -27,6 +27,7 @@ export interface CatalogProduct {
 }
 
 import { getPublicSupabaseConfig } from '../shared/config';
+import { canReportCatalogImageFailure, markCatalogImageFailureReport } from './image-health.js';
 
 const supabaseConfig = getPublicSupabaseConfig();
 const config = {
@@ -35,6 +36,7 @@ const config = {
 };
 
 export const catalogReady = supabaseConfig.isReady;
+const imageFailureReports = new Map<string, number>();
 
 function headers(token?: string): HeadersInit {
   return {
@@ -78,6 +80,24 @@ export async function getCatalogProduct(id: string, signal?: AbortSignal): Promi
   if (![imagesResponse, offersResponse, linkResponse].every((result) => result.ok)) throw new Error('Não foi possível carregar todos os dados da oferta.');
   const [images, offers, link] = await Promise.all([imagesResponse.json(), offersResponse.json(), linkResponse.json()]);
   return { ...product, images, offer: offers[0] ?? null, affiliate_link: link ?? null };
+}
+
+export async function reportCatalogImageFailure(productId: string, imageUrl: string): Promise<void> {
+  if (!catalogReady || !productId || !imageUrl) return;
+  const key = `${productId}:${imageUrl}`;
+  if (!canReportCatalogImageFailure(imageFailureReports, key)) return;
+  imageFailureReports.set(key, Number.POSITIVE_INFINITY);
+  try {
+    const response = await fetch(`${config.url}/rest/v1/rpc/report_product_image_failure`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ target_product_id: productId, target_image_url: imageUrl }),
+      signal: AbortSignal.timeout(4000)
+    });
+    const accepted = response.ok && await response.json().then((value) => value === true).catch(() => false);
+    markCatalogImageFailureReport(imageFailureReports, key, accepted);
+  } catch {
+    markCatalogImageFailureReport(imageFailureReports, key, false);
+  }
 }
 
 export function formatPrice(value?: number | null): string {

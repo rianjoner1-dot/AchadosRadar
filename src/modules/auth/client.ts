@@ -1,6 +1,7 @@
 import { createClient, type User } from '@supabase/supabase-js';
 import type { CartItem } from '../catalog/types';
 import { cartStorageKey, readLocalCart } from '../cart/store';
+import { prepareAvatarBlob } from './avatar.mjs';
 
 import { getPublicSupabaseConfig } from '../shared/config';
 
@@ -13,13 +14,34 @@ export const supabase = authReady ? createClient(url, key, {
 
 export async function currentUser(): Promise<User | null> {
   if (!supabase) return null;
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!session) return null;
   const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
+  if (error) throw error;
   return data.user;
+}
+
+function validateRemoteCartRows(value: unknown): Array<{ product_id: string; products?: unknown }> {
+  if (!Array.isArray(value)) throw new Error('Resposta inválida ao sincronizar o carrinho.');
+  for (const row of value) {
+    if (!row || typeof row !== 'object' || typeof row.product_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(row.product_id)) {
+      throw new Error('Resposta inválida ao sincronizar o carrinho.');
+    }
+    const related = Array.isArray(row.products) ? row.products[0] : row.products;
+    if (related == null) continue;
+    if (typeof related !== 'object' || related.id !== row.product_id || !['magalu', 'mercadolivre'].includes(related.platform) || typeof related.title !== 'string' || !related.title.trim()) {
+      throw new Error('Resposta inválida ao sincronizar o carrinho.');
+    }
+  }
+  return value as Array<{ product_id: string; products?: unknown }>;
 }
 
 export async function syncCartForUser(userId: string): Promise<void> {
   if (!supabase) return;
+  const { data: { user: sessionUser }, error: sessionError } = await supabase.auth.getUser();
+  if (sessionError) throw sessionError;
+  if (sessionUser?.id !== userId) return;
   const accountKey = cartStorageKey(userId);
   const currentOwner = localStorage.getItem('achados_radar_cart_owner');
   const incomingLocalItems = !currentOwner || currentOwner === userId ? readLocalCart() : [];
@@ -27,9 +49,13 @@ export async function syncCartForUser(userId: string): Promise<void> {
   try { accountItems = JSON.parse(localStorage.getItem(accountKey) || '[]'); } catch { accountItems = []; }
   const merged = new Map<string, CartItem>();
   for (const item of [...accountItems, ...incomingLocalItems]) if (item.id) merged.set(item.id, item);
+  localStorage.setItem(accountKey, JSON.stringify([...merged.values()]));
   const { data: remote, error } = await supabase.from('cart_items').select('product_id,products(id,platform,title,product_images(url,display_order),offers(price,seller_name,installments_text,observed_at))').eq('user_id', userId);
   if (error) throw error;
-  for (const row of remote ?? []) {
+  const remoteRows = validateRemoteCartRows(remote);
+  const { data: { user: latestUser }, error: latestSessionError } = await supabase.auth.getUser();
+  if (latestSessionError || latestUser?.id !== userId) return;
+  for (const row of remoteRows) {
     const product = Array.isArray(row.products) ? row.products[0] : row.products;
     if (!product || merged.has(row.product_id)) continue;
     const offer = Array.isArray(product.offers) ? product.offers.sort((a: { observed_at?: string }, b: { observed_at?: string }) => Date.parse(b.observed_at ?? '') - Date.parse(a.observed_at ?? ''))[0] : null;
@@ -37,12 +63,12 @@ export async function syncCartForUser(userId: string): Promise<void> {
     merged.set(row.product_id, { id: row.product_id, platform: product.platform, title: product.title, price: offer?.price ?? null, priceFormatted: typeof offer?.price === 'number' ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(offer.price) : 'Preço indisponível', image: image ?? '', sellerName: offer?.seller_name ?? '', installments: offer?.installments_text ?? '' });
   }
   localStorage.setItem(accountKey, JSON.stringify([...merged.values()]));
-  localStorage.removeItem('achados_radar_cart');
+  if (!currentOwner || currentOwner === userId) localStorage.removeItem('achados_radar_cart');
   localStorage.setItem('achados_radar_cart_owner', userId);
 
   const productIds = [...merged.keys()].filter((id) => /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id));
   if (!productIds.length) return;
-  const known = new Set((remote ?? []).map((row) => row.product_id));
+  const known = new Set(remoteRows.map((row) => row.product_id));
   const toInsert = productIds.filter((productId) => !known.has(productId)).map((product_id) => ({ user_id: userId, product_id }));
   if (toInsert.length) {
     const { error: insertError } = await supabase.from('cart_items').upsert(toInsert, { onConflict: 'user_id,product_id', ignoreDuplicates: true });
@@ -50,39 +76,43 @@ export async function syncCartForUser(userId: string): Promise<void> {
   }
 }
 
-export async function removeRemoteCartItem(productId: string): Promise<void> {
-  if (!supabase) return;
+export async function removeRemoteCartItem(productId: string, expectedUserId?: string | null): Promise<void> {
+  if (!supabase || expectedUserId === null) return;
   const user = await currentUser();
-  if (!user) return;
-  const { error } = await supabase.from('cart_items').delete().eq('user_id', user.id).eq('product_id', productId);
+  if (!user) {
+    if (expectedUserId) throw new Error('A sessão da conta mudou. Atualize a lista e tente novamente.');
+    return;
+  }
+  const ownerId = expectedUserId ?? user.id;
+  if (user.id !== ownerId) throw new Error('A sessão da conta mudou. Atualize a lista e tente novamente.');
+  const { data, error } = await supabase.from('cart_items').delete().eq('user_id', ownerId).eq('product_id', productId).select('product_id');
   if (error) throw error;
+  if (!data?.some((row: { product_id?: string }) => row.product_id === productId)) {
+    const confirmedUser = await currentUser();
+    if (confirmedUser?.id !== ownerId) throw new Error('A sessão da conta mudou. Atualize a lista e tente novamente.');
+  }
 }
 
-export async function clearRemoteCart(): Promise<void> {
-  if (!supabase) return;
+export async function clearRemoteCart(expectedUserId?: string | null): Promise<void> {
+  if (!supabase || expectedUserId === null) return;
   const user = await currentUser();
-  if (!user) return;
-  const { error } = await supabase.from('cart_items').delete().eq('user_id', user.id);
+  if (!user) {
+    if (expectedUserId) throw new Error('A sessão da conta mudou. Atualize a lista e tente novamente.');
+    return;
+  }
+  const ownerId = expectedUserId ?? user.id;
+  if (user.id !== ownerId) throw new Error('A sessão da conta mudou. Atualize a lista e tente novamente.');
+  const { data, error } = await supabase.from('cart_items').delete().eq('user_id', ownerId).select('product_id');
   if (error) throw error;
+  if (!data?.length) {
+    const confirmedUser = await currentUser();
+    if (confirmedUser?.id !== ownerId) throw new Error('A sessão da conta mudou. Atualize a lista e tente novamente.');
+  }
 }
 
 export async function uploadAvatar(user: User, file: File): Promise<string> {
   if (!supabase) throw new Error('Supabase não está configurado.');
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Escolha uma foto JPEG, PNG ou WebP com até 5 MB.');
-  const image = await createImageBitmap(file);
-  const minSide = Math.min(image.width, image.height);
-  const sx = (image.width - minSide) / 2;
-  const sy = (image.height - minSide) / 2;
-  const targetSize = Math.min(320, minSide);
-  const canvas = document.createElement('canvas');
-  canvas.width = targetSize;
-  canvas.height = targetSize;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Falha ao inicializar contexto gráfico para compressão.');
-  ctx.drawImage(image, sx, sy, minSide, minSide, 0, 0, targetSize, targetSize);
-  image.close();
-  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('Não foi possível processar a foto.')), 'image/webp', .80));
-  if (blob.size > 2 * 1024 * 1024) throw new Error('A foto otimizada precisa ficar abaixo de 2 MB.');
+  const blob = await prepareAvatarBlob(file);
   const path = `${user.id}/avatar.webp`;
   const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/webp', upsert: true });
   if (error) throw error;

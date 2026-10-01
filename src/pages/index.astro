@@ -25,6 +25,14 @@ const demo = demoProducts.map((product) => ({
     </div>
   </section>
 
+  <section class="container spotlight-section" id="spotlightSection" aria-labelledby="spotlightTitle" hidden>
+    <div class="spotlight-heading">
+      <div><p class="spotlight-eyebrow">SELEÇÃO DO RADAR</p><h2 id="spotlightTitle">Achados que merecem um olhar</h2><p>Confira preço, entrega e condições observadas antes de seguir para a loja.</p></div>
+      <span id="spotlightCount" class="spotlight-count"></span>
+    </div>
+    <div id="spotlightGrid" class="spotlight-grid"></div>
+  </section>
+
   <section class="container catalog-section" aria-labelledby="catalog-title">
     <h2 id="catalog-title">Buscar ofertas</h2>
     <form id="catalogFilters" class="catalog-filters">
@@ -45,7 +53,13 @@ const demo = demoProducts.map((product) => ({
     </form>
 
     <div class="results-heading"><h2 id="resultsTitle">Ofertas</h2><span id="catalogStatus" aria-live="polite">Carregando...</span></div>
-    <div id="catalogGrid" class="catalog-grid" aria-live="polite">
+    <div id="catalogGrid" class="catalog-grid" data-loading="true" aria-live="polite">
+      {(catalogReady || demo.length === 0) && Array.from({ length: 20 }, () => (
+        <article class="catalog-card catalog-skeleton" data-catalog-skeleton aria-hidden="true">
+          <div class="catalog-image skeleton-image"></div>
+          <div class="catalog-card-body"><span class="skeleton-line skeleton-store"></span><span class="skeleton-line skeleton-title"></span><span class="skeleton-line skeleton-price"></span><span class="skeleton-line skeleton-button"></span></div>
+        </article>
+      ))}
       {!catalogReady && demo.map((product) => (
         <article class="catalog-card" data-demo-card data-platform={product.platform} data-search-title={product.title} data-search-seller={product.sellerName || ''} data-price={product.price}>
           <a class="catalog-image" href={product.detailUrl} aria-label={`Ver ${product.title}`}><img src={product.image} alt={product.title} width="320" height="260" loading="lazy" decoding="async" /></a>
@@ -66,8 +80,10 @@ const demo = demoProducts.map((product) => ({
 </Layout>
 
 <script>
-  import { catalogReady, escapeHtml, formatPrice, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
+  import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
+  import { selectSpotlightOffers } from '../modules/catalog/spotlights.mjs';
   import { matchesDemoProduct } from '../modules/catalog/search-utils.js';
+  import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
 
   const form = document.querySelector<HTMLFormElement>('#catalogFilters')!;
   const grid = document.querySelector<HTMLElement>('#catalogGrid')!;
@@ -75,15 +91,83 @@ const demo = demoProducts.map((product) => ({
   const empty = document.querySelector<HTMLElement>('#catalogEmpty')!;
   const loadMore = document.querySelector<HTMLButtonElement>('#loadMore')!;
   const sentinel = document.querySelector<HTMLElement>('#catalogSentinel')!;
+  const spotlightSection = document.querySelector<HTMLElement>('#spotlightSection')!;
+  const spotlightGrid = document.querySelector<HTMLElement>('#spotlightGrid')!;
+  const spotlightCount = document.querySelector<HTMLElement>('#spotlightCount')!;
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
   let cursor: { created_at: string; id: string; price?: number | null; score?: number | null } | null = null;
   let controller: AbortController | null = null;
   let loading = false;
+  let autoLoadEnabled = true;
   let requestVersion = 0;
   let appendedCount = 0;
+  let firstPageSettled = false;
+
+  function reserveFirstPageHeight() {
+    if (firstPageSettled) return;
+    const columns = window.matchMedia('(max-width: 640px)').matches ? 2 : window.matchMedia('(max-width: 980px)').matches ? 3 : 4;
+    const rows = Math.ceil(20 / columns);
+    const skeleton = grid.querySelector<HTMLElement>('[data-catalog-skeleton]');
+    const cardHeight = skeleton?.getBoundingClientRect().height || 410;
+    const styles = window.getComputedStyle(grid);
+    const rowGap = Number.parseFloat(styles.rowGap) || 14;
+    grid.style.minHeight = `${rows * cardHeight + Math.max(0, rows - 1) * rowGap}px`;
+  }
+  reserveFirstPageHeight();
+  window.addEventListener('resize', reserveFirstPageHeight, { passive: true });
 
   const safeImage = (product: CatalogProduct) => product.images?.[0]?.url ?? '';
+  function renderSpotlightCard(entry: ReturnType<typeof selectSpotlightOffers>[number], featured = false) {
+    const { product, discountPercent } = entry;
+    const id = encodeURIComponent(product.id);
+    const image = safeImage(product);
+    const store = product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
+    const offer = product.offer;
+    const discount = discountPercent
+      ? `<span class="spotlight-discount">${discountPercent}% abaixo do preço anterior informado</span><span class="spotlight-old-price">De ${formatPrice(offer?.old_price)}</span>`
+      : '';
+    const detail = offer?.coupon_code
+      ? `Condição observada: cupom ${escapeHtml(offer.coupon_code)}. Confira as regras na loja.`
+      : offer?.shipping_text
+        ? `Confira entrega e condições observadas na página do produto.`
+        : 'Veja as informações da oferta e confira as condições na loja.';
+    const imageMarkup = image
+      ? `<img class="spotlight-image" src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(image)}" alt="${escapeHtml(product.title)}" width="640" height="480" loading="lazy" decoding="async">`
+      : '<span class="spotlight-image-placeholder" role="img" aria-label="Foto indisponível">Foto indisponível</span>';
+    return `<article class="spotlight-card${featured ? ' spotlight-card-featured' : ''}" data-product-id="${id}">
+      <a class="spotlight-media" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${imageMarkup}</a>
+      <div class="spotlight-copy"><span class="spotlight-store">${store} · oferta observada</span>
+      ${discount}
+      <h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
+      <p class="spotlight-detail">${detail}</p>
+      <p class="spotlight-price">${formatPrice(offer?.price)}</p>
+      ${offer?.installments_text ? `<p class="spotlight-fact">${escapeHtml(offer.installments_text)}</p>` : ''}
+      <a class="spotlight-action" href="/produto?id=${id}">Conferir este achado <span aria-hidden="true">→</span></a></div></article>`;
+  }
+
+  function renderSpotlights(products: CatalogProduct[]) {
+    const selected = selectSpotlightOffers(products);
+    spotlightGrid.replaceChildren();
+    if (!selected.length) { spotlightSection.hidden = true; return; }
+    const [featured, ...secondary] = selected;
+    spotlightGrid.dataset.count = String(selected.length);
+    spotlightGrid.insertAdjacentHTML('beforeend', renderSpotlightCard(featured, true));
+    if (secondary.length) {
+      const side = document.createElement('div');
+      side.className = 'spotlight-side';
+      side.innerHTML = secondary.map((entry) => renderSpotlightCard(entry)).join('');
+      spotlightGrid.append(side);
+    }
+    spotlightCount.textContent = `${selected.length} ofertas disponíveis na última consulta`;
+    spotlightSection.hidden = false;
+    bindImageFailureReporting(spotlightGrid, {
+      selector: '.spotlight-image:not([data-fallback-bound])',
+      placeholderClass: 'spotlight-image-placeholder',
+      reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
+    });
+  }
+
   function renderCard(product: CatalogProduct) {
     const id = encodeURIComponent(product.id);
     const store = product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
@@ -91,8 +175,8 @@ const demo = demoProducts.map((product) => ({
     const price = formatPrice(offer?.price);
     const observedAt = offer?.observed_at ? new Date(offer.observed_at).toLocaleString('pt-BR') : '';
     const image = safeImage(product);
-    return `<article class="catalog-card">
-      <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">` : '<span class="image-placeholder">Imagem indisponível</span>'}</a>
+    return `<article class="catalog-card" data-product-id="${id}">
+      <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(image)}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">` : '<span class="image-placeholder">Imagem indisponível</span>'}</a>
       <div class="catalog-card-body"><span class="store-label">${store}</span><h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
       <p class="seller-label">Vendido por ${escapeHtml(offer?.seller_name || store)}</p><p class="catalog-price">${price}</p>
       ${offer?.installments_text ? `<p class="catalog-meta">${escapeHtml(offer.installments_text)}</p>` : ''}
@@ -108,6 +192,7 @@ const demo = demoProducts.map((product) => ({
   }
 
   function filterDemo() {
+    grid.removeAttribute('data-loading');
     const filters = currentFilters();
     const query = filters.q;
     let visible = 0;
@@ -138,11 +223,12 @@ const demo = demoProducts.map((product) => ({
     if (reset) {
       requestVersion++;
       loading = false;
+      autoLoadEnabled = true;
+      loadMore.textContent = 'Carregar mais ofertas';
       controller?.abort();
       controller = new AbortController();
       cursor = null;
       appendedCount = 0;
-      grid.replaceChildren();
     }
     if (!catalogReady || loading) return;
     loading = true;
@@ -152,7 +238,19 @@ const demo = demoProducts.map((product) => ({
     try {
       const products = await searchCatalog({ ...currentFilters(), cursor, limit: 20, signal: controller?.signal });
       if (version !== requestVersion) return;
+      if (reset) { grid.replaceChildren(); renderSpotlights(products); }
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
+      grid.removeAttribute('data-loading');
+      if (reset) {
+        firstPageSettled = true;
+        grid.style.removeProperty('min-height');
+        window.removeEventListener('resize', reserveFirstPageHeight);
+      }
+      bindImageFailureReporting(grid, {
+        selector: '.catalog-image img:not([data-fallback-bound])',
+        placeholderClass: 'image-placeholder',
+        reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
+      });
       appendedCount += products.length;
       if (products.length) cursor = { created_at: products[products.length - 1].created_at, id: products[products.length - 1].id, price: products[products.length - 1].offer?.price ?? null, score: products[products.length - 1].search_score ?? null };
       status.textContent = products.length === 0 && !reset && appendedCount > 0
@@ -160,12 +258,27 @@ const demo = demoProducts.map((product) => ({
         : `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 20 ? ' · role ou carregue mais' : ''}`;
       empty.hidden = appendedCount > 0;
       loadMore.hidden = products.length < 20;
+      autoLoadEnabled = true;
+      loadMore.textContent = 'Carregar mais ofertas';
       if (appendedCount > 80) {
         const removable = grid.querySelectorAll('.catalog-card');
         for (let i = 0; i < removable.length - 80; i++) removable[i].remove();
       }
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') status.textContent = 'Não foi possível carregar. Verifique a conexão e tente novamente.';
+      if ((error as Error).name !== 'AbortError') {
+        autoLoadEnabled = false;
+        if (reset) grid.replaceChildren();
+        grid.removeAttribute('data-loading');
+        if (reset) {
+          firstPageSettled = true;
+          grid.style.removeProperty('min-height');
+          window.removeEventListener('resize', reserveFirstPageHeight);
+        }
+        status.textContent = 'Não foi possível carregar. Verifique a conexão e tente novamente.';
+        if (reset) spotlightSection.hidden = true;
+        loadMore.hidden = false;
+        loadMore.textContent = 'Tentar novamente';
+      }
     } finally {
       if (version === requestVersion) { loading = false; loadMore.disabled = false; }
     }
@@ -180,11 +293,17 @@ const demo = demoProducts.map((product) => ({
   (document.querySelector('#sortFilter') as HTMLSelectElement).value = query.get('ordem') ?? 'recent';
 
   if (catalogReady) {
-    grid.replaceChildren();
     status.textContent = 'Carregando ofertas atualizadas do catálogo...';
     void load(true);
   } else {
     filterDemo();
+    bindImageFailureReporting(grid, {
+      selector: '.catalog-image img:not([data-fallback-bound])',
+      placeholderClass: 'image-placeholder',
+      reportFailure: (productId, imageUrl) => {
+        if (catalogReady) void reportCatalogImageFailure(productId, imageUrl);
+      }
+    });
   }
 
   let debounce: number;
@@ -201,9 +320,13 @@ const demo = demoProducts.map((product) => ({
   globalSearch?.form?.addEventListener('submit', (event) => { event.preventDefault(); queryInput.value = globalSearch.value; syncUrl(); void load(true); });
   form.addEventListener('change', () => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
   form.addEventListener('submit', (event) => { event.preventDefault(); syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
-  loadMore.addEventListener('click', () => void load(false));
+  loadMore.addEventListener('click', () => {
+    autoLoadEnabled = true;
+    loadMore.textContent = 'Carregar mais ofertas';
+    void load(false);
+  });
   if ('IntersectionObserver' in window) new IntersectionObserver((entries) => {
-    if (entries.some((entry) => entry.isIntersecting) && !loadMore.hidden) void load(false);
+    if (autoLoadEnabled && entries.some((entry) => entry.isIntersecting) && !loadMore.hidden) void load(false);
   }, { rootMargin: '600px' }).observe(sentinel);
 </script>
 
@@ -224,10 +347,21 @@ const demo = demoProducts.map((product) => ({
   .results-heading span { color: #666; font-size: .84rem; }
   .catalog-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
   .catalog-card { min-width: 0; overflow: hidden; display: flex; flex-direction: column; background: white; border: 1px solid #e0e0e0; border-radius: 8px; transition: box-shadow .18s ease, transform .18s ease; }
+  .catalog-skeleton { pointer-events: none; }
+  .skeleton-image, .skeleton-line { background: #ededed; animation: catalog-skeleton-pulse 1.4s ease-in-out infinite alternate; }
+  .skeleton-image { width: 100%; border: 0; }
+  .skeleton-line { display: block; height: 12px; margin: 5px 0; border-radius: 3px; }
+  .skeleton-store { width: 34%; height: 9px; }
+  .skeleton-title { width: 92%; height: 32px; }
+  .skeleton-price { width: 54%; height: 20px; margin-top: 12px; }
+  .skeleton-button { width: 100%; height: 38px; margin-top: auto; }
+  @keyframes catalog-skeleton-pulse { from { opacity: .55; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .catalog-skeleton *, .catalog-skeleton { animation: none; } }
   .catalog-card:hover { box-shadow: 0 5px 18px rgba(0,0,0,.1); transform: translateY(-2px); }
   .catalog-image { min-height: 200px; height: 220px; display: grid; place-items: center; padding: 14px; background: #fff; border-bottom: 1px solid #eee; }
   .catalog-image img { width: 100%; height: 100%; object-fit: contain; }
-  .image-placeholder { color: #777; font-size: .85rem; }
+  .image-placeholder { display: grid; width: 100%; height: 100%; place-content: center; justify-items: center; gap: 10px; background: #f6f6f6; color: #666; font-size: .82rem; }
+  .image-placeholder::before { content: ''; width: 34px; height: 26px; border: 1px solid #bdbdbd; border-radius: 4px; background: radial-gradient(circle at 72% 28%, #aaa 2px, transparent 3px), linear-gradient(135deg, transparent 48%, #c8c8c8 49%, #c8c8c8 52%, transparent 53%); }
   .catalog-card-body { padding: 14px; display: flex; flex: 1; flex-direction: column; align-items: flex-start; }
   .store-label { color: #666; text-transform: uppercase; font-size: .68rem; letter-spacing: .05em; font-weight: 700; }
   .catalog-card h3 { margin: 6px 0; font: 500 .94rem/1.4 var(--font-body); color: #222; }
@@ -241,4 +375,90 @@ const demo = demoProducts.map((product) => ({
   #catalogSentinel { height: 1px; }
   @media (max-width: 980px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .catalog-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 640px) { .home-intro { padding: 30px 0; } .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .catalog-card-body { padding: 10px; } .catalog-image { height: 170px; min-height: 150px; padding: 10px; } .catalog-card h3 { font-size: .84rem; } .catalog-price { font-size: 1.08rem; } .catalog-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 9px; } .catalog-filters .filter-search { grid-column: 1 / -1; } .catalog-filters .btn-primary { min-height: 40px; } }
+</style>
+
+<style is:global>
+  #spotlightSection[hidden] { display: none !important; }
+  #spotlightSection { margin-top: 26px; }
+  .spotlight-heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 14px; }
+  .spotlight-heading h2 { margin: 0; color: #292820; font-size: clamp(1.3rem, 2.4vw, 1.8rem); letter-spacing: -.025em; }
+  .spotlight-heading p:not(.spotlight-eyebrow) { max-width: 62ch; margin: 5px 0 0; color: #625f58; font-size: .9rem; }
+  .spotlight-eyebrow { margin: 0 0 5px; color: #805c38; font-size: .7rem; font-weight: 800; letter-spacing: .13em; }
+  .spotlight-count { padding-bottom: 3px; color: #6d6a63; font-size: .78rem; white-space: nowrap; }
+  .spotlight-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .85fr); gap: 14px; }
+  .spotlight-grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+  .spotlight-card { min-width: 0; overflow: hidden; display: grid; grid-template-columns: minmax(140px, .78fr) minmax(0, 1fr); align-items: stretch; border: 1px solid #ddd4c6; border-radius: 12px; background: #faf8f4; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+  .spotlight-card:hover { border-color: #bba88e; box-shadow: 0 8px 24px rgba(62, 48, 31, .1); transform: translateY(-2px); }
+  .spotlight-card-featured { min-height: 322px; grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr); background: radial-gradient(ellipse at 18% 20%, rgba(255,255,255,.8), transparent 56%), linear-gradient(125deg, #f0e9df, #e8dfd2); }
+  .spotlight-media { display: grid; min-width: 0; min-height: 146px; place-items: center; padding: 12px; background: rgba(255,255,255,.64); text-decoration: none; }
+  .spotlight-card-featured .spotlight-media { min-height: 322px; padding: 20px; background: rgba(255,255,255,.34); }
+  .spotlight-image { display: block; width: 100%; height: 100%; max-height: 276px; object-fit: contain; }
+  .spotlight-image-placeholder { display: grid; width: 100%; min-height: 125px; place-items: center; border-radius: 8px; background: #eeeae3; color: #746f67; font-size: .78rem; }
+  .spotlight-copy { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 16px; }
+  .spotlight-card-featured .spotlight-copy { justify-content: center; padding: clamp(18px, 3vw, 32px); }
+  .spotlight-store { color: #6c655a; font-size: .68rem; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
+  .spotlight-discount { display: inline-flex; margin-top: 9px; padding: 5px 8px; border-radius: 4px; background: #8b4c36; color: #fff; font-size: .72rem; font-weight: 750; line-height: 1.25; }
+  .spotlight-old-price { margin-top: 7px; color: #777168; font-size: .78rem; text-decoration: line-through; }
+  .spotlight-copy h3 { margin: 8px 0 0; color: #282721; font-size: 1rem; line-height: 1.35; text-wrap: pretty; }
+  .spotlight-card-featured .spotlight-copy h3 { max-width: 24ch; font-size: clamp(1.25rem, 2.1vw, 1.75rem); letter-spacing: -.025em; }
+  .spotlight-copy h3 a { color: inherit; text-decoration: none; }
+  .spotlight-copy h3 a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  .spotlight-detail { margin: 7px 0 0; color: #625f58; font-size: .8rem; line-height: 1.45; }
+  .spotlight-price { margin: 12px 0 0; color: #25251f; font-size: 1.3rem; font-variant-numeric: tabular-nums; font-weight: 800; }
+  .spotlight-card-featured .spotlight-price { font-size: 1.65rem; }
+  .spotlight-fact { margin: 3px 0 0; color: #666158; font-size: .76rem; }
+  .spotlight-action { display: inline-flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 13px; color: #704c2c; font-size: .82rem; font-weight: 800; text-decoration: none; }
+  .spotlight-action span { transition: transform .18s ease; }
+  .spotlight-action:hover { color: #503820; text-decoration: underline; text-underline-offset: 3px; }
+  .spotlight-action:hover span { transform: translateX(3px); }
+  .spotlight-action:focus-visible, .spotlight-media:focus-visible, .spotlight-copy h3 a:focus-visible { outline: 3px solid #8b4c36; outline-offset: 3px; }
+  .spotlight-side { min-width: 0; display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .spotlight-side .spotlight-copy { padding: 13px; }
+  .spotlight-side .spotlight-copy h3 { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .spotlight-side .spotlight-price { margin-top: 8px; font-size: 1.1rem; }
+  .spotlight-side .spotlight-action { padding-top: 9px; }
+  @media (max-width: 900px) {
+    .spotlight-grid { grid-template-columns: minmax(0, 1fr); }
+    .spotlight-card-featured { min-height: 280px; }
+    .spotlight-card-featured .spotlight-media { min-height: 280px; }
+    .spotlight-side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; }
+  }
+  @media (max-width: 640px) {
+    #spotlightSection { margin-top: 20px; }
+    .spotlight-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
+    .spotlight-count { white-space: normal; }
+    .spotlight-card-featured { min-height: 238px; grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr); }
+    .spotlight-card-featured .spotlight-media { min-height: 238px; padding: 10px; }
+    .spotlight-card-featured .spotlight-copy { padding: 14px 12px; }
+    .spotlight-card-featured .spotlight-copy h3 { font-size: 1.12rem; }
+    .spotlight-card-featured .spotlight-price { font-size: 1.35rem; }
+    .spotlight-side { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+    .spotlight-side .spotlight-card { min-height: 142px; grid-template-columns: 112px minmax(0, 1fr); }
+    .spotlight-side .spotlight-media { min-height: 142px; padding: 8px; }
+    .spotlight-side .spotlight-copy { padding: 10px; }
+    .spotlight-side .spotlight-copy h3 { font-size: .9rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { .spotlight-card, .spotlight-action span { transition: none; } }
+
+  /* AJAX-created cards have no Astro scope attribute, so style them through the static grid ID. */
+  #catalogGrid .catalog-card { min-width: 0; overflow: hidden; display: flex; flex-direction: column; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; transition: box-shadow .18s ease, transform .18s ease; }
+  #catalogGrid .catalog-card:hover { box-shadow: 0 5px 18px rgba(0,0,0,.1); transform: translateY(-2px); }
+  #catalogGrid .catalog-image { min-height: 200px; height: 220px; display: grid; place-items: center; padding: 14px; background: #fff; border-bottom: 1px solid #eee; }
+  #catalogGrid .catalog-image img { width: 100%; height: 100%; object-fit: contain; }
+  #catalogGrid .image-placeholder { display: grid; width: 100%; height: 100%; place-content: center; justify-items: center; gap: 10px; background: #f6f6f6; color: #666; font-size: .82rem; }
+  #catalogGrid .image-placeholder::before { content: ''; width: 34px; height: 26px; border: 1px solid #bdbdbd; border-radius: 4px; background: radial-gradient(circle at 72% 28%, #aaa 2px, transparent 3px), linear-gradient(135deg, transparent 48%, #c8c8c8 49%, #c8c8c8 52%, transparent 53%); }
+  #catalogGrid .catalog-card-body { padding: 14px; display: flex; flex: 1; flex-direction: column; align-items: flex-start; }
+  #catalogGrid .store-label { color: #666; text-transform: uppercase; font-size: .68rem; letter-spacing: .05em; font-weight: 700; }
+  #catalogGrid .catalog-card h3 { margin: 6px 0; font: 500 .94rem/1.4 var(--font-body); color: #222; }
+  #catalogGrid .catalog-card h3 a:hover { text-decoration: underline; }
+  #catalogGrid .seller-label, #catalogGrid .catalog-meta { color: #777; font-size: .76rem; margin-top: 5px; }
+  #catalogGrid .catalog-price { color: #222; font-size: 1.22rem; font-weight: 700; margin-top: 10px; }
+  #catalogGrid .coupon-label { margin-top: 5px; color: #35633e; font-size: .78rem; }
+  #catalogGrid .card-detail-link { margin-top: auto; width: 100%; }
+  @media (max-width: 640px) {
+    #catalogGrid .catalog-card-body { padding: 10px; }
+    #catalogGrid .catalog-image { height: 170px; min-height: 150px; padding: 10px; }
+    #catalogGrid .catalog-card h3 { font-size: .84rem; }
+    #catalogGrid .catalog-price { font-size: 1.08rem; }
+  }
 </style>

@@ -1,3 +1,5 @@
+import { isUsableProductImage } from './image-health.js';
+
 export function nextGalleryIndex(currentIndex, key, itemCount) {
   if (itemCount < 1) return null;
   if (key === 'Home') return 0;
@@ -7,19 +9,26 @@ export function nextGalleryIndex(currentIndex, key, itemCount) {
   return null;
 }
 
-/** @param {HTMLElement | null} [announcement] */
-export function initProductGallery(imageHost, thumbnails, productTitle, announcement = null) {
+/** @param {HTMLElement | null} [announcement] @param {(imageUrl: string) => void} [onImageFailure] */
+export function initProductGallery(imageHost, thumbnails, productTitle, announcement = null, onImageFailure = null) {
   const selectImage = (index, focus = false) => {
     const button = thumbnails[index];
     if (!button) return;
     const image = document.createElement('img');
-    image.src = button.dataset.image;
     image.alt = productTitle;
     image.width = 640;
     image.height = 640;
     image.decoding = 'async';
     if (index === 0) image.fetchPriority = 'high';
+    const showFallback = () => {
+      if (imageHost.firstChild !== image || isUsableProductImage(image)) return;
+      if (typeof onImageFailure === 'function') onImageFailure(button.dataset.image);
+      imageHost.textContent = 'Foto indisponível';
+    };
+    image.addEventListener('error', showFallback, { once: true });
+    image.addEventListener('load', showFallback, { once: true });
     imageHost.replaceChildren(image);
+    image.src = button.dataset.image;
     if (announcement) announcement.textContent = `Foto ${index + 1} de ${thumbnails.length}: ${productTitle}`;
     thumbnails.forEach((thumbnail, thumbnailIndex) => {
       const selected = thumbnailIndex === index;

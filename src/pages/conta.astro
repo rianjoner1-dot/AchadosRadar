@@ -18,6 +18,19 @@ import { authReady } from '../modules/auth/client';
         <button type="submit" class="btn-primary" disabled={!authReady}>Confirmar e entrar</button>
         <button id="resendOtp" type="button" class="text-button" disabled={!authReady}>Enviar outro código</button>
       </form>
+      <details class="password-access">
+        <summary>Acessar com senha (opcional)</summary>
+        <form id="passwordLoginForm">
+          <label for="passwordEmail">Email</label><input id="passwordEmail" type="email" autocomplete="email" maxlength="254" required disabled={!authReady} />
+          <label for="passwordInput">Senha</label><input id="passwordInput" type="password" autocomplete="current-password" required minlength="8" disabled={!authReady} />
+          <button type="submit" class="btn-secondary" disabled={!authReady}>Entrar com senha</button>
+          <button id="resetPasswordButton" type="button" class="text-button" disabled={!authReady}>Enviar link para redefinir senha</button>
+        </form>
+      </details>
+      <form id="recoveryForm" hidden>
+        <label for="newPassword">Nova senha</label><input id="newPassword" type="password" autocomplete="new-password" minlength="10" required />
+        <button type="submit" class="btn-primary">Salvar nova senha</button>
+      </form>
       <p id="authStatus" role="status" aria-live="polite"></p>
     </section>
     <section id="profilePanel" class="account-panel" hidden>
@@ -30,32 +43,73 @@ import { authReady } from '../modules/auth/client';
         <label for="avatarFile">Foto do perfil (JPEG, PNG ou WebP)</label><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp" />
         <button type="submit" class="btn-primary">Salvar alterações</button>
       </form>
-      <div class="profile-actions"><a href="/carrinho" class="btn-secondary">Minha lista</a><button id="signOutButton" type="button" class="btn-secondary">Sair da conta</button></div>
+      <div class="profile-actions"><a href="/carrinho" class="btn-secondary">Minha lista</a><a id="adminPanelLink" href="/painel-admin" class="btn-secondary" hidden>Painel administrativo</a><button id="signOutButton" type="button" class="btn-secondary">Sair da conta</button></div>
       <details class="delete-account"><summary>Excluir conta</summary><p>A exclusão remove o perfil, a lista sincronizada e a foto de perfil. Esta ação não pode ser desfeita.</p><button id="deleteAccountButton" type="button" class="btn-danger">Excluir minha conta</button></details>
       <p id="profileStatus" role="status" aria-live="polite"></p>
     </section>
   </div>
 </Layout>
 <script>
-  import { supabase, syncCartForUser, uploadAvatar } from '../modules/auth/client';
+  import { currentUser, supabase, syncCartForUser, uploadAvatar } from '../modules/auth/client';
+  import { deleteLocalCartForUser, setCartOwner } from '../modules/cart/store';
   import { normalizeBrazilianPhone } from '../modules/auth/phone.mjs';
+  import { runAuthAction } from '../modules/auth/run-action.mjs';
   const login = document.querySelector<HTMLElement>('#loginPanel')!;
   const profile = document.querySelector<HTMLElement>('#profilePanel')!;
   const requestForm = document.querySelector<HTMLFormElement>('#requestOtpForm')!;
   const verifyForm = document.querySelector<HTMLFormElement>('#verifyOtpForm')!;
+  const passwordForm = document.querySelector<HTMLFormElement>('#passwordLoginForm')!;
+  const recoveryForm = document.querySelector<HTMLFormElement>('#recoveryForm')!;
   const status = document.querySelector<HTMLElement>('#authStatus')!;
   const profileStatus = document.querySelector<HTMLElement>('#profileStatus')!;
   const emailInput = document.querySelector<HTMLInputElement>('#emailInput')!;
+  let sessionRenderVersion = 0;
+  let renderedUserId: string | null = null;
   let lastEmail = '';
 
+  function clearPrivateProfile() {
+    (document.querySelector<HTMLInputElement>('#displayName')!).value = '';
+    (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = '';
+    (document.querySelector<HTMLImageElement>('#avatarPreview')!).removeAttribute('src');
+    (document.querySelector<HTMLImageElement>('#avatarPreview')!).hidden = true;
+    document.querySelector<HTMLAnchorElement>('#adminPanelLink')!.hidden = true;
+    document.querySelector('#accountEmail')!.textContent = '';
+    profileStatus.textContent = '';
+  }
+
   async function renderSession() {
+    const version = ++sessionRenderVersion;
     if (!supabase) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { login.hidden = false; profile.hidden = true; return; }
+    let user;
+    try { user = await currentUser(); }
+    catch {
+      if (version !== sessionRenderVersion) return;
+      renderedUserId = null;
+      login.hidden = false;
+      profile.hidden = true;
+      clearPrivateProfile();
+      status.textContent = 'Não foi possível confirmar a sessão. Tente novamente.';
+      return;
+    }
+    if (version !== sessionRenderVersion) return;
+    renderedUserId = user?.id ?? null;
+    if (!user) {
+      login.hidden = false; profile.hidden = true;
+      clearPrivateProfile();
+      status.textContent = '';
+      return;
+    }
+    clearPrivateProfile();
     login.hidden = true; profile.hidden = false;
+    status.textContent = '';
     document.querySelector('#accountEmail')!.textContent = user.email ?? '';
-    await syncCartForUser(user.id);
-    const { data } = await supabase.from('profiles').select('full_name,phone_e164,avatar_url').eq('id', user.id).maybeSingle();
+    try { await syncCartForUser(user.id); }
+    catch { if (version === sessionRenderVersion) profileStatus.textContent = 'Não foi possível sincronizar a lista agora; seu perfil continua disponível.'; }
+    if (version !== sessionRenderVersion) return;
+    const { data, error: profileError } = await supabase.from('profiles').select('full_name,phone_e164,avatar_url,role').eq('id', user.id).maybeSingle();
+    if (version !== sessionRenderVersion) return;
+    if (profileError) { profileStatus.textContent = 'Não foi possível carregar os dados do perfil agora.'; return; }
+    document.querySelector<HTMLAnchorElement>('#adminPanelLink')!.hidden = data?.role !== 'admin';
     (document.querySelector<HTMLInputElement>('#displayName')!).value = data?.full_name ?? '';
     (document.querySelector<HTMLInputElement>('#phoneNumber')!).value = data?.phone_e164 ?? '';
     const avatar = document.querySelector<HTMLImageElement>('#avatarPreview')!;
@@ -64,35 +118,80 @@ import { authReady } from '../modules/auth/client';
   }
   if (supabase) {
     void renderSession();
-    supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) window.setTimeout(() => void renderSession(), 0);
-      else { localStorage.removeItem('achados_radar_cart_owner'); void renderSession(); }
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') recoveryForm.hidden = false;
+      const nextUserId = session?.user?.id ?? null;
+      if (nextUserId === renderedUserId && event !== 'PASSWORD_RECOVERY') return;
+      sessionRenderVersion += 1;
+      setCartOwner(nextUserId);
+      // Do not expose profile data from an unverified or revoked local session.
+      login.hidden = true; profile.hidden = true;
+      clearPrivateProfile();
+      if (session?.user) {
+        status.textContent = 'Confirmando sessão…';
+        window.setTimeout(() => void renderSession(), 0);
+      } else {
+        void renderSession();
+      }
     });
   }
 
   requestForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!supabase) { status.textContent = 'O acesso ainda não está configurado.'; return; }
+    const client = supabase;
+    if (!client) { status.textContent = 'O acesso ainda não está configurado.'; return; }
     lastEmail = emailInput.value.trim().toLowerCase();
     status.textContent = 'Enviando código...';
-    const { error } = await supabase.auth.signInWithOtp({ email: lastEmail, options: { shouldCreateUser: true, emailRedirectTo: `${location.origin}/conta` } });
-    status.textContent = error ? 'Não foi possível enviar agora. Confira o email e tente novamente.' : 'Código enviado. Confira sua caixa de entrada e o spam.';
-    verifyForm.hidden = Boolean(error);
+    const sent = await runAuthAction(() => client.auth.signInWithOtp({ email: lastEmail, options: { shouldCreateUser: true, emailRedirectTo: `${location.origin}/conta` } }));
+    status.textContent = sent ? 'Código enviado. Confira sua caixa de entrada e o spam.' : 'Não foi possível enviar agora. Confira o email e tente novamente.';
+    verifyForm.hidden = !sent;
   });
   document.querySelector<HTMLButtonElement>('#resendOtp')!.addEventListener('click', () => requestForm.requestSubmit());
+  passwordForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const client = supabase;
+    if (!client) return;
+    const email = document.querySelector<HTMLInputElement>('#passwordEmail')!.value.trim().toLowerCase();
+    const password = document.querySelector<HTMLInputElement>('#passwordInput')!.value;
+    status.textContent = 'Entrando…';
+    const signedIn = await runAuthAction(() => client.auth.signInWithPassword({ email, password }));
+    status.textContent = signedIn ? 'Acesso confirmado.' : 'Não foi possível entrar. Confira email e senha.';
+    if (signedIn) await renderSession();
+  });
+  document.querySelector<HTMLButtonElement>('#resetPasswordButton')!.addEventListener('click', async () => {
+    const client = supabase;
+    if (!client) return;
+    const email = document.querySelector<HTMLInputElement>('#passwordEmail')!.value.trim().toLowerCase();
+    if (!email) { status.textContent = 'Informe seu email para receber o link de redefinição.'; return; }
+    const sent = await runAuthAction(() => client.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/conta` }));
+    status.textContent = sent ? 'Se o email estiver cadastrado, enviaremos um link de redefinição.' : 'Não foi possível enviar o link agora.';
+  });
+  recoveryForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const client = supabase;
+    if (!client) return;
+    const password = document.querySelector<HTMLInputElement>('#newPassword')!.value;
+    if (password.length < 10) { status.textContent = 'Use pelo menos 10 caracteres para a nova senha.'; return; }
+    const updated = await runAuthAction(() => client.auth.updateUser({ password }));
+    status.textContent = updated ? 'Senha redefinida com sucesso.' : 'Não foi possível redefinir a senha.';
+    if (updated) recoveryForm.hidden = true;
+  });
   verifyForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     const token = document.querySelector<HTMLInputElement>('#otpInput')!.value.trim();
-    const { error } = await supabase.auth.verifyOtp({ email: lastEmail || emailInput.value.trim().toLowerCase(), token, type: 'email' });
-    status.textContent = error ? 'Código inválido ou expirado. Solicite outro e tente novamente.' : 'Acesso confirmado.';
-    if (!error) await renderSession();
+    const verified = await runAuthAction(() => client.auth.verifyOtp({ email: lastEmail || emailInput.value.trim().toLowerCase(), token, type: 'email' }));
+    status.textContent = verified ? 'Acesso confirmado.' : 'Código inválido ou expirado, ou houve uma falha de rede. Solicite outro e tente novamente.';
+    if (verified) await renderSession();
   });
   document.querySelector<HTMLFormElement>('#profileForm')!.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!supabase) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    let user;
+    try { user = await currentUser(); }
+    catch { profileStatus.textContent = 'Não foi possível confirmar a sessão. Tente novamente.'; return; }
+    if (!user) { profileStatus.textContent = 'Entre novamente para salvar seu perfil.'; return; }
     profileStatus.textContent = 'Salvando perfil...';
     const name = document.querySelector<HTMLInputElement>('#displayName')!.value.trim();
     const rawPhone = document.querySelector<HTMLInputElement>('#phoneNumber')!.value.trim();
@@ -112,18 +211,32 @@ import { authReady } from '../modules/auth/client';
     } catch (error) { profileStatus.textContent = error instanceof Error ? error.message : 'Não foi possível salvar o perfil.'; }
   });
   document.querySelector<HTMLButtonElement>('#signOutButton')!.addEventListener('click', async () => {
-    if (supabase) await supabase.auth.signOut({ scope: 'local' });
-    localStorage.removeItem('achados_radar_cart_owner');
+    const client = supabase;
+    if (client && !await runAuthAction(() => client.auth.signOut({ scope: 'local' }))) {
+      status.textContent = 'Não foi possível encerrar a sessão agora. Tente novamente.';
+      return;
+    }
+    setCartOwner(null);
     status.textContent = 'Você saiu da conta.';
   });
   document.querySelector<HTMLButtonElement>('#deleteAccountButton')!.addEventListener('click', async () => {
-    if (!supabase || !confirm('Excluir permanentemente sua conta e os dados associados?')) return;
-    const { data: { session } } = await supabase.auth.getSession();
+    const client = supabase;
+    if (!client || !confirm('Excluir permanentemente sua conta e os dados associados?')) return;
+    let session;
+    try {
+      const result = await client.auth.getSession();
+      if (result.error) throw result.error;
+      session = result.data.session;
+    }
+    catch { profileStatus.textContent = 'Não foi possível confirmar a sessão. Tente novamente.'; return; }
     if (!session) return;
-    const response = await fetch('/api/account/delete', { method: 'POST', headers: { authorization: `Bearer ${session.access_token}` } });
+    let response: Response;
+    try { response = await fetch('/api/account/delete', { method: 'POST', headers: { authorization: `Bearer ${session.access_token}` } }); }
+    catch { profileStatus.textContent = 'Não foi possível confirmar a exclusão por falha de conexão. Sua conta e seus dados locais foram preservados.'; return; }
     if (!response.ok) { profileStatus.textContent = 'A exclusão não foi concluída. Entre em contato pelo canal indicado na política de privacidade.'; return; }
-    await supabase.auth.signOut({ scope: 'local' });
-    localStorage.removeItem('achados_radar_cart_owner');
+    deleteLocalCartForUser(session.user.id);
+    await runAuthAction(() => client.auth.signOut({ scope: 'local' }));
+    setCartOwner(null);
     status.textContent = 'Conta excluída.';
     await renderSession();
   });
@@ -143,6 +256,9 @@ import { authReady } from '../modules/auth/client';
   .avatar-preview { width:96px;height:96px;object-fit:cover;border-radius:50%;border:1px solid #ddd;margin:0 0 12px; }
   .profile-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
   .text-button { color:#444; text-decoration:underline; padding:8px; }
+  .password-access { margin-top:18px; padding-top:16px; border-top:1px solid #eee; color:#444; font-size:.9rem; }
+  .password-access form { display:grid; gap:9px; margin-top:12px; }
+  #recoveryForm { display:grid; gap:9px; margin-top:16px; }
   .delete-account { margin-top:26px; border-top:1px solid #ddd; padding-top:18px; color:#555; font-size:.88rem; }
   .delete-account p { margin:8px 0 12px; }
   .btn-danger { border:1px solid #a33; color:#8d2525; background:white; border-radius:5px; padding:10px 14px; min-height:42px; }

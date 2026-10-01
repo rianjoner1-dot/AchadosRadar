@@ -10,14 +10,12 @@
   --text-primary: #222;
   --text-secondary: #555;
   --text-muted: #707070;
-  --accent-cyan: #333;
-  --accent-cyan-glow: transparent;
   --accent-emerald: #47734e;
   --accent-amber: #9b6e00;
   --accent-rose: #9e3f3f;
-  --action: #f5c400;
-  --action-hover: #e8b900;
-  --focus-ring: 2px solid #2359a8;
+  --action: #333333;
+  --action-hover: #111111;
+  --focus-ring: 2px solid #333;
   --font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   --radius-sm: 5px;
@@ -75,8 +73,8 @@ img { display: block; max-width: 100%; height: auto; }
   text-decoration: none;
   transition: background-color .16s ease, border-color .16s ease, color .16s ease;
 }
-.btn-primary { border-color: #d8ab00; background: var(--action); color: #222; }
-.btn-primary:hover { border-color: #c49c00; background: var(--action-hover); text-decoration: none; }
+.btn-primary { border-color: #333333; background: var(--action); color: #fff; }
+.btn-primary:hover { border-color: #111111; background: var(--action-hover); text-decoration: none; }
 .btn-secondary { border-color: #bdbdbd; background: #fff; color: #333; }
 .btn-secondary:hover { border-color: #888; background: #f6f6f6; text-decoration: none; }
 .badge-platform { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #f2f2f2; color: #444; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }

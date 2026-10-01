@@ -1,0 +1,38 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+export const prerender = true;
+---
+
+<Layout title="Página não encontrada | Achados Radar" description="Esse endereço não está disponível. Volte à vitrine para continuar procurando ofertas." noIndex={true}>
+  <section class="container not-found-page" aria-labelledby="notFoundTitle">
+    <div class="not-found-art" aria-hidden="true">
+      <svg viewBox="0 0 160 120" role="presentation">
+        <path d="M30 94h100" />
+        <circle cx="76" cy="48" r="25" />
+        <path d="m94 66 22 22M67 47h18M76 38v18" />
+        <path d="M40 27h13M111 31h10M43 52h7" />
+      </svg>
+      <span>404</span>
+    </div>
+    <p class="not-found-eyebrow">FORA DO RADAR</p>
+    <h1 id="notFoundTitle">Esta página não apareceu por aqui</h1>
+    <p>O endereço pode ter mudado ou o link não está mais disponível. A lista de ofertas continua pronta para você explorar.</p>
+    <div class="not-found-actions">
+      <a href="/" class="btn-primary">Voltar às ofertas</a>
+      <a href="/carrinho" class="btn-secondary">Abrir minha lista</a>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .not-found-page { display: grid; justify-items: center; align-content: center; min-height: 58vh; padding-top: 52px; padding-bottom: 72px; text-align: center; }
+  .not-found-art { position: relative; display: grid; width: min(300px, 80vw); aspect-ratio: 5/3; place-items: center; margin-bottom: 20px; border-radius: 44% 56% 58% 42% / 48% 44% 56% 52%; background: #eee7dc; color: #755435; }
+  .not-found-art svg { width: 62%; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .not-found-art span { position: absolute; right: 12px; bottom: 7px; color: #7b6041; font-size: 1.2rem; font-weight: 800; letter-spacing: .08em; }
+  .not-found-eyebrow { margin: 0 0 7px; color: #805c38; font-size: .76rem; font-weight: 800; letter-spacing: .12em; }
+  .not-found-page h1 { max-width: 18ch; margin: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); text-wrap: balance; }
+  .not-found-page > p:not(.not-found-eyebrow) { max-width: 54ch; margin: 12px 0 0; color: #555; line-height: 1.6; }
+  .not-found-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 24px; }
+  @media (max-width: 520px) { .not-found-page { min-height: 54vh; padding-top: 30px; padding-bottom: 48px; } .not-found-actions { width: 100%; flex-direction: column; } .not-found-actions a { width: 100%; } }
+</style>

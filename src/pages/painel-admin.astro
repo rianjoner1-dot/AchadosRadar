@@ -1,0 +1,148 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Painel administrativo | Achados Radar" description="Métricas agregadas do catálogo." noIndex={true}>
+  <main class="container admin-page">
+    <header class="admin-heading">
+      <div>
+        <p class="eyebrow">ADMINISTRAÇÃO</p>
+        <h1>Métricas do site</h1>
+        <p>Visitas a produtos e saídas para os marketplaces, com e sem login.</p>
+      </div>
+      <label class="period-picker">Período
+        <select id="metricsDays" aria-label="Período das métricas">
+          <option value="7">Últimos 7 dias</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+      </label>
+    </header>
+
+    <p id="adminStatus" class="admin-status" role="status" aria-live="polite">Validando acesso administrativo…</p>
+    <section id="metricsPanel" hidden aria-labelledby="summaryHeading">
+      <h2 id="summaryHeading" class="sr-only">Resumo do período</h2>
+      <div class="summary-grid">
+        <article class="summary-card"><span>Visualizações de produtos</span><strong id="totalViews">0</strong></article>
+        <article class="summary-card"><span>Cliques de saída aceitos</span><strong id="totalClicks">0</strong></article>
+        <article class="summary-card"><span>Período</span><strong id="rangeLabel">—</strong></article>
+      </div>
+
+      <div class="table-heading">
+        <div><h2>Rankings de produtos</h2><p>Produtos com mais visualizações e cliques de saída para os marketplaces.</p></div>
+        <button id="refreshMetrics" class="btn-secondary" type="button">Atualizar</button>
+      </div>
+      <div class="rankings-grid">
+        <section class="ranking-card" aria-labelledby="viewsHeading">
+          <h3 id="viewsHeading">Mais visualizados</h3>
+          <div class="metrics-table-wrap"><table><thead><tr><th scope="col">Produto</th><th scope="col">Loja</th><th scope="col">Visualizações</th></tr></thead><tbody id="mostViewedRows"></tbody></table></div>
+        </section>
+        <section class="ranking-card" aria-labelledby="clicksHeading">
+          <h3 id="clicksHeading">Mais cliques de saída</h3>
+          <div class="metrics-table-wrap"><table><thead><tr><th scope="col">Produto</th><th scope="col">Loja</th><th scope="col">Cliques</th></tr></thead><tbody id="mostClickedRows"></tbody></table></div>
+        </section>
+      </div>
+      <p id="emptyMetrics" class="empty-metrics" hidden>As métricas aparecerão quando houver visitas a produtos e redirecionamentos válidos.</p>
+      <p class="metrics-footnote">As métricas são agregadas por produto e dia. O site não registra email, CPF, telefone, IP, identidade ou identificador de visitante nesse painel. Uma visualização é contada no máximo uma vez por produto em cada aba do navegador.</p>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { supabase } from '../modules/auth/client';
+  type ProductMetric = { productId: string; title: string; platform: string; views: number; outboundClicks: number };
+  type MetricResult = { days: number; from: string; through: string; totals: { views: number; outboundClicks: number }; mostViewedProducts: ProductMetric[]; mostClickedProducts: ProductMetric[] };
+  const status = document.querySelector<HTMLElement>('#adminStatus')!;
+  const panel = document.querySelector<HTMLElement>('#metricsPanel')!;
+  const daysSelect = document.querySelector<HTMLSelectElement>('#metricsDays')!;
+  const number = new Intl.NumberFormat('pt-BR');
+  const storeLabel = (platform: string) => platform === 'magalu' ? 'Magalu' : platform === 'mercadolivre' ? 'Mercado Livre' : '—';
+
+  function renderRanking(products: ProductMetric[], bodyId: string, metric: 'views' | 'outboundClicks') {
+    const body = document.querySelector<HTMLTableSectionElement>(`#${bodyId}`)!;
+    body.replaceChildren();
+    for (const item of products) {
+      const row = document.createElement('tr');
+      for (const value of [item.title, storeLabel(item.platform), number.format(item[metric])]) {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.append(cell);
+      }
+      body.append(row);
+    }
+    return products.length;
+  }
+
+  function render(data: MetricResult) {
+    document.querySelector('#totalViews')!.textContent = number.format(data.totals.views);
+    document.querySelector('#totalClicks')!.textContent = number.format(data.totals.outboundClicks);
+    document.querySelector('#rangeLabel')!.textContent = `${data.from} a ${data.through}`;
+    const viewedCount = renderRanking(data.mostViewedProducts, 'mostViewedRows', 'views');
+    const clickedCount = renderRanking(data.mostClickedProducts, 'mostClickedRows', 'outboundClicks');
+    document.querySelector<HTMLElement>('#emptyMetrics')!.hidden = viewedCount > 0 || clickedCount > 0;
+    panel.hidden = false;
+    status.textContent = `${viewedCount + clickedCount} produtos com atividade no período.`;
+  }
+
+  async function load() {
+    if (!supabase) { status.textContent = 'O painel requer uma sessão administrativa no Supabase.'; return; }
+    status.textContent = 'Carregando métricas…';
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { status.textContent = 'Entre na conta administrativa para acessar este painel.'; return; }
+    try {
+      const response = await fetch(`/api/admin/metrics?days=${encodeURIComponent(daysSelect.value)}`, {
+        headers: { authorization: `Bearer ${session.access_token}` }, cache: 'no-store'
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Acesso ao painel negado.');
+      render(result as MetricResult);
+    } catch (error) {
+      panel.hidden = true;
+      status.textContent = error instanceof Error ? error.message : 'Não foi possível carregar o painel.';
+    }
+  }
+  daysSelect.addEventListener('change', () => void load());
+  document.querySelector('#refreshMetrics')!.addEventListener('click', () => void load());
+  void load();
+</script>
+
+<style>
+  .admin-page { max-width: 1240px; padding-top: 36px; padding-bottom: 64px; }
+  .admin-heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; padding-bottom: 22px; border-bottom: 1px solid #ddd; }
+  .admin-heading h1 { margin: 3px 0 7px; color: #222; font-size: clamp(1.7rem, 3vw, 2.3rem); }
+  .admin-heading p:not(.eyebrow) { color: #666; }
+  .eyebrow { margin: 0; color: #666; font-size: .76rem; font-weight: 700; letter-spacing: .08em; }
+  .period-picker { display: grid; gap: 6px; color: #444; font-size: .84rem; font-weight: 600; }
+  .period-picker select { min-width: 165px; min-height: 42px; padding: 8px 10px; border: 1px solid #bbb; border-radius: 5px; background: white; color: #222; font: inherit; }
+  .admin-status { margin: 18px 0; color: #555; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 22px 0 36px; }
+  .summary-card { display: grid; gap: 10px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #fff; }
+  .summary-card span { color: #666; font-size: .84rem; }
+  .summary-card strong { color: #222; font-size: 1.75rem; font-variant-numeric: tabular-nums; }
+  .table-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .table-heading h2 { margin: 0 0 4px; color: #222; font-size: 1.25rem; }
+  .table-heading p, .metrics-footnote { color: #666; font-size: .86rem; }
+  .rankings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .ranking-card { min-width: 0; }
+  .ranking-card h3 { margin: 0 0 10px; color: #333; font-size: 1rem; }
+  .metrics-table-wrap { overflow-x: auto; border: 1px solid #ddd; border-radius: 8px; background: white; }
+  table { width: 100%; border-collapse: collapse; text-align: left; }
+  th, td { padding: 13px 14px; border-bottom: 1px solid #eee; }
+  th { background: #f5f5f5; color: #444; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+  td { color: #333; font-size: .9rem; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td:nth-child(n+3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty-metrics { padding: 20px; color: #666; }
+  .metrics-footnote { margin-top: 16px; line-height: 1.55; }
+  @media (max-width: 700px) { .admin-heading { align-items: stretch; flex-direction: column; } .period-picker select { width: 100%; } .summary-grid { grid-template-columns: 1fr; gap: 9px; margin: 18px 0 28px; } .summary-card { padding: 14px 16px; } .summary-card strong { font-size: 1.45rem; } .rankings-grid { grid-template-columns: 1fr; gap: 22px; } .table-heading { align-items: stretch; flex-direction: column; } .table-heading button { align-self: flex-start; } table { min-width: 670px; } }
+</style>
+
+<style is:global>
+  #metricsPanel table { width: 100%; border-collapse: collapse; text-align: left; }
+  #metricsPanel th, #metricsPanel td { padding: 13px 14px; border-bottom: 1px solid #eee; }
+  #metricsPanel th { background: #f5f5f5; color: #444; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+  #metricsPanel td { color: #333; font-size: .9rem; }
+  #metricsPanel tbody tr:last-child td { border-bottom: 0; }
+  #metricsPanel td:nth-child(n+3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (max-width: 700px) { #metricsPanel table { min-width: 670px; } }
+</style>

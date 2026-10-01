@@ -12,6 +12,7 @@ interface Props {
   canonicalUrl?: string;
   ogImage?: string;
   ogType?: 'website' | 'product';
+  noIndex?: boolean;
 }
 
 const {
@@ -19,7 +20,8 @@ const {
   description = "Compare ofertas observadas no Mercado Livre e Magazine Luiza. Confira preço, estoque e condições na loja antes de comprar.",
   canonicalUrl,
   ogImage,
-  ogType = 'website'
+  ogType = 'website',
+  noIndex = false
 } = Astro.props;
 ---
 
@@ -30,6 +32,7 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#ffffff" />
+    {noIndex && <meta name="robots" content="noindex, nofollow" />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     
     <!-- Open Graph / Redes Sociais -->
@@ -64,6 +67,7 @@ const {
 
     <script>
       import { readLocalCart, saveCartItem, removeCartItem, updateCartBadge } from '../modules/cart/store';
+      import { shouldUseGlobalImageFallback } from '../modules/catalog/image-health.js';
 
       function syncButtons() {
         const ids = new Set(readLocalCart().map((item) => item.id));
@@ -92,9 +96,14 @@ const {
         } catch { /* Ignore invalid product data. */ }
       });
       document.addEventListener('cart:changed', () => { updateCartBadge(); syncButtons(); });
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'achados_radar_cart_owner' || event.key === 'achados_radar_cart' || event.key?.startsWith('achados_radar_cart:')) {
+          updateCartBadge(); syncButtons();
+        }
+      });
 
       const useImageFallback = (image: HTMLImageElement) => {
-        if (image.dataset.imageFallback === 'true') return;
+        if (image.dataset.imageFallback === 'true' || !shouldUseGlobalImageFallback(image)) return;
         image.dataset.imageFallback = 'true';
         image.src = '/product-placeholder.svg';
         image.alt = image.alt || 'Imagem indisponível';

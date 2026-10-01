@@ -1,9 +1,14 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isAllowedMarketplaceImageUrl } from '../src/modules/shared/marketplace-image-url.mjs';
 
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseUrl = process.env.PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const inputPath = process.argv[2];
 const dryRun = process.argv.includes('--dry-run');
+const unavailableReportPath = process.env.CONFIRMED_UNAVAILABLE_REPORTS || path.resolve(process.env.LOCAL_CATALOG_BRIDGE_DATA || path.join(projectRoot, '..', 'produtos_coletados', 'confirmed_unavailable.json'));
 if (!inputPath) {
   console.error('Uso: node scripts/import-catalog.mjs <catalogo.json> [--dry-run]');
   process.exit(2);
@@ -13,14 +18,23 @@ const allowedHosts = {
   mercadolivre: ['mercadolivre.com.br', 'produto.mercadolivre.com.br', 'mercadolivre.com', 'meli.la'],
   magalu: ['magazinevoce.com.br', 'magazineluiza.com.br', 'magalu.com.br', 'a-static.mlcdn.com.br', 'm.magazineluiza.com.br']
 };
-const imageHosts = {
-  mercadolivre: ['mlstatic.com', 'mlstatic.com.br'],
-  magalu: ['mlcdn.com.br', 'magazineluiza.com.br']
-};
 const exactAffiliateHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
+const unavailableEvidence = 'explicit_not_found_without_title_or_price';
+const missingObservationTimestamp = '1970-01-01T00:00:00.000Z';
 const get = (o, ...keys) => keys.map((key) => o?.[key]).find((value) => value !== undefined && value !== null);
 const text = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
 const toPrice = (value) => typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
+const isUnavailableEvidence = (item) => item?.marketplaceUnavailable === true
+  && (item.marketplaceUnavailableEvidence === unavailableEvidence || item.evidence === unavailableEvidence)
+  && ['mercadolivre', 'magalu'].includes(get(item, 'platform', 'marketplace', 'store'))
+  && Boolean(text(get(item, 'external_id', 'externalId', 'id', 'productId')))
+  && (() => {
+    try {
+      const platform = get(item, 'platform', 'marketplace', 'store');
+      const url = new URL(get(item, 'originalUrl', 'original_url', 'url', 'productUrl'));
+      return url.protocol === 'https:' && allowedHosts[platform].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+    } catch { return false; }
+  })();
 function normalize(item) {
   const platform = get(item, 'platform', 'marketplace', 'store');
   const externalId = text(get(item, 'external_id', 'externalId', 'id', 'productId'));
@@ -49,16 +63,22 @@ function normalize(item) {
   if (!original) errors.push('url_original_fora_da_allowlist');
   if (!affiliate) errors.push('link_afiliado_ausente_ou_fora_da_allowlist');
   const imagesRaw = get(item, 'images', 'photos', 'pictures', 'fotos') ?? [get(item, 'image', 'thumbnail', 'imagem')];
-  const images = (Array.isArray(imagesRaw) ? imagesRaw : []).map((img) => typeof img === 'string' ? img : get(img, 'url', 'src')).filter((url) => {
-    try { const parsed = new URL(url); return parsed.protocol === 'https:' && imageHosts[platform]?.some((host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)); } catch { return false; }
-  }).map((url, index) => ({ url, display_order: index, is_primary: index === 0 }));
+  const images = (Array.isArray(imagesRaw) ? imagesRaw : []).map((img) => typeof img === 'string' ? img : get(img, 'url', 'src'))
+    .filter((url) => isAllowedMarketplaceImageUrl(platform, url))
+    .map((url, index) => ({ url, display_order: index, is_primary: index === 0 }));
   if (!images.length) errors.push('foto_https_ausente');
   const macroStatus = get(item, 'linkStatus', 'link_status');
   const rawStockQuantity = get(item, 'stockQuantity', 'stock_quantity');
   const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
   const rawStockStatus = get(item, 'stockStatus', 'stock_status');
   const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'unknown';
-  const consistentStockStatus = stockStatus === 'in_stock' && stockQuantity === 0 ? 'unknown' : stockStatus;
+  const rawObservedAt = get(item, 'offerObservedAt', 'offer_observed_at', 'observedAt', 'observed_at', 'collectedAt', 'collected_at', 'lastCheckedAt', 'linkVerifiedAt', 'verified_at');
+  const parsedObservedAt = rawObservedAt ? new Date(rawObservedAt) : null;
+  const hasTrustedObservationTime = parsedObservedAt instanceof Date
+    && !Number.isNaN(parsedObservedAt.getTime())
+    && parsedObservedAt.getTime() <= Date.now() + 5 * 60 * 1000;
+  const observedAt = hasTrustedObservationTime ? parsedObservedAt.toISOString() : missingObservationTimestamp;
+  const consistentStockStatus = stockStatus === 'in_stock' && (stockQuantity === 0 || !hasTrustedObservationTime) ? 'unknown' : stockStatus;
   const macroVerifiedAt = get(item, 'lastCheckedAt', 'linkVerifiedAt', 'verified_at');
   const officialFlag = get(item, 'isOfficialShortLink', 'linkReady', 'affiliateLinkVerified') === true;
   const magaluOfficialUrl = platform === 'magalu' && Boolean(get(item, 'storeAffiliateId', 'store_affiliate_id')) && Boolean(affiliate) && new URL(affiliate).hostname.endsWith('magazinevoce.com.br');
@@ -74,6 +94,7 @@ function normalize(item) {
     coupon_code: text(get(item, 'coupon', 'couponText', 'cupom')),
     stock_quantity: stockQuantity,
     stock_status: consistentStockStatus,
+    observed_at: observedAt,
     stock_evidence: text(get(item, 'stockEvidence', 'stock_evidence')) ?? '',
     seller_name: text(get(item, 'sellerName', 'seller_name', 'seller')) ?? 'Loja Parceira',
     seller_id: text(get(item, 'sellerId', 'seller_id')) ?? '', store_name: text(get(item, 'storeName', 'store_name')) ?? (platform === 'magalu' ? 'Magalu' : 'Mercado Livre'),
@@ -89,6 +110,17 @@ function normalize(item) {
 const payload = JSON.parse(await fs.readFile(inputPath, 'utf8'));
 const products = Array.isArray(payload) ? payload : Array.isArray(payload.products) ? payload.products : Array.isArray(payload.items) ? payload.items : null;
 if (!products) throw new Error('JSON deve ser um array ou ter a propriedade products/items.');
+let unavailableReports = Array.isArray(payload.confirmedUnavailable) ? payload.confirmedUnavailable : [];
+if (unavailableReportPath !== inputPath) {
+  try {
+    const pending = JSON.parse(await fs.readFile(unavailableReportPath, 'utf8'));
+    if (Array.isArray(pending)) {
+      const merged = new Map(unavailableReports.map((report) => [`${get(report, 'platform', 'marketplace', 'store')}:${get(report, 'external_id', 'externalId', 'id', 'productId')}`, report]));
+      for (const report of pending) merged.set(`${report.platform}:${report.externalId}`, report);
+      unavailableReports = [...merged.values()];
+    }
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
 const platformFilters = new Set(
   process.argv
     .filter((arg) => arg.startsWith('--platform='))
@@ -102,28 +134,33 @@ const selectedProducts = products
   .slice(0, limit);
 if (dryRun) {
   const summaryOnly = process.argv.includes('--summary');
+  const rejectedReports = unavailableReports.filter((item) => !isUnavailableEvidence(item)).map((item) => ({ id: get(item, 'external_id', 'externalId', 'id', 'productId'), errors: ['evidencia_de_indisponibilidade_ausente_ou_invalida'] }));
   const report = selectedProducts.map((item, index) => {
+    if (isUnavailableEvidence(item)) return { index, id: get(item, 'external_id', 'externalId', 'id', 'productId'), platform: get(item, 'platform', 'marketplace', 'store'), valid: true, publishable: false, archiveCandidate: true, errors: [], notPublishableReasons: ['indisponibilidade_confirmada_na_pagina_oficial'] };
+    if (item?.marketplaceUnavailable === true) return { index, id: get(item, 'external_id', 'externalId', 'id', 'productId'), platform: get(item, 'platform', 'marketplace', 'store'), valid: false, publishable: false, errors: ['evidencia_de_indisponibilidade_ausente_ou_invalida'], notPublishableReasons: [] };
     const { errors, row } = normalize(item);
     const notPublishableReasons = [];
     if (!errors.length) {
       if (!row.link_is_official) notPublishableReasons.push('link_afiliado_nao_verificado');
       if (row.stock_status !== 'in_stock') notPublishableReasons.push(`estoque_${row.stock_status}`);
+      if (row.observed_at === missingObservationTimestamp) notPublishableReasons.push('oferta_sem_horario_de_observacao');
     }
     return { index, id: row.external_id, platform: row.platform, valid: errors.length === 0, publishable: errors.length === 0 && notPublishableReasons.length === 0, errors, notPublishableReasons };
   });
   const summaryByPlatform = Object.groupBy ? Object.groupBy(report, (item) => String(item.platform ?? 'ausente')) : report.reduce((groups, item) => { (groups[item.platform ?? 'ausente'] ??= []).push(item); return groups; }, {});
   const platformSummary = Object.fromEntries(Object.entries(summaryByPlatform).map(([platform, rows]) => [platform, { total: rows.length, valid: rows.filter((item) => item.valid).length, publishable: rows.filter((item) => item.publishable).length }]));
   const notPublishableReasons = report.flatMap((item) => item.notPublishableReasons).reduce((counts, reason) => ({ ...counts, [reason]: (counts[reason] ?? 0) + 1 }), {});
-  const output = { mode: 'dry-run', inputTotal: products.length, total: selectedProducts.length, valid: report.filter((item) => item.valid).length, publishable: report.filter((item) => item.publishable).length, platformSummary, notPublishableReasons };
+  const output = { mode: 'dry-run', inputTotal: products.length, total: selectedProducts.length, valid: report.filter((item) => item.valid).length, publishable: report.filter((item) => item.publishable).length, archiveCandidates: report.filter((item) => item.archiveCandidate).length + unavailableReports.filter(isUnavailableEvidence).length, platformSummary, notPublishableReasons };
   if (process.argv.includes('--verbose')) {
     output.details = selectedProducts.map((item, index) => {
+      if (isUnavailableEvidence(item)) return { index, id: get(item, 'external_id', 'externalId', 'id', 'productId'), platform: get(item, 'platform', 'marketplace', 'store'), archiveCandidate: true, evidence: unavailableEvidence };
       const { row } = normalize(item);
-      return { index, id: row.external_id, platform: row.platform, valid: report[index].valid, publishable: report[index].publishable, imageUrls: row.images.map((image) => image.url), installments: row.installments_text, shipping: row.shipping_text, coupon: row.coupon_code, stockQuantity: row.stock_quantity, stockStatus: row.stock_status, stockEvidence: row.stock_evidence, linkStatus: row.link_status, expiresAt: row.expires_at, refreshDueAt: row.refresh_due_at };
+      return { index, id: row.external_id, platform: row.platform, valid: report[index].valid, publishable: report[index].publishable, imageUrls: row.images.map((image) => image.url), installments: row.installments_text, shipping: row.shipping_text, coupon: row.coupon_code, stockQuantity: row.stock_quantity, stockStatus: row.stock_status, stockEvidence: row.stock_evidence, offerObservedAt: row.observed_at, linkStatus: row.link_status, expiresAt: row.expires_at, refreshDueAt: row.refresh_due_at };
     });
   }
-  if (!summaryOnly) output.rejected = report.filter((item) => !item.valid);
+  if (!summaryOnly) output.rejected = [...report.filter((item) => !item.valid), ...rejectedReports];
   console.log(JSON.stringify(output, null, 2));
-  process.exitCode = report.some((item) => !item.valid) ? 1 : 0;
+  process.exitCode = report.some((item) => !item.valid) || rejectedReports.length > 0 ? 1 : 0;
 } else if (!baseUrl || !serviceKey) {
   console.error('Defina PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY apenas no ambiente local confiável.');
   process.exit(2);
@@ -134,6 +171,7 @@ if (dryRun) {
 } else {
 const rejected = [];
 let imported = 0;
+let archived = 0;
 const requestImport = async (body) => {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/rest/v1/rpc/import_catalog_item`, {
     method: 'POST', headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' },
@@ -142,16 +180,70 @@ const requestImport = async (body) => {
   if (!response.ok) throw new Error(`import_catalog_item: HTTP ${response.status} ${await response.text()}`);
   return response.status === 204 ? null : response.json();
 };
+const requestArchive = async (platform, externalId) => {
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/rest/v1/rpc/archive_unavailable_catalog_item`, {
+    method: 'POST', headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ p_platform: platform, p_external_id: externalId })
+  });
+  if (!response.ok) throw new Error(`archive_unavailable_catalog_item: HTTP ${response.status} ${await response.text()}`);
+  return response.status === 204 ? null : response.json();
+};
+const isAlreadyArchived = async (platform, externalId) => {
+  const params = new URLSearchParams({ select: 'status', platform: `eq.${platform}`, external_id: `eq.${externalId}`, limit: '1' });
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/rest/v1/products?${params}`, {
+    headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` }, signal: AbortSignal.timeout(5000)
+  });
+  if (!response.ok) throw new Error(`verify_archived_product: HTTP ${response.status}`);
+  const [product] = await response.json();
+  return product?.status === 'archived';
+};
+const clearPendingReport = async (report) => {
+  const key = `${get(report, 'platform', 'marketplace', 'store')}:${get(report, 'external_id', 'externalId', 'id', 'productId')}`;
+  let pending = [];
+  if (unavailableReportPath !== inputPath) {
+    try { pending = JSON.parse(await fs.readFile(unavailableReportPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const filtered = (Array.isArray(pending) ? pending : []).filter((item) => `${item.platform}:${item.externalId}` !== key);
+    await fs.writeFile(unavailableReportPath, `${JSON.stringify(filtered, null, 2)}\n`, 'utf8');
+    return;
+  }
+  const catalogPayload = Array.isArray(payload) ? { products } : payload;
+  catalogPayload.confirmedUnavailable = (catalogPayload.confirmedUnavailable || []).filter((item) => `${item.platform}:${item.externalId}` !== key);
+  await fs.writeFile(inputPath, `${JSON.stringify(catalogPayload, null, 2)}\n`, 'utf8');
+};
+
+for (const report of dryRun ? [] : unavailableReports) {
+  if (!isUnavailableEvidence(report)) {
+    rejected.push({ id: get(report, 'external_id', 'externalId', 'id', 'productId'), errors: ['evidencia_de_indisponibilidade_ausente_ou_invalida'] });
+    continue;
+  }
+  try {
+    const archivedResult = await requestArchive(get(report, 'platform', 'marketplace', 'store'), text(get(report, 'external_id', 'externalId', 'id', 'productId')));
+    if (archivedResult === false && !(await isAlreadyArchived(get(report, 'platform', 'marketplace', 'store'), text(get(report, 'external_id', 'externalId', 'id', 'productId'))))) {
+      throw new Error('Produto não encontrado ou não arquivado no catálogo.');
+    }
+    archived++;
+    await clearPendingReport(report);
+    report.archivedAt = new Date().toISOString();
+  } catch (error) { rejected.push({ id: get(report, 'external_id', 'externalId', 'id', 'productId'), errors: [String(error.message)] }); }
+}
 
 for (const [index, item] of selectedProducts.entries()) {
+  if (item?.marketplaceUnavailable === true) {
+    const platform = get(item, 'platform', 'marketplace', 'store');
+    const externalId = text(get(item, 'external_id', 'externalId', 'id', 'productId'));
+    if (!isUnavailableEvidence(item)) { rejected.push({ index, id: externalId, errors: ['evidencia_de_indisponibilidade_ausente_ou_invalida'] }); continue; }
+    try { await requestArchive(platform, externalId); archived++; }
+    catch (error) { rejected.push({ index, id: externalId, errors: [String(error.message)] }); }
+    continue;
+  }
   const { errors, row } = normalize(item);
   if (errors.length) { rejected.push({ index, id: get(item, 'id', 'external_id'), errors }); continue; }
   try {
     const isAvailable = row.stock_status === 'in_stock';
-    await requestImport({ ...row, status: row.link_is_official && isAvailable ? 'published' : 'draft', link_status: row.link_is_official ? 'active' : 'broken', observed_at: item.offerObservedAt ?? item.offer_observed_at ?? item.observedAt ?? item.observed_at ?? new Date().toISOString() });
+    await requestImport({ ...row, status: row.link_is_official && isAvailable ? 'published' : 'draft', link_status: row.link_is_official ? 'active' : 'broken' });
     imported++;
   } catch (error) { rejected.push({ index, id: row.external_id, errors: [String(error.message)] }); }
 }
-console.log(JSON.stringify({ input_total: products.length, selected_total: selectedProducts.length, imported, rejected_count: rejected.length, rejected }, null, 2));
+console.log(JSON.stringify({ input_total: products.length, selected_total: selectedProducts.length, imported, archived, rejected_count: rejected.length, rejected }, null, 2));
 if (rejected.length) process.exitCode = 1;
 }

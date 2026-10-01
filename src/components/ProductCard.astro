@@ -17,7 +17,6 @@ interface Props {
     installments?: string;
     coupon?: string;
     stockStatus?: string;
-    url?: string;
   };
 }
 
@@ -54,7 +53,7 @@ const isML = product.platform === 'mercadolivre';
     </div>
 
     <h3 class="card-title">
-      <a href={`/produto/${product.id}`} title={product.title}>
+      <a href={`/produto?id=${encodeURIComponent(product.id)}`} title={product.title}>
         {product.title}
       </a>
     </h3>
@@ -84,18 +83,11 @@ const isML = product.platform === 'mercadolivre';
 
     <div class="card-actions">
       <a
-        href={product.url || `/produto/${product.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
+        href={`/produto?id=${encodeURIComponent(product.id)}`}
         class="btn-primary card-outbound-btn"
-        aria-label={`Ver oferta de ${product.title} no ${product.storeName || 'Marketplace'}`}
+        aria-label={`Ver detalhes e disponibilidade de ${product.title}`}
       >
-        <span>Ver na Loja</span>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-          <polyline points="15 3 21 3 21 9"></polyline>
-          <line x1="10" y1="14" x2="21" y2="3"></line>
-        </svg>
+        <span>Ver oferta</span>
       </a>
 
       <button
@@ -198,7 +190,7 @@ const isML = product.platform === 'mercadolivre';
   }
 
   .card-title a:hover {
-    color: var(--accent-cyan);
+    color: var(--text-primary);
   }
 
   .card-price-block {
