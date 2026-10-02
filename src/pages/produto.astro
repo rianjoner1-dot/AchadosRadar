@@ -223,12 +223,12 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-breadcrumb span:last-child { overflow:hidden; text-overflow:ellipsis; }
   .product-overview { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr); gap:38px; }
   .product-main-image { aspect-ratio:1; display:grid; place-items:center; padding:24px; border:1px solid #e1e1e1; border-radius:8px; background:white; }
-  .product-main-image img { width:100%; height:100%; object-fit:contain; }
+  .product-main-image img { width:100%; height:100%; object-fit:contain; object-position:center top; }
   .product-thumbnails { display:flex; gap:8px; overflow:auto; padding:10px 0; }
   .gallery-thumb { width:72px; height:72px; border:1px solid #ddd; border-radius:5px; padding:4px; flex:0 0 auto; background:white; }
   .gallery-thumb[aria-pressed="true"] { border-color:#333; }
   .gallery-thumb:focus-visible { outline:3px solid #333; outline-offset:2px; }
-  .gallery-thumb img { width:100%; height:100%; object-fit:contain; }
+  .gallery-thumb img { width:100%; height:100%; object-fit:contain; object-position:center top; }
   .product-info { display:flex; flex-direction:column; align-items:flex-start; gap:12px; }
   .product-store { display:flex; align-items:center; gap:8px; min-height:30px; padding:5px 9px; border:1px solid #e4e8ec; border-radius:8px; background:#f7f9fb; color:#555; text-transform:uppercase; font-size:.75rem; letter-spacing:.05em; font-weight:700; }
   .product-store img { display:block; width:58px; height:20px; object-fit:contain; border-radius:2px; }
@@ -273,11 +273,11 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
 
 <style is:global>
   /* Product facts, gallery thumbnails and related cards are populated after hydration. */
-  #productMainImage img { width: 100%; height: 100%; object-fit: contain; }
+  #productMainImage img { width: 100%; height: 100%; object-fit: contain; object-position: center top; }
   #productThumbnails .gallery-thumb { width: 72px; height: 72px; border: 1px solid #ddd; border-radius: 5px; padding: 4px; flex: 0 0 auto; background: #fff; }
   #productThumbnails .gallery-thumb[aria-pressed="true"] { border-color: #333; }
   #productThumbnails .gallery-thumb:focus-visible { outline: 3px solid #333; outline-offset: 2px; }
-  #productThumbnails .gallery-thumb img { width: 100%; height: 100%; object-fit: contain; }
+  #productThumbnails .gallery-thumb img { width: 100%; height: 100%; object-fit: contain; object-position: center top; }
   #productPrice { display: flex; flex-direction: column; gap: 5px; width: 100%; background: #f7f7f7; padding: 16px; border-radius: 7px; }
   #productPrice .price-observed { color: #666; font-size: .75rem; }
   #productPrice strong { color: #222; font-size: 1.9rem; }
@@ -286,7 +286,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   #productFacts li span { color: #666; }
   #productFacts li strong { color: #222; text-align: right; }
   #relatedGrid .related-card { border: 1px solid #e5e5e5; border-radius: 7px; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 10px; }
-  #relatedGrid .related-card img { width: 100%; height: 140px; object-fit: contain; padding: 10px; background: #fff; }
+  #relatedGrid .related-card img { width: 100%; height: 140px; object-fit: contain; object-position: center top; padding: 10px; background: #fff; }
   #relatedGrid .related-image-placeholder { display: grid; width: 100%; height: 140px; place-items: center; padding: 10px; background: #f6f6f6; color: #666; font-size: .82rem; }
   #relatedGrid .related-card a span { display: block; padding: 8px 10px; color: #333; font-size: .84rem; }
   #relatedGrid .related-card strong { padding: 0 10px; color: #222; }
