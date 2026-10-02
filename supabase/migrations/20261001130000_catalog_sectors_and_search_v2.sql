@@ -140,7 +140,6 @@ RETURNS TABLE (
 )
 LANGUAGE sql STABLE SECURITY INVOKER
 SET search_path = public
-SET pg_trgm.word_similarity_threshold = '0.4'
 AS $$
   WITH query AS (
     SELECT public.normalize_catalog_text(search_query) AS normalized,
