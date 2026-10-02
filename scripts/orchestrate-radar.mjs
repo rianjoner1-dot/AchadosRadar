@@ -29,7 +29,7 @@ async function findBrowser() {
     .sort((left, right) => Number(right.name.slice(9)) - Number(left.name.slice(9)))
     .map((entry) => path.join(root, entry.name, 'chrome-win64', 'chrome.exe'));
   for (const candidate of candidates) {
-    try { await access(candidate); return { path: candidate, name: 'Chromium' }; } catch {}
+    try { await access(candidate); return { path: candidate, name: 'Chromium' }; } catch { }
   }
   throw new Error(`Chromium não encontrado em ${root}. Instale com 'npx playwright install chromium'.`);
 }
@@ -94,12 +94,12 @@ let commandId = 0;
 const pendingCommands = new Map();
 socket.addEventListener('message', (event) => {
   const message = JSON.parse(event.data);
-  
+
   if (message.method === 'Runtime.consoleAPICalled') {
     const args = message.params.args.map(a => a.value || a.description || '').join(' ');
     const isError = message.params.type === 'error';
     const isWarning = message.params.type === 'warning';
-    
+
     if (isError) {
       console.error(`\x1b[31m[Robô] ${args}\x1b[0m`); // Vermelho
     } else if (isWarning) {
@@ -109,7 +109,7 @@ socket.addEventListener('message', (event) => {
     }
     return;
   }
-  
+
   if (message.method === 'Runtime.exceptionThrown') {
     const exception = message.params.exceptionDetails;
     const text = exception.text || 'Exceção desconhecida';

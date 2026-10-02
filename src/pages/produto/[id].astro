@@ -15,8 +15,8 @@ export function getStaticPaths() {
 
 const { product: sourceProduct } = Astro.props;
 const product = { ...sourceProduct, image: upgradeProductImageUrl(sourceProduct.platform, sourceProduct.image) };
-const isML = product.platform === 'mercadolivre';
-const storeName = isML ? 'Mercado Livre' : 'Magalu';
+const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' };
+const storeName = marketplaceNames[product.platform] ?? 'Loja parceira';
 const relatedProducts = sampleProducts.filter((item) => item.id !== product.id).map((item) => ({
   ...item,
   image: upgradeProductImageUrl(item.platform, item.image)
@@ -149,7 +149,7 @@ const canonicalUrl = canonicalOrigin ? new URL(`/produto/${encodeURIComponent(pr
           <article class="demo-related-card" data-demo-related-card hidden={index >= 8}>
             <a href={`/produto/${encodeURIComponent(item.id)}`} aria-label={`Ver ${item.title}`}>
               <img src={item.image} alt="" width="220" height="170" loading="lazy" decoding="async" />
-              <small>{item.platform === 'magalu' ? 'Magalu' : 'Mercado Livre'}</small>
+              <small>{marketplaceNames[item.platform] ?? 'Loja parceira'}</small>
               <span>{item.title}</span>
             </a>
             <strong>{item.priceFormatted}</strong>

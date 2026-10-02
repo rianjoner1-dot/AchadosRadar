@@ -92,7 +92,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   const content = document.querySelector<HTMLElement>('#productContent')!;
   const error = document.querySelector<HTMLElement>('#productError')!;
   const id = new URLSearchParams(location.search).get('id');
-  const storeName = (platform: string) => platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
+  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' } as Record<string, string>)[platform] ?? 'Loja parceira';
   function saveProduct(product: CatalogProduct) {
     const offer = product.offer;
     return saveCartItem({ id: product.id, platform: product.platform, title: product.title, price: offer?.price ?? null, priceFormatted: formatPrice(offer?.price), image: product.images?.[0]?.url ?? '', sellerName: offer?.seller_name ?? '', installments: offer?.installments_text ?? '' });

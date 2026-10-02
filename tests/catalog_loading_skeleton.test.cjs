@@ -7,7 +7,10 @@ const home = fs.readFileSync(path.join(__dirname, '../src/pages/index.astro'), '
 
 test('F1.12: initial loading reserves the first 20-item page until its cards settle', () => {
   assert.match(home, /Array\.from\(\{ length: 20 \}/);
-  assert.match(home, /searchCatalog\(\{ \.\.\.currentFilters\(\), cursor, limit: 20,/);
+  assert.match(home, /searchCatalog\(\{ \.\.\.filters, cursor, limit: 20,/);
+  assert.match(home, /const \{ products, fetched \} = await takeCatalogBatch\(version\)/);
+  assert.match(home, /Promise\.all\(platformsToFetch\.map\(\(platform\) => fetchPlatformPage\(platform, filters, version\)\)\)/);
+  assert.match(home, /const candidates = interleaveByPlatform\(catalogPlatforms\.flatMap/);
   assert.match(home, /data-catalog-skeleton aria-hidden="true"/);
   assert.match(home, /function reserveFirstPageHeight\(\)/);
   assert.match(home, /const rows = Math\.ceil\(20 \/ columns\)/);

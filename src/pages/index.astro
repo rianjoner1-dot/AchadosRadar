@@ -8,6 +8,7 @@ export const prerender = true;
 
 const title = 'Achados Radar | Ofertas para comparar';
 const description = 'Compare ofertas observadas no Mercado Livre e Magalu. A compra é concluída na loja parceira.';
+const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' };
 const demo = demoProducts.map((product) => ({
   ...product,
   demo: true,
@@ -81,7 +82,7 @@ const demo = demoProducts.map((product) => ({
         <article class="catalog-card" data-demo-card data-platform={product.platform} data-search-title={product.title} data-search-seller={product.sellerName || ''} data-price={product.price}>
           <a class="catalog-image" href={product.detailUrl} aria-label={`Ver ${product.title}`}><img src={product.image} alt={product.title} width="320" height="260" loading="lazy" decoding="async" /></a>
           <div class="catalog-card-body">
-            <div class="catalog-card-topline"><span class="store-label"><img src={`/images/marketplaces/${product.platform}.png`} alt="" width="480" height="160" loading="lazy" />{product.storeName || (product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre')}</span><span class="stock-pill stock-check">Amostra</span></div>
+            <div class="catalog-card-topline"><span class="store-label"><img src={`/images/marketplaces/${product.platform}.png`} alt="" width="480" height="160" loading="lazy" />{product.storeName || marketplaceNames[product.platform] || 'Loja parceira'}</span><span class="stock-pill stock-check">Amostra</span></div>
             <h3><a href={product.detailUrl}>{product.title}</a></h3>
             <div class="catalog-price-panel"><span class="price-caption">Preço de exemplo</span><p class="catalog-price">{product.priceFormatted}</p></div>
             <a class="btn-secondary card-detail-link" href={product.detailUrl}>Ver detalhes</a>
@@ -98,6 +99,7 @@ const demo = demoProducts.map((product) => ({
 <script>
   import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
   import { selectSpotlightOffers } from '../modules/catalog/spotlights.mjs';
+  import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
   import { isKnownUnavailableMercadoLivreImage, preloadProductImage } from '../modules/catalog/image-health.js';
   import { matchesDemoProduct } from '../modules/catalog/search-utils.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
@@ -116,9 +118,17 @@ const demo = demoProducts.map((product) => ({
   const imageDestinationChecks = new Map<string, Promise<boolean>>();
   let spotlightRenderVersion = 0;
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
+  const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' };
   const marketplaceButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-marketplace-filter]')];
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
-  let cursor: { created_at: string; id: string; price?: number | null; score?: number | null } | null = null;
+  type CatalogCursor = { created_at: string; id: string; price?: number | null; score?: number | null };
+  let cursor: CatalogCursor | null = null;
+  let catalogBuffer: CatalogProduct[] = [];
+  let catalogExhausted = false;
+  const catalogPlatforms = ['mercadolivre', 'magalu', 'amazon', 'shopee'];
+  let platformCursors = new Map<string, CatalogCursor | null>();
+  let platformBuffers = new Map<string, CatalogProduct[]>();
+  let exhaustedPlatforms = new Set<string>();
   let controller: AbortController | null = null;
   let loading = false;
   let autoLoadEnabled = true;
@@ -145,7 +155,7 @@ const demo = demoProducts.map((product) => ({
     const { product, discountPercent } = entry;
     const id = encodeURIComponent(product.id);
     const image = safeImage(product);
-    const store = product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
+    const store = marketplaceNames[product.platform] || 'Loja parceira';
     const offer = product.offer;
     const discount = discountPercent
       ? `<span class="spotlight-discount">${discountPercent}% abaixo do preço anterior informado</span><span class="spotlight-old-price">De ${formatPrice(offer?.old_price)}</span>`
@@ -269,7 +279,7 @@ const demo = demoProducts.map((product) => ({
 
   function renderCard(product: CatalogProduct) {
     const id = encodeURIComponent(product.id);
-    const store = product.platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
+    const store = marketplaceNames[product.platform] || 'Loja parceira';
     const marketplaceLogo = `/images/marketplaces/${product.platform}.png`;
     const offer = product.offer;
     const price = formatPrice(offer?.price);
@@ -325,6 +335,69 @@ const demo = demoProducts.map((product) => ({
     for (const button of marketplaceButtons) button.setAttribute('aria-pressed', String(button.dataset.marketplaceFilter === selected));
   }
 
+  function shouldMixCurrentFeed() {
+    const filters = currentFilters();
+    return filters.platform === 'all' && filters.sort === 'recent';
+  }
+
+  async function fetchCatalogPage(filters: ReturnType<typeof currentFilters>, version: number) {
+    const page = await searchCatalog({ ...filters, cursor, limit: 20, signal: controller?.signal });
+    if (version !== requestVersion) return [];
+    if (!page.length || page.length < 20) catalogExhausted = true;
+    else {
+      const last = page[page.length - 1];
+      cursor = { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null };
+      catalogBuffer.push(...page);
+    }
+    return page;
+  }
+
+  async function fetchPlatformPage(platform: string, filters: ReturnType<typeof currentFilters>, version: number) {
+    const page = await searchCatalog({ ...filters, platform, cursor: platformCursors.get(platform) ?? null, limit: 20, signal: controller?.signal });
+    if (version !== requestVersion) return [];
+    const buffer = platformBuffers.get(platform) ?? [];
+    if (!page.length || page.length < 20) exhaustedPlatforms.add(platform);
+    if (page.length) {
+      const last = page[page.length - 1];
+      platformCursors.set(platform, { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null });
+      platformBuffers.set(platform, [...buffer, ...page]);
+    }
+    return page;
+  }
+
+  async function takeCatalogBatch(version: number) {
+    const filters = currentFilters();
+    const fetched: CatalogProduct[] = [];
+    const shouldMixStores = filters.platform === 'all' && filters.sort === 'recent';
+    if (shouldMixStores) {
+      const platformsToFetch = catalogPlatforms.filter((platform) => !exhaustedPlatforms.has(platform) && (platformBuffers.get(platform)?.length ?? 0) < 20);
+      const pages = await Promise.all(platformsToFetch.map((platform) => fetchPlatformPage(platform, filters, version)));
+      fetched.push(...pages.flat());
+      if (version !== requestVersion) return { products: [], fetched };
+
+      const candidates = interleaveByPlatform(catalogPlatforms.flatMap((platform) => platformBuffers.get(platform) ?? []));
+      const products = candidates.slice(0, 20);
+      const selectedIds = new Set(products.map((product) => product.id));
+      for (const platform of catalogPlatforms) {
+        platformBuffers.set(platform, (platformBuffers.get(platform) ?? []).filter((product) => !selectedIds.has(product.id)));
+      }
+      return { products, fetched };
+    }
+
+    while (!catalogExhausted && catalogBuffer.length < 20) {
+      const page = await fetchCatalogPage(filters, version);
+      fetched.push(...page);
+      if (!page.length || version !== requestVersion) break;
+    }
+
+    if (version !== requestVersion) return { products: [], fetched };
+    const candidates = catalogBuffer;
+    const products = candidates.slice(0, 20);
+    const remainingIds = new Set(products.map((product) => product.id));
+    catalogBuffer = candidates.filter((product) => !remainingIds.has(product.id));
+    return { products, fetched };
+  }
+
   async function load(reset: boolean) {
     if (reset) {
       requestVersion++;
@@ -334,6 +407,11 @@ const demo = demoProducts.map((product) => ({
       controller?.abort();
       controller = new AbortController();
       cursor = null;
+      catalogBuffer = [];
+      catalogExhausted = false;
+      platformCursors = new Map();
+      platformBuffers = new Map();
+      exhaustedPlatforms = new Set();
       appendedCount = 0;
     }
     if (!catalogReady || loading) return;
@@ -342,9 +420,9 @@ const demo = demoProducts.map((product) => ({
     status.textContent = 'Buscando ofertas...';
     const version = requestVersion;
     try {
-      const products = await searchCatalog({ ...currentFilters(), cursor, limit: 20, signal: controller?.signal });
+      const { products, fetched } = await takeCatalogBatch(version);
       if (version !== requestVersion) return;
-      if (reset) { grid.replaceChildren(); void prepareSpotlights(products, true); }
+      if (reset) { grid.replaceChildren(); void prepareSpotlights(fetched, true); }
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
       grid.removeAttribute('data-loading');
       if (reset) {
@@ -358,12 +436,12 @@ const demo = demoProducts.map((product) => ({
         reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
       });
       appendedCount += products.length;
-      if (products.length) cursor = { created_at: products[products.length - 1].created_at, id: products[products.length - 1].id, price: products[products.length - 1].offer?.price ?? null, score: products[products.length - 1].search_score ?? null };
       status.textContent = products.length === 0 && !reset && appendedCount > 0
         ? `Fim das ofertas disponíveis. ${appendedCount} produtos carregados.`
         : `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 20 ? ' · role ou carregue mais' : ''}`;
       empty.hidden = appendedCount > 0;
-      loadMore.hidden = products.length < 20;
+      const mixedFeedHasMore = catalogPlatforms.some((platform) => !exhaustedPlatforms.has(platform) || (platformBuffers.get(platform)?.length ?? 0) > 0);
+      loadMore.hidden = shouldMixCurrentFeed() ? !mixedFeedHasMore : catalogExhausted && catalogBuffer.length === 0;
       autoLoadEnabled = true;
       loadMore.textContent = 'Carregar mais ofertas';
       if (appendedCount > 80) {
