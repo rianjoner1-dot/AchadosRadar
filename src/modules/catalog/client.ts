@@ -114,3 +114,12 @@ export function formatPrice(value?: number | null): string {
 export function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 }
+
+export function logSearchTermAsync(query?: string, sector?: string) {
+  if (!catalogReady || !query?.trim()) return;
+  fetch(`${config.url}/rest/v1/rpc/log_search_term`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ query: query.trim(), sector: sector || null })
+  }).catch(() => { /* falha silenciosa, apenas log */ });
+}

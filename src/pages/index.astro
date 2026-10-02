@@ -113,7 +113,7 @@ const demo = demoProducts.map((product) => ({
 </Layout>
 
 <script>
-  import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, type CatalogProduct } from '../modules/catalog/client';
+  import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, logSearchTermAsync, type CatalogProduct } from '../modules/catalog/client';
   import { selectSpotlightOffers } from '../modules/catalog/spotlights.mjs';
   import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
   import { isKnownUnavailableMercadoLivreImage, preloadProductImage } from '../modules/catalog/image-health.js';
@@ -528,19 +528,33 @@ const demo = demoProducts.map((product) => ({
   }
 
   let debounce: number;
+  let logDebounce: number;
+  let lastLoggedQuery = '';
+  function logCurrentSearch() {
+    const currentQ = queryInput.value.trim();
+    if (currentQ && currentQ !== lastLoggedQuery) {
+      lastLoggedQuery = currentQ;
+      logSearchTermAsync(currentQ, sectorFilter.value);
+    }
+  }
+
   queryInput.addEventListener('input', () => {
     if (globalSearch) globalSearch.value = queryInput.value;
     window.clearTimeout(debounce);
+    window.clearTimeout(logDebounce);
     debounce = window.setTimeout(() => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); }, 250);
+    logDebounce = window.setTimeout(logCurrentSearch, 2000);
   });
   globalSearch?.addEventListener('input', () => {
     queryInput.value = globalSearch.value;
     window.clearTimeout(debounce);
+    window.clearTimeout(logDebounce);
     debounce = window.setTimeout(() => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); }, 250);
+    logDebounce = window.setTimeout(logCurrentSearch, 2000);
   });
-  globalSearch?.form?.addEventListener('submit', (event) => { event.preventDefault(); queryInput.value = globalSearch.value; syncUrl(); void load(true); });
+  globalSearch?.form?.addEventListener('submit', (event) => { event.preventDefault(); queryInput.value = globalSearch.value; syncUrl(); logCurrentSearch(); void load(true); });
   form.addEventListener('change', () => { syncMarketplaceButtons(); syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
-  form.addEventListener('submit', (event) => { event.preventDefault(); syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
+  form.addEventListener('submit', (event) => { event.preventDefault(); syncUrl(); logCurrentSearch(); if (catalogReady) void load(true); else filterDemo(); });
   for (const button of marketplaceButtons) button.addEventListener('click', () => {
     platformFilter.value = button.dataset.marketplaceFilter ?? 'all';
     syncMarketplaceButtons();
