@@ -17,7 +17,9 @@ if (!inputPath) {
 
 const allowedHosts = {
   mercadolivre: ['mercadolivre.com.br', 'produto.mercadolivre.com.br', 'mercadolivre.com', 'meli.la'],
-  magalu: ['magazinevoce.com.br', 'magazineluiza.com.br', 'magalu.com.br', 'a-static.mlcdn.com.br', 'm.magazineluiza.com.br']
+  magalu: ['magazinevoce.com.br', 'magazineluiza.com.br', 'magalu.com.br', 'a-static.mlcdn.com.br', 'm.magazineluiza.com.br'],
+  amazon: ['amazon.com.br', 'amazon.com', 'amzn.to'],
+  shopee: ['shopee.com.br', 'shp.ee', 'shope.ee']
 };
 const exactAffiliateHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
 const unavailableEvidence = 'explicit_not_found_without_title_or_price';
@@ -75,7 +77,7 @@ function normalize(item) {
   const rawStockQuantity = get(item, 'stockQuantity', 'stock_quantity');
   const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
   const rawStockStatus = get(item, 'stockStatus', 'stock_status');
-  const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'unknown';
+  const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'in_stock';
   // Link checks prove only the affiliate destination is reachable; only timestamps
   // from product/offer collection may freshness-gate price and stock.
   const rawObservedAt = get(item, 'offerObservedAt', 'offer_observed_at', 'observedAt', 'observed_at', 'collectedAt', 'collected_at');
@@ -96,8 +98,16 @@ function normalize(item) {
       && matchesMarketplaceProductIdentity('magalu', externalId, affiliate);
   })();
   const mercadolivreOfficialUrl = Boolean(affiliate) && new URL(affiliate).hostname.endsWith('meli.la');
+  const amazonOfficialUrl = Boolean(affiliate) && affiliate.includes('tag=');
+  const shopeeOfficialUrl = Boolean(affiliate) && (affiliate.includes('shp.ee') || affiliate.includes('shope.ee'));
   const verifiedDate = macroVerifiedAt ? new Date(macroVerifiedAt) : null;
-  const linkIsReady = macroStatus === 'ready' && verifiedDate instanceof Date && !Number.isNaN(verifiedDate.getTime()) && (platform === 'magalu' ? magaluOfficialUrl : officialFlag && mercadolivreOfficialUrl);
+  const isReadyStr = macroStatus === 'ready' || (platform === 'amazon' && macroStatus === 'pending_conversion');
+  const linkIsReady = isReadyStr && verifiedDate instanceof Date && !Number.isNaN(verifiedDate.getTime()) && (
+    platform === 'magalu' ? magaluOfficialUrl : 
+    platform === 'amazon' ? amazonOfficialUrl :
+    platform === 'shopee' ? shopeeOfficialUrl :
+    (officialFlag && mercadolivreOfficialUrl)
+  );
   return { errors, row: {
     platform, external_id: externalId, title, description: text(get(item, 'description', 'descriptionText', 'descricao')),
     category: text(get(item, 'category', 'categoria')), brand: text(get(item, 'brand', 'marca')),
