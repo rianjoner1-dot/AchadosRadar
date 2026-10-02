@@ -19,16 +19,19 @@ export interface CatalogProduct {
   external_id: string;
   title: string;
   description?: string | null;
+  category?: string | null;
   created_at: string;
   images: { url: string; display_order: number; original_url?: string }[];
   offer: CatalogOffer | null;
   affiliate_link: { status: string; expires_at?: string | null; refresh_due_at?: string | null; verified_at?: string } | null;
+  sectors?: string[];
   search_score?: number;
 }
 
 import { getPublicSupabaseConfig } from '../shared/config';
 import { canReportCatalogImageFailure, markCatalogImageFailureReport } from './image-health.js';
 import { sanitizeCatalogProductImages } from './image-identity.mjs';
+import { buildCatalogSearchRequest } from './search-request.js';
 
 const supabaseConfig = getPublicSupabaseConfig();
 const config = {
@@ -54,18 +57,13 @@ function headers(token?: string): HeadersInit {
 }
 
 export async function searchCatalog(input: {
-  q?: string; platform?: string; min?: number; max?: number; sort?: string;
+  q?: string; platform?: string; min?: number; max?: number; sort?: string; sector?: string;
   cursor?: { created_at: string; id: string; price?: number | null; score?: number | null } | null; limit?: number; signal?: AbortSignal;
 }): Promise<CatalogProduct[]> {
   if (!catalogReady) throw new Error('Catálogo remoto ainda não configurado.');
-  const response = await fetch(`${config.url}/rest/v1/rpc/search_catalog`, {
+  const response = await fetch(`${config.url}/rest/v1/rpc/search_catalog_v2`, {
     method: 'POST', headers: headers(), signal: input.signal,
-    body: JSON.stringify({
-      search_query: input.q ?? '', target_platform: input.platform && input.platform !== 'all' ? input.platform : null,
-      min_price: input.min ?? null, max_price: input.max ?? null, sort_by: input.sort ?? 'recent',
-      cursor_created_at: input.cursor?.created_at ?? null, cursor_id: input.cursor?.id ?? null, cursor_price: input.cursor?.price ?? null,
-      page_size: input.limit ?? 20, cursor_score: input.cursor?.score ?? null
-    })
+    body: JSON.stringify(buildCatalogSearchRequest(input))
   });
   if (!response.ok) throw new Error(`Falha ao buscar catálogo (${response.status}).`);
   const products = await response.json();

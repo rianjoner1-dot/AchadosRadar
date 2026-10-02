@@ -20,3 +20,5 @@ Thumbs.db
 # Extras / IDE
 .vscode/
 supabase/.temp/
+data/chrome-profile/
+scratch/

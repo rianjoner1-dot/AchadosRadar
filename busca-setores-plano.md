@@ -1,0 +1,31 @@
+# Plano de implementação: busca e setores do catálogo
+
+Objetivo: os botões de setor filtrarem produtos relacionados, enquanto a busca aceita várias palavras, acentos e pequenos erros de digitação, mantendo preço, loja e paginação corretos.
+
+## Diagnóstico do patch recebido
+
+- Os botões atuais inserem listas como `vestido camisa calca moletom bolsa` no campo `q`. `normalize_catalog_query` remove os espaços: a consulta passa a ser uma única sequência. Acrescentar `category` ao título não resolve essa semântica.
+- O limiar global `word_similarity >= 0.15` pode admitir resultados pouco relacionados. A tolerância deve ser calibrada com exemplos positivos e negativos, por termo.
+- A busca proposta continua sem um parâmetro próprio de setor. “Moda” e uma busca digitada têm necessidades diferentes: setor aceita alternativas; consulta digitada exige que os termos relevantes sejam atendidos.
+- O índice atual cobre o título normalizado; a expressão nova concatena título e categoria e não corresponde a esse índice. Medir o plano de execução antes de criar índices.
+- As subconsultas de oferta usam somente `observed_at`. Empates podem fazer preço, filtros e dados exibidos dependerem de linhas diferentes. Selecionar uma única oferta com desempate estável.
+
+## Etapas e critérios de aceitação
+
+1. **Confirmar contrato e dados reais.** Conferir assinatura da RPC remota, nomes de colunas, grants/RLS e cobertura de `products.category`; comparar com as migrations locais. Registrar exemplos de cada loja e setor sem credenciais. **Validar:** identificar categorias ausentes, variações de nomes e diferenças entre banco remoto e arquivos locais antes de escrever a migration.
+
+2. **Definir setores independentes das palavras pesquisadas.** Usar slugs estáveis: `eletronicos`, `moda`, `moveis`, `pc-gamer`, `eletro`, `jardim`, `bebes`, `beleza`, `pet`, `casa`. Preservar a categoria original do marketplace e criar associação produto–setor que aceite vários setores. Fazer classificação inicial pela categoria; fallback por título com regras específicas, sinônimos e registro da origem. Evitar termos isolados ambíguos, como `importado`, `painel` e `carrinho`. **Validar:** blazer → Moda; teclado gamer → PC Gamer e Eletrônicos; carrinho de bebê → Bebês; itens sem classificação continuam em Tudo.
+
+3. **Separar filtro de setor e busca textual.** Criar `search_catalog_v2` com `target_sector` e contrato de resposta explícito para categoria/setores. Manter a RPC atual durante a transição, evitando sobrecargas ambíguas e mudança incompatível do `RETURNS TABLE`. Setor filtra associações; consulta digitada mantém palavras normalizadas separadas. Todos os termos significativos precisam corresponder ao título/categoria por palavra, prefixo ou aproximação controlada. Sinônimos e expressões compostas devem ser explícitos. **Validar:** `air fryer`/`airfryer`, `fone bluetooth`, `brimco`, acentos e pontuação; consultas irrelevantes não retornam produtos só por baixa similaridade. Definir comportamento para termos muito curtos.
+
+4. **Preservar consistência e relevância.** Selecionar a oferta mais recente uma vez por produto, com `observed_at DESC, id DESC`, e reutilizá-la em filtros, preço, ordenação e JSON. Priorizar título exato e correspondência de todos os termos sobre aproximação/categoria. Cursor deve reproduzir exatamente a ordem escolhida, incluindo score, preço nulo, data e UUID. **Validar:** ofertas empatadas, preços ausentes, limites mínimo/máximo e cinco páginas sem duplicar ou perder produtos em um conjunto estável.
+
+5. **Preparar migration, permissões e desempenho.** Criar migration incremental para associações de setores e RPC v2; manter `SECURITY INVOKER`, publicação e políticas existentes. Associação pública só pode revelar setores de produtos publicados; escrita segue a autorização do importador. Revogar execução de PUBLIC e conceder somente os papéis necessários. Avaliar índices com `EXPLAIN (ANALYZE, BUFFERS)` em dados representativos; comparações numéricas de similaridade sozinhas não comprovam uso de índice. **Validar:** anon não acessa rascunhos nem escreve classificações; retorno mantém uma imagem por card e máximo de 20 produtos por chamada. Registrar latência antes/depois.
+
+6. **Integrar frontend e classificação contínua.** Em `client.ts`, enviar `target_sector`; em `index.astro`, usar `?setor=moda&q=blazer` sem substituir o texto digitado pelo setor. Restaurar URL e `aria-pressed` ao abrir um link; Tudo limpa só o setor. Alterar qualquer filtro aborta requisições antigas e limpa buffers/cursors de todas as lojas. Preservar mistura por marketplace na navegação sem busca; com texto, priorizar relevância global. Importação passa a atualizar associações junto com a categoria, sem reclassificar manualmente todo o catálogo após cada radar. **Validar:** setor + loja + preço + texto combinam; recarregar mantém filtros; resposta antiga não reaparece após troca rápida; modo demo segue a mesma semântica.
+
+7. **Publicar em ordem e manter reversão pronta.** Primeiro validar migration e classificação em ambiente de desenvolvimento, depois aplicar no remoto com registro do resultado; habilitar frontend v2 somente após confirmar o contrato. Preservar RPC antiga e permitir retornar o frontend para ela. Ajustar regras sem apagar categoria original nem itens salvos. **Validar:** confirmar RPC acessível como anon antes do deploy e documentar reversão; nenhuma etapa remota está executada por este plano.
+
+8. **Validação final.** Ampliar `tests/search_utils.test.cjs` e `tests/database_block_d.test.cjs` com positivos/negativos, setores sobrepostos, categorias nulas, empate de ofertas e cursor. Executar testes, `astro check`, build e orçamento de assets/funções. No navegador, verificar setores, URL, teclado, vazio/erro, mistura entre lojas e carregamento contínuo. **Concluído quando:** resultados relevantes passam nos exemplos, nenhuma regressão de permissões/paginação ocorre e há evidência local e remota registrada em `docs/VALIDACOES.md`.
+
+O patch recebido deve ser substituído pela migration e integração acima. Não há razão comprovada para adotar `0.15` globalmente nem para tratar uma lista de palavras de setor como uma única consulta textual.

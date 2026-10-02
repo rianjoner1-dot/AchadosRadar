@@ -13,6 +13,7 @@ if (args.includes('--help')) {
   console.log('Uso: node scripts/verify-responsive.mjs [URL] [--routes=/,/conta] [--viewports=390,1440]');
   console.log('Saida: --summary-only mostra somente o resultado por rota e o detalhe da galeria real.');
   console.log('Fluxos opcionais: --smoke-search valida busca, loja, precos minimo/maximo e ordenacao sem registrar eventos.');
+  console.log('Fluxos opcionais: --smoke-sectors valida setor, busca, loja, preco e restauracao da URL no catalogo de demonstracao.');
   console.log('Fluxos opcionais: --smoke-related-feed percorre as paginas relacionadas disponiveis sem abrir ofertas.');
   console.log('Fluxos opcionais: --smoke-guest-cart valida salvar/remover um produto de demonstração sem sair para o marketplace.');
   console.log('Fluxos opcionais: --smoke-account-ui valida o nome da primeira conta e a seleção visual de foto sem enviar dados.');
@@ -137,6 +138,7 @@ try {
   let guestCartSmoke = null;
   let adminGuestSmoke = null;
   let catalogSearchSmoke = null;
+  let sectorFilterSmoke = null;
   let relatedFeedSmoke = null;
   let accountUiSmoke = null;
   let isStaticArtifact = false;
@@ -473,16 +475,16 @@ try {
       const state = await command('Runtime.evaluate', {
         returnByValue: true,
         expression: `(() => ({ query: new URLSearchParams(location.search).get('q'), status: document.querySelector('#catalogStatus')?.textContent || '',
-          cards: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton])')].map(card => ({
+          cards: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]):not([hidden])')].map(card => ({
             title: card.querySelector('h3')?.textContent?.trim() || '', store: card.querySelector('.store-label')?.textContent?.trim() || '',
             price: Number((card.querySelector('.catalog-price')?.textContent || '').match(/[0-9][0-9.]*,[0-9]{2}/)?.[0]?.replaceAll('.', '').replace(',', '.') || 0)
           })) }))()`
       });
       searchState = state.result.value;
-      if (searchState.query === 'fone' && !searchState.status.includes('Buscando')) break;
+      if (searchState.query === 'fone' && searchState.cards.length > 0 && searchState.cards.every((card) => /fone/i.test(card.title))) break;
       await delay(100);
     }
-    if (searchState?.query !== 'fone' || !searchState.cards.length || !searchState.cards.some((card) => /fone/i.test(card.title))) {
+    if (searchState?.query !== 'fone' || !searchState.cards.length || searchState.cards.some((card) => !/fone/i.test(card.title))) {
       throw new Error(`Catalog search did not return matching offers: ${JSON.stringify(searchState)}`);
     }
     const selectedStore = /magalu/i.test(searchState.cards[0].store) ? 'magalu' : 'mercadolivre';
@@ -494,7 +496,7 @@ try {
       const state = await command('Runtime.evaluate', {
         returnByValue: true,
         expression: `(() => ({ store: new URLSearchParams(location.search).get('loja'), status: document.querySelector('#catalogStatus')?.textContent || '',
-          cards: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton])')].map(card => card.querySelector('.store-label')?.textContent?.trim() || '') }))()`
+          cards: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]):not([hidden])')].map(card => card.querySelector('.store-label')?.textContent?.trim() || '') }))()`
       });
       filteredState = state.result.value;
       if (filteredState.store === selectedStore && !filteredState.status.includes('Buscando')) break;
@@ -512,8 +514,8 @@ try {
       const state = await command('Runtime.evaluate', {
         returnByValue: true,
         expression: `(() => ({ sort: new URLSearchParams(location.search).get('ordem'), status: document.querySelector('#catalogStatus')?.textContent || '',
-          priceTexts: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]) .catalog-price')].map(el => el.textContent?.trim() || ''),
-          prices: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]) .catalog-price')].map(el => Number((el.textContent || '').match(/[0-9][0-9.]*,[0-9]{2}/)?.[0]?.replaceAll('.', '').replace(',', '.') || 0)) }))()`
+          priceTexts: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]):not([hidden]) .catalog-price')].map(el => el.textContent?.trim() || ''),
+          prices: [...document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]):not([hidden]) .catalog-price')].map(el => Number((el.textContent || '').match(/[0-9][0-9.]*,[0-9]{2}/)?.[0]?.replaceAll('.', '').replace(',', '.') || 0)) }))()`
       });
       sortedState = state.result.value;
       if (sortedState.sort === 'price_asc' && !sortedState.status.includes('Buscando')) break;
@@ -529,7 +531,7 @@ try {
         const response = await command('Runtime.evaluate', {
           returnByValue: true,
           expression: `(() => ({ value: new URLSearchParams(location.search).get('${parameter}'), status: document.querySelector('#catalogStatus')?.textContent || '',
-            count: document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton])').length }))()`
+            count: document.querySelectorAll('#catalogGrid .catalog-card:not([data-catalog-skeleton]):not([hidden])').length }))()`
         });
         state = response.result.value;
         if (state.value === value && !state.status.includes('Buscando')) break;
@@ -558,6 +560,80 @@ try {
       filteredResults: filteredState.cards.length, priceAscending: true, sortedResults: sortedState.prices.length,
       minPriceExcludesHigherOffers: minFilterState.count === 0, maxPriceExcludesLowerOffers: maxFilterState.count === 0,
       clearingPriceFiltersRestoresResults: resetPriceState.count > 0 };
+  }
+
+  if (args.includes('--smoke-sectors')) {
+    currentCheck = 'catalog sector, query and URL restoration smoke';
+    await command('Page.navigate', { url: new URL('/', baseUrl).href });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const ready = await command('Runtime.evaluate', { expression: 'document.readyState === "complete"', returnByValue: true });
+      if (ready.result.value) break;
+      if (attempt === 99) throw new Error('Catalog page did not finish loading for sector smoke.');
+      await delay(100);
+    }
+    await command('Runtime.evaluate', {
+      expression: `(() => { const field = document.querySelector('#catalogSearch'); field.value = 'air fryer'; field.dispatchEvent(new Event('input', { bubbles: true })); })()`
+    });
+    let initialSectorState = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => ({ query: document.querySelector('#catalogSearch')?.value || '', urlQuery: new URLSearchParams(location.search).get('q'), cards: [...document.querySelectorAll('#catalogGrid .catalog-card[data-demo-card]:not([hidden])')].map(card => ({ title: card.querySelector('h3')?.textContent?.trim() || '', platform: card.dataset.platform })) }))()`
+      });
+      initialSectorState = state.result.value;
+      if (initialSectorState.urlQuery === 'air fryer' && initialSectorState.cards.length > 0 && initialSectorState.cards.every((card) => /air fryer/i.test(card.title))) break;
+      await delay(50);
+    }
+    if (initialSectorState?.query !== 'air fryer' || !initialSectorState.cards.length || initialSectorState.cards.some((card) => !/air fryer/i.test(card.title))) {
+      throw new Error(`Demo search did not find only matching air fryer fixtures: ${JSON.stringify(initialSectorState)}`);
+    }
+    const platform = initialSectorState.cards[0].platform;
+    await command('Runtime.evaluate', {
+      expression: `(() => { const store = document.querySelector('#platformFilter'); store.value = '${platform}'; store.dispatchEvent(new Event('change', { bubbles: true }));
+        const minimum = document.querySelector('#minPrice'); minimum.value = '1'; minimum.dispatchEvent(new Event('change', { bubbles: true }));
+        document.querySelector('.sector-btn[data-sector="eletro"]')?.click(); })()`
+    });
+    const selectedSector = await command('Runtime.evaluate', {
+      returnByValue: true,
+      expression: `(() => ({ query: document.querySelector('#catalogSearch')?.value || '', sector: new URLSearchParams(location.search).get('setor'), store: new URLSearchParams(location.search).get('loja'), min: new URLSearchParams(location.search).get('min'),
+        pressed: document.querySelector('.sector-btn[data-sector="eletro"]')?.getAttribute('aria-pressed'), cards: [...document.querySelectorAll('#catalogGrid .catalog-card[data-demo-card]:not([hidden])')].map(card => ({ title: card.querySelector('h3')?.textContent?.trim() || '', platform: card.dataset.platform })) }))()`
+    });
+    const selected = selectedSector.result.value;
+    if (selected.query !== 'air fryer' || selected.sector !== 'eletro' || selected.store !== platform || selected.min !== '1' || selected.pressed !== 'true' ||
+      !selected.cards.length || selected.cards.some((card) => !/air fryer/i.test(card.title) || card.platform !== platform)) {
+      throw new Error(`Sector, query, store and price filters did not combine: ${JSON.stringify(selected)}`);
+    }
+    await command('Runtime.evaluate', { expression: `document.querySelector('.sector-btn[data-sector=""]')?.click()` });
+    const clearedSector = await command('Runtime.evaluate', {
+      returnByValue: true,
+      expression: `(() => ({ query: document.querySelector('#catalogSearch')?.value || '', sector: new URLSearchParams(location.search).get('setor'), store: new URLSearchParams(location.search).get('loja'), min: new URLSearchParams(location.search).get('min'),
+        allPressed: document.querySelector('.sector-btn[data-sector=""]')?.getAttribute('aria-pressed'), visibleCount: document.querySelectorAll('#catalogGrid .catalog-card[data-demo-card]:not([hidden])').length }))()`
+    });
+    const cleared = clearedSector.result.value;
+    if (cleared.query !== 'air fryer' || cleared.sector || cleared.store !== platform || cleared.min !== '1' || cleared.allPressed !== 'true' || cleared.visibleCount === 0) {
+      throw new Error(`Everything did not clear only the sector filter: ${JSON.stringify(cleared)}`);
+    }
+    const restoredUrl = new URL('/', baseUrl);
+    restoredUrl.search = new URLSearchParams({ setor: 'eletro', q: 'air fryer', loja: platform, min: '1' }).toString();
+    await command('Page.navigate', { url: restoredUrl.href });
+    let restored = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const state = await command('Runtime.evaluate', {
+        returnByValue: true,
+        expression: `(() => ({ query: document.querySelector('#catalogSearch')?.value || '', sector: document.querySelector('#sectorFilter')?.value || '', pressed: document.querySelector('.sector-btn[data-sector="eletro"]')?.getAttribute('aria-pressed'),
+          store: document.querySelector('#platformFilter')?.value || '', min: document.querySelector('#minPrice')?.value || '', visibleCount: document.querySelectorAll('#catalogGrid .catalog-card[data-demo-card]:not([hidden])').length }))()`
+      });
+      restored = state.result.value;
+      if (restored.query === 'air fryer' && restored.sector === 'eletro' && restored.pressed === 'true' && restored.store === platform && restored.min === '1' && restored.visibleCount) break;
+      await delay(50);
+    }
+    if (restored.query !== 'air fryer' || restored.sector !== 'eletro' || restored.pressed !== 'true' || restored.store !== platform || restored.min !== '1' || !restored.visibleCount) {
+      throw new Error(`Sector and other filters were not restored from the URL: ${JSON.stringify(restored)}`);
+    }
+    sectorFilterSmoke = { queryAndSectorIndependent: selected.query === 'air fryer' && selected.sector === 'eletro',
+      storeAndPriceCombined: selected.store === platform && selected.min === '1',
+      allClearsOnlySector: !cleared.sector && cleared.query === 'air fryer' && cleared.store === platform && cleared.min === '1',
+      urlRestoresSelection: restored.pressed === 'true' && restored.visibleCount > 0 };
   }
 
   if (args.includes('--smoke-related-feed')) {
@@ -644,7 +720,7 @@ try {
       badFocus: result.keyboard?.filter((focus) => !focus.visible || (!focus.inViewport && !focus.className.includes('skip-link'))).map((focus) => ({ name: focus.name, className: focus.className, tag: focus.tag, top: focus.top, outlineStyle: focus.outlineStyle, inViewport: focus.inViewport })),
       productGalleryKeyboard: result.productGalleryKeyboard };
   });
-  const summary = { checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, guestCartSmoke, adminGuestSmoke, catalogSearchSmoke, relatedFeedSmoke, accountUiSmoke,
+  const summary = { checked: results.length, skipped: skipped.length, skippedRoutes: skipped, failures: failureDetails.length, failureDetails, guestCartSmoke, adminGuestSmoke, catalogSearchSmoke, sectorFilterSmoke, relatedFeedSmoke, accountUiSmoke,
     productRoutes: results.filter((result) => result.liveProduct).map((result) => ({ route: result.route, viewport: result.viewport, productTitlePresent: result.productTitlePresent,
       productGalleryImageCount: result.productGalleryImageCount, productGalleryKeyboard: result.productGalleryKeyboard, relatedCardCount: result.relatedCardCount })) };
   console.log(JSON.stringify(args.includes('--summary-only') ? summary : { ...summary, results }, null, 2));

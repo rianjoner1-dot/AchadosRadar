@@ -56,19 +56,20 @@ const demo = demoProducts.map((product) => ({
       <h2 id="catalog-title">Buscar ofertas</h2>
       <div class="sector-filters" role="group" aria-label="Filtrar por categorias">
         <button type="button" class="sector-btn" data-sector="" aria-pressed="true">🌟 Tudo</button>
-        <button type="button" class="sector-btn" data-sector="eletronico fone smartwatch tv notebook" aria-pressed="false">💻 Eletrônicos</button>
-        <button type="button" class="sector-btn" data-sector="vestido camisa calca moletom bolsa" aria-pressed="false">👗 Moda</button>
-        <button type="button" class="sector-btn" data-sector="moveis sofa rack painel cama" aria-pressed="false">🛋️ Móveis</button>
-        <button type="button" class="sector-btn" data-sector="pc gamer teclado mouse monitor" aria-pressed="false">🎮 PC Gamer</button>
-        <button type="button" class="sector-btn" data-sector="eletrodomestico airfryer geladeira fogao" aria-pressed="false">🔥 Eletro</button>
-        <button type="button" class="sector-btn" data-sector="jardim planta vaso mangueira piscina" aria-pressed="false">🌿 Jardim</button>
-        <button type="button" class="sector-btn" data-sector="bebe carrinho cadeirinha baba berco" aria-pressed="false">🧸 Bebês</button>
-        <button type="button" class="sector-btn" data-sector="perfume importado secador chapinha skincare" aria-pressed="false">💄 Beleza</button>
-        <button type="button" class="sector-btn" data-sector="racao pet gato arranhador tapete higienico" aria-pressed="false">🐾 Pet</button>
-        <button type="button" class="sector-btn" data-sector="casa limpeza organizador aspirador" aria-pressed="false">✨ Casa</button>
+        <button type="button" class="sector-btn" data-sector="eletronicos" aria-pressed="false">💻 Eletrônicos</button>
+        <button type="button" class="sector-btn" data-sector="moda" aria-pressed="false">👗 Moda</button>
+        <button type="button" class="sector-btn" data-sector="moveis" aria-pressed="false">🛋️ Móveis</button>
+        <button type="button" class="sector-btn" data-sector="pc-gamer" aria-pressed="false">🎮 PC Gamer</button>
+        <button type="button" class="sector-btn" data-sector="eletro" aria-pressed="false">🔥 Eletro</button>
+        <button type="button" class="sector-btn" data-sector="jardim" aria-pressed="false">🌿 Jardim</button>
+        <button type="button" class="sector-btn" data-sector="bebes" aria-pressed="false">🧸 Bebês</button>
+        <button type="button" class="sector-btn" data-sector="beleza" aria-pressed="false">💄 Beleza</button>
+        <button type="button" class="sector-btn" data-sector="pet" aria-pressed="false">🐾 Pet</button>
+        <button type="button" class="sector-btn" data-sector="casa" aria-pressed="false">✨ Casa</button>
       </div>
     </div>
     <form id="catalogFilters" class="catalog-filters">
+      <input type="hidden" id="sectorFilter" name="setor" value="" />
       <label class="filter-search">Busca
         <input id="catalogSearch" type="search" name="q" placeholder="Ex.: brinco, air fryer, fone..." autocomplete="off" />
       </label>
@@ -94,7 +95,7 @@ const demo = demoProducts.map((product) => ({
         </article>
       ))}
       {!catalogReady && demo.map((product) => (
-        <article class="catalog-card" data-demo-card data-platform={product.platform} data-search-title={product.title} data-search-seller={product.sellerName || ''} data-price={product.price}>
+        <article class="catalog-card" data-demo-card data-platform={product.platform} data-search-title={product.title} data-search-category={'category' in product ? product.category || '' : ''} data-price={product.price}>
           <a class="catalog-image" href={product.detailUrl} aria-label={`Ver ${product.title}`}><img src={product.image} alt={product.title} width="320" height="260" loading="lazy" decoding="async" /></a>
           <div class="catalog-card-body">
             <div class="catalog-card-topline"><span class="store-label"><img src={`/images/marketplaces/${product.platform}.png`} alt="" width="480" height="160" loading="lazy" />{product.storeName || marketplaceNames[product.platform] || 'Loja parceira'}</span><span class="stock-pill stock-check">Amostra</span></div>
@@ -116,7 +117,7 @@ const demo = demoProducts.map((product) => ({
   import { selectSpotlightOffers } from '../modules/catalog/spotlights.mjs';
   import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
   import { isKnownUnavailableMercadoLivreImage, preloadProductImage } from '../modules/catalog/image-health.js';
-  import { matchesDemoProduct } from '../modules/catalog/search-utils.js';
+  import { matchesDemoProduct, matchesDemoSector } from '../modules/catalog/search-utils.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
 
   const form = document.querySelector<HTMLFormElement>('#catalogFilters')!;
@@ -137,14 +138,17 @@ const demo = demoProducts.map((product) => ({
   const marketplaceButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-marketplace-filter]')];
   
   const sectorButtons = [...document.querySelectorAll<HTMLButtonElement>('.sector-btn')];
-  sectorButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      sectorButtons.forEach(b => b.setAttribute('aria-pressed', 'false'));
-      btn.setAttribute('aria-pressed', 'true');
-      queryInput.value = btn.getAttribute('data-sector') || '';
-      form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-    });
-  });
+  const sectorFilter = document.querySelector<HTMLInputElement>('#sectorFilter')!;
+  function syncSectorButtons() {
+    const selected = sectorFilter.value;
+    for (const button of sectorButtons) button.setAttribute('aria-pressed', String((button.dataset.sector ?? '') === selected));
+  }
+  sectorButtons.forEach((button) => button.addEventListener('click', () => {
+    sectorFilter.value = button.dataset.sector ?? '';
+    syncSectorButtons();
+    syncUrl();
+    if (catalogReady) void load(true); else filterDemo();
+  }));
 
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
   type CatalogCursor = { created_at: string; id: string; price?: number | null; score?: number | null };
@@ -325,7 +329,7 @@ const demo = demoProducts.map((product) => ({
 
   function currentFilters() {
     const params = new FormData(form);
-    return { q: String(params.get('q') || ''), platform: String(params.get('loja') || 'all'), min: Number(params.get('min')) || undefined, max: Number(params.get('max')) || undefined, sort: String(params.get('ordem') || 'recent') };
+    return { q: String(params.get('q') || ''), platform: String(params.get('loja') || 'all'), min: Number(params.get('min')) || undefined, max: Number(params.get('max')) || undefined, sort: String(params.get('ordem') || 'recent'), sector: String(params.get('setor') || '') };
   }
 
   function filterDemo() {
@@ -335,7 +339,8 @@ const demo = demoProducts.map((product) => ({
     let visible = 0;
     const cards = [...grid.querySelectorAll<HTMLElement>('[data-demo-card]')];
     for (const card of cards) {
-      const matches = matchesDemoProduct(query, card.dataset.searchTitle || '', card.dataset.searchSeller || '')
+      const matches = matchesDemoProduct(query, card.dataset.searchTitle || '', card.dataset.searchCategory || '')
+        && matchesDemoSector(filters.sector, `${card.dataset.searchTitle || ''} ${card.dataset.searchCategory || ''}`)
         && (filters.platform === 'all' || card.dataset.platform === filters.platform)
         && (filters.min === undefined || Number(card.dataset.price) >= filters.min)
         && (filters.max === undefined || Number(card.dataset.price) <= filters.max);
@@ -363,7 +368,7 @@ const demo = demoProducts.map((product) => ({
 
   function shouldMixCurrentFeed() {
     const filters = currentFilters();
-    return filters.platform === 'all' && filters.sort === 'recent';
+    return filters.platform === 'all' && filters.sort === 'recent' && !filters.q.trim();
   }
 
   async function fetchCatalogPage(filters: ReturnType<typeof currentFilters>, version: number) {
@@ -394,7 +399,7 @@ const demo = demoProducts.map((product) => ({
   async function takeCatalogBatch(version: number) {
     const filters = currentFilters();
     const fetched: CatalogProduct[] = [];
-    const shouldMixStores = filters.platform === 'all' && filters.sort === 'recent';
+    const shouldMixStores = filters.platform === 'all' && filters.sort === 'recent' && !filters.q.trim();
     if (shouldMixStores) {
       const platformsToFetch = catalogPlatforms.filter((platform) => !exhaustedPlatforms.has(platform) && (platformBuffers.get(platform)?.length ?? 0) < 20);
       const pages = await Promise.all(platformsToFetch.map((platform) => fetchPlatformPage(platform, filters, version)));
@@ -496,6 +501,9 @@ const demo = demoProducts.map((product) => ({
 
   const query = new URLSearchParams(location.search);
   queryInput.value = query.get('q') ?? '';
+  const requestedSector = query.get('setor') ?? '';
+  sectorFilter.value = sectorButtons.some((button) => button.dataset.sector === requestedSector) ? requestedSector : '';
+  syncSectorButtons();
   if (globalSearch) globalSearch.value = queryInput.value;
   const requestedPlatform = query.get('loja') ?? 'all';
   const platformFilter = document.querySelector<HTMLSelectElement>('#platformFilter')!;

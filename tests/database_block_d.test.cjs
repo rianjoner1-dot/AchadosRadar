@@ -371,6 +371,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await runMigration(db, '20260930220000_stable_image_recheck_priority.sql');
     await runMigration(db, '20260930230000_keep_archived_product_metrics.sql');
     await runMigration(db, '20261001090000_cart_owner_reads_archived_products.sql');
+    await runMigration(db, '20261001130000_catalog_sectors_and_search_v2.sql');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.profiles', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to profiles');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to saved carts');
     assert.equal((await db.query("SELECT has_table_privilege('authenticated', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, true, 'Authenticated users retain cart access, filtered by RLS');
@@ -403,6 +404,94 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
       await db.query('INSERT INTO public.product_images (product_id, url, display_order) VALUES ($1, \'https://a-static.mlcdn.com.br/item.jpg\', 0)', [row.id]);
       await db.query('INSERT INTO public.offers (product_id, price, stock_status, store_name, observed_at) VALUES ($1, $2, \'in_stock\', \'Magalu\', now())', [row.id, row.price]);
     }
+    const sectorProducts = [
+      { id: 'ababab11-abab-4bab-8bab-ababababab11', external: 'sector-blazer', title: 'Blazer feminino elegante', category: 'Moda feminina', status: 'published' },
+      { id: 'ababab22-abab-4bab-8bab-ababababab22', external: 'sector-keyboard', title: 'Teclado mecânico gamer RGB', category: 'Informática', status: 'published' },
+      { id: 'ababab33-abab-4bab-8bab-ababababab33', external: 'sector-baby', title: 'Carrinho de bebê dobrável', category: null, status: 'published' },
+      { id: 'ababab44-abab-4bab-8bab-ababababab44', external: 'sector-fryer', title: 'Fritadeira elétrica Air Fryer', category: 'Eletroportáteis', status: 'published' },
+      { id: 'ababab55-abab-4bab-8bab-ababababab55', external: 'sector-unclassified', title: 'Painel solar sem categoria mapeada', category: null, status: 'published' },
+      { id: 'ababab66-abab-4bab-8bab-ababababab66', external: 'sector-draft', title: 'Blazer rascunho', category: 'Moda', status: 'draft' }
+    ];
+    for (const row of sectorProducts) {
+      await db.query('INSERT INTO public.products (id, platform, external_id, title, category, status) VALUES ($1, \'magalu\', $2, $3, $4, $5)', [row.id, row.external, row.title, row.category, row.status]);
+    }
+    await db.query("INSERT INTO public.products (id, platform, external_id, title, category, status) VALUES ('ababab88-abab-4bab-8bab-ababababab88', 'magalu', 'sector-samsung-tv', 'Smart TV Samsung 55 polegadas', 'Eletrônicos', 'published'), ('ababab99-abab-4bab-8bab-ababababab99', 'magalu', 'sector-samsung-phone', 'Celular Samsung Galaxy', 'Eletrônicos', 'published')");
+    await db.query("INSERT INTO public.products (id, platform, external_id, title, category, status) VALUES ('abababaa-abab-4bab-8bab-abababababaa', 'magalu', 'sector-telephone', 'Telefone Bluetooth sem fio', 'Eletrônicos', 'published'), ('abababbb-abab-4bab-8bab-abababababbb', 'magalu', 'sector-fritadeira', 'Fritadeira elétrica compacta', 'Eletroportáteis', 'published')");
+    const categoryOnlyId = 'ababab77-abab-4bab-8bab-ababababab77';
+    await db.query("INSERT INTO public.products (id, platform, external_id, title, category, status) VALUES ($1, 'magalu', 'category-only-blazer', 'Produto de campanha', 'Blazer feminino', 'published')", [categoryOnlyId]);
+    await db.query(`
+      INSERT INTO public.offers (id, product_id, price, stock_status, store_name, observed_at) VALUES
+        ('ababab88-abab-4bab-8bab-ababababab88', $1, 99, 'in_stock', 'Magalu', '2026-10-01T00:00:00Z'),
+        ('ababab99-abab-4bab-8bab-ababababab99', $1, 89, 'in_stock', 'Magalu', '2026-10-01T00:00:00Z')
+    `, [sectorProducts[0].id]);
+    const keyboardSectors = await db.query('SELECT sector_slug FROM public.product_sectors WHERE product_id = $1 ORDER BY sector_slug', [sectorProducts[1].id]);
+    assert.deepEqual(keyboardSectors.rows.map((row) => row.sector_slug), ['eletronicos', 'pc-gamer'], 'A gaming keyboard belongs to both PC Gamer and Electronics');
+    assert.equal((await db.query('SELECT assignment_source FROM public.product_sectors WHERE product_id = $1 AND sector_slug = \'moda\'', [sectorProducts[0].id])).rows[0].assignment_source, 'category', 'Category-derived assignments record their provenance');
+    assert.equal((await db.query('SELECT assignment_source FROM public.product_sectors WHERE product_id = $1 AND sector_slug = \'bebes\'', [sectorProducts[2].id])).rows[0].assignment_source, 'title', 'Title fallback derives baby products');
+    assert.equal((await db.query('SELECT sector_slug FROM public.product_sectors WHERE product_id = $1', [sectorProducts[4].id])).rows.length, 0, 'Ambiguous terms such as a standalone panel remain unclassified and eligible for Everything');
+    await db.query("INSERT INTO public.product_sectors (product_id, sector_slug, assignment_source) VALUES ($1, 'pet', 'manual')", [sectorProducts[4].id]);
+    await db.query("UPDATE public.products SET title = 'Item sem correspondencia', category = NULL WHERE id = $1", [sectorProducts[4].id]);
+    assert.equal((await db.query('SELECT assignment_source FROM public.product_sectors WHERE product_id = $1 AND sector_slug = \'pet\'', [sectorProducts[4].id])).rows[0]?.assignment_source, 'manual', 'Importer-driven reclassification preserves a manual sector assignment');
+    await setAuthContext(db, { role: 'authenticated', sub: userId });
+    await assert.rejects(
+      db.query("INSERT INTO public.product_sectors (product_id, sector_slug, assignment_source) VALUES ($1, 'casa', 'manual')", [sectorProducts[4].id]),
+      /row-level security policy/,
+      'An ordinary authenticated account cannot write sector assignments'
+    );
+    await db.exec('RESET ROLE;');
+    const selectedBlazer = await db.query("SELECT id, category, sectors, offer FROM public.search_catalog_v2('blazer', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20, NULL, 'moda')");
+    assert.equal(selectedBlazer.rows[0]?.id, sectorProducts[0].id, 'A sector filter is independent from the free-text query');
+    assert.deepEqual(selectedBlazer.rows[0].sectors, ['moda']);
+    assert.equal(selectedBlazer.rows[1]?.id, categoryOnlyId, 'Exact title matches rank ahead of category-only matches');
+    assert.equal(selectedBlazer.rows[0].offer.price, 89, 'Equal observation timestamps select the offer with the greater stable ID');
+    const stalePriceExcluded = await db.query("SELECT id FROM public.search_catalog_v2('blazer', NULL, 90, NULL, 'recent', NULL, NULL, NULL, 20, NULL, 'moda')");
+    assert.equal(stalePriceExcluded.rows.length, 0, 'Price filtering uses the same latest offer selected for the response');
+    const currentPriceIncluded = await db.query("SELECT id, offer FROM public.search_catalog_v2('blazer', NULL, 89, 89, 'recent', NULL, NULL, NULL, 20, NULL, 'moda')");
+    assert.equal(currentPriceIncluded.rows[0]?.id, sectorProducts[0].id, 'Inclusive price bounds use the deterministic latest offer');
+    const airFryer = await db.query("SELECT id FROM public.search_catalog_v2('air fryer', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20, NULL, 'eletro')");
+    assert.deepEqual(airFryer.rows.map((row) => row.id).sort(), [sectorProducts[3].id, 'abababbb-abab-4bab-8bab-abababababbb'].sort(), 'A multiword query matches its compound product spelling and category sector');
+    const compactAirFryer = await db.query("SELECT id FROM public.search_catalog_v2('airfryer', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20, NULL, 'eletro')");
+    assert.deepEqual(compactAirFryer.rows.map((row) => row.id).sort(), [sectorProducts[3].id, 'abababbb-abab-4bab-8bab-abababababbb'].sort(), 'The compact product spelling matches a spaced query in the title');
+    for (const term of ['air fryer', 'airfryer', 'fritadeira']) {
+      const synonym = await db.query("SELECT count(*)::int AS count FROM public.search_catalog_v2($1, NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20, NULL, 'eletro') WHERE external_id = 'sector-fritadeira'", [term]);
+      assert.equal(synonym.rows[0].count, 1, `${term} finds a product titled only Fritadeira`);
+    }
+    const fuzzyV2 = await db.query("SELECT id FROM public.search_catalog_v2('brimco', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(fuzzyV2.rows.map((row) => row.id).sort(), rows.slice(0, 2).map((row) => row.id).sort(), 'A one-character typo remains recoverable with controlled token similarity');
+    const accentedPunctuation = await db.query("SELECT id FROM public.search_catalog_v2('brínco!!! prata', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(accentedPunctuation.rows.map((row) => row.id).sort(), rows.slice(0, 2).map((row) => row.id).sort(), 'Accents and punctuation normalize without collapsing multiple terms');
+    const foneBluetooth = await db.query("SELECT id FROM public.search_catalog_v2('fone bluetooth', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(foneBluetooth.rows.map((row) => row.id).sort(), rows.slice(2).map((row) => row.id).sort(), 'Every meaningful search word must match');
+    const headphoneAlias = await db.query("SELECT id FROM public.search_catalog_v2('headphones bluetooth', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(headphoneAlias.rows.map((row) => row.id).sort(), rows.slice(2).map((row) => row.id).sort(), 'Explicit headphone and fone aliases keep multiword search useful');
+    const shortTermSearch = await db.query("SELECT external_id FROM public.search_catalog_v2('tv samsung', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(shortTermSearch.rows.map((row) => row.external_id), ['sector-samsung-tv'], 'A short exact token remains required alongside longer search words');
+    const shortOnlySearch = await db.query("SELECT external_id FROM public.search_catalog_v2('55 tv', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(shortOnlySearch.rows.map((row) => row.external_id), ['sector-samsung-tv'], 'Short-only queries match exact words without requiring query order');
+    const shortTokenSearch = await db.query("SELECT external_id FROM public.search_catalog_v2('tv', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.deepEqual(shortTokenSearch.rows.map((row) => row.external_id), ['sector-samsung-tv'], 'A short single-token query matches a whole word instead of an arbitrary substring');
+    const foneSubstringSearch = await db.query("SELECT count(*)::int AS count FROM public.search_catalog_v2('fone', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20) WHERE external_id = 'sector-telephone'");
+    assert.equal(foneSubstringSearch.rows[0].count, 0, 'A short word does not match an unrelated substring inside telefone');
+    const mixedUnrelatedTerms = await db.query("SELECT id FROM public.search_catalog_v2('fone camera', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
+    assert.equal(mixedUnrelatedTerms.rows.length, 0, 'A matching single word cannot admit unrelated multiword results');
+    const wrongSector = await db.query("SELECT id FROM public.search_catalog_v2('blazer', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20, NULL, 'pet')");
+    assert.equal(wrongSector.rows.length, 0, 'The sector slug applies a separate category filter');
+    assert.equal(selectedBlazer.rows[0].category, 'Moda feminina', 'The original marketplace category remains intact in the response');
+    const searchFunctionSecurity = await db.query("SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_catalog_v2(text,text,numeric,numeric,text,timestamp with time zone,uuid,numeric,integer,real,text)'::regprocedure");
+    assert.equal(searchFunctionSecurity.rows[0].prosecdef, false, 'The public catalog RPC remains SECURITY INVOKER');
+    assert.equal((await db.query("SELECT has_function_privilege('anon', 'public.search_catalog_v2(text,text,numeric,numeric,text,timestamp with time zone,uuid,numeric,integer,real,text)'::regprocedure, 'EXECUTE') AS allowed")).rows[0].allowed, true, 'Anonymous visitors can call the public search RPC');
+    assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.product_sectors', 'INSERT') AS allowed")).rows[0].allowed, false, 'Anonymous visitors cannot write product-sector assignments');
+    await db.query("UPDATE public.products SET title = 'Headset Bluetooth sem fio', category = 'Audio' WHERE id = $1", [sectorProducts[0].id]);
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM public.product_sectors WHERE product_id = $1 AND sector_slug = \'moda\'', [sectorProducts[0].id])).rows[0].count, 0, 'Updated title/category values remove stale derived sector assignments');
+    assert.equal((await db.query('SELECT assignment_source FROM public.product_sectors WHERE product_id = $1 AND sector_slug = \'eletronicos\'', [sectorProducts[0].id])).rows[0].assignment_source, 'title', 'The importer update automatically rebuilds assignments and provenance');
+    await setAuthContext(db, { role: 'anon' });
+    assert.equal((await db.query('SELECT count(*)::int AS count FROM public.product_sectors WHERE product_id = $1', [sectorProducts[5].id])).rows[0].count, 0, 'Anonymous table reads cannot reveal sectors assigned to drafts');
+    assert.equal((await db.query("SELECT count(*)::int AS count FROM public.search_catalog_v2('', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20) WHERE id = $1", [sectorProducts[5].id])).rows[0].count, 0, 'The public RPC never returns draft products');
+    await db.exec('RESET ROLE;');
+
+    const searchPlanDiagnostic = fs.readFileSync(path.resolve(__dirname, '../scripts/explain-catalog-search-v2.sql'), 'utf8');
+    await db.exec(searchPlanDiagnostic);
+
     const fuzzy = await db.query("SELECT id, title FROM public.search_catalog('brimco', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 20)");
     const scores = await db.query("SELECT public.normalize_catalog_text('Brinco prata delicado') AS normalized, similarity(public.normalize_catalog_text('Brinco prata delicado'), public.normalize_catalog_text('brimco')) AS score");
     assert.equal(fuzzy.rows.length, 2, `Trigram search should find a nearby spelling: ${JSON.stringify(scores.rows)}`);
@@ -435,6 +524,35 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await db.query("INSERT INTO public.products (platform, external_id, title, status) SELECT 'magalu', 'page-cap-' || n, 'Page cap item ' || n, 'published' FROM generate_series(1, 25) AS series(n)");
     const cappedPage = await db.query("SELECT id FROM public.search_catalog('', NULL, NULL, NULL, 'recent', NULL, NULL, NULL, 999)");
     assert.equal(cappedPage.rows.length, 20, 'Public catalog search enforces a hard 20-product page cap');
+
+    await db.query(`
+      INSERT INTO public.products (platform, external_id, title, category, status)
+      SELECT 'magalu', 'cursor-page-' || n, 'Cursor Test Token Item ' || lpad(n::text, 3, '0'), 'Casa', 'published'
+      FROM generate_series(1, 100) AS n;
+    `);
+    await db.query(`
+      INSERT INTO public.offers (product_id, price, stock_status, store_name, observed_at)
+      SELECT p.id, ((substring(p.external_id from '([0-9]+)$')::integer % 17) + 1)::numeric,
+        'in_stock', 'Magalu', '2026-10-01T00:00:00Z'::timestamptz
+      FROM public.products p
+      WHERE p.external_id LIKE 'cursor-page-%'
+        AND substring(p.external_id from '([0-9]+)$')::integer % 9 <> 0;
+    `);
+    const cursorSeen = [];
+    let searchCursor = null;
+    for (let pageIndex = 0; pageIndex < 5; pageIndex++) {
+      const page = await db.query(
+        "SELECT id, created_at, (offer->>'price')::numeric AS price, search_score FROM public.search_catalog_v2('cursor test token', 'magalu', NULL, NULL, 'price_asc', $1, $2, $3, 20, $4, 'casa')",
+        [searchCursor?.created_at ?? null, searchCursor?.id ?? null, searchCursor?.price ?? null, searchCursor?.search_score ?? null]
+      );
+      assert.equal(page.rows.length, 20, `Each cursor page ${pageIndex + 1} returns 20 rows`);
+      cursorSeen.push(...page.rows);
+      const last = page.rows.at(-1);
+      searchCursor = { ...last, search_score: last.search_score };
+    }
+    const expectedCursorIds = (await db.query("SELECT p.id FROM public.products p JOIN public.product_sectors ps ON ps.product_id = p.id WHERE p.external_id LIKE 'cursor-page-%' AND ps.sector_slug = 'casa'")).rows.map((row) => row.id).sort();
+    assert.equal(new Set(cursorSeen.map((row) => row.id)).size, 100, 'Five search pages contain no duplicate product IDs');
+    assert.deepEqual(cursorSeen.map((row) => row.id).sort(), expectedCursorIds, 'Five keyset pages neither skip nor add products, including rows without offers and tied prices');
 
     const first = await db.query("SELECT id, created_at, (offer->>'price')::numeric AS price FROM public.search_catalog('fone', NULL, NULL, NULL, 'price_asc', NULL, NULL, NULL, 1)");
     assert.equal(first.rows.length, 1);
