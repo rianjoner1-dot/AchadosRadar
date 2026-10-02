@@ -52,7 +52,18 @@ const demo = demoProducts.map((product) => ({
   </section>
 
   <section class="container catalog-section" aria-labelledby="catalog-title">
-    <h2 id="catalog-title">Buscar ofertas</h2>
+    <div class="catalog-header-wrap">
+      <h2 id="catalog-title">Buscar ofertas</h2>
+      <div class="sector-filters" role="group" aria-label="Filtrar por categorias">
+        <button type="button" class="sector-btn" data-sector="" aria-pressed="true">🌟 Tudo</button>
+        <button type="button" class="sector-btn" data-sector="eletronico fone smartwatch tv notebook" aria-pressed="false">💻 Eletrônicos</button>
+        <button type="button" class="sector-btn" data-sector="vestido camisa calca moletom bolsa" aria-pressed="false">👗 Moda</button>
+        <button type="button" class="sector-btn" data-sector="moveis sofa rack painel cama" aria-pressed="false">🛋️ Móveis</button>
+        <button type="button" class="sector-btn" data-sector="pc gamer teclado mouse monitor" aria-pressed="false">🎮 PC Gamer</button>
+        <button type="button" class="sector-btn" data-sector="eletrodomestico airfryer geladeira fogao" aria-pressed="false">🔥 Eletro</button>
+        <button type="button" class="sector-btn" data-sector="casa limpeza organizador aspirador" aria-pressed="false">✨ Casa</button>
+      </div>
+    </div>
     <form id="catalogFilters" class="catalog-filters">
       <label class="filter-search">Busca
         <input id="catalogSearch" type="search" name="q" placeholder="Ex.: brinco, air fryer, fone..." autocomplete="off" />
@@ -120,6 +131,17 @@ const demo = demoProducts.map((product) => ({
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
   const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' };
   const marketplaceButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-marketplace-filter]')];
+  
+  const sectorButtons = [...document.querySelectorAll<HTMLButtonElement>('.sector-btn')];
+  sectorButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      sectorButtons.forEach(b => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      queryInput.value = btn.getAttribute('data-sector') || '';
+      form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    });
+  });
+
   const globalSearch = document.querySelector<HTMLInputElement>('#global-search-input');
   type CatalogCursor = { created_at: string; id: string; price?: number | null; score?: number | null };
   let cursor: CatalogCursor | null = null;
@@ -548,7 +570,13 @@ const demo = demoProducts.map((product) => ({
   .marketplace-filter:first-child { gap: 6px; color: #303d4b; font-size: .84rem; font-weight: 750; }
   .marketplace-all-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #dcecf9; color: #0b4f8a; font-size: 1.2rem; }
   .catalog-section { padding-top: 32px; padding-bottom: 56px; }
-  .catalog-section > h2, .results-heading h2 { color: #282921; font-size: 1.35rem; letter-spacing: -.02em; }
+  .catalog-header-wrap { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 4px; }
+  .catalog-header-wrap h2 { margin: 0; }
+  .sector-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sector-btn { padding: 7px 14px; border: 1px solid #d1d5db; border-radius: 20px; background: #fff; color: #4b5563; font-size: 0.83rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  .sector-btn:hover { border-color: #9ca3af; background: #f9fafb; color: #111827; }
+  .sector-btn[aria-pressed="true"] { background: #1f2937; color: #fff; border-color: #1f2937; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .catalog-section h2, .results-heading h2 { color: #282921; font-size: 1.35rem; letter-spacing: -.02em; }
   .catalog-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(120px, 1fr)) auto; gap: 12px; padding: 18px; margin: 14px 0 30px; background: #fff; border: 1px solid #dedede; border-radius: 8px; }
   .catalog-filters label { display: grid; gap: 6px; color: #444; font-size: .8rem; font-weight: 600; }
   .catalog-filters input, .catalog-filters select { min-width: 0; width: 100%; min-height: 42px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 8px 10px; color: #222; background: #fff; font: inherit; }
