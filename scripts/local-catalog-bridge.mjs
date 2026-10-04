@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isAllowedMarketplaceImageUrl } from '../src/modules/shared/marketplace-image-url.mjs';
+import { isAllowedMarketplaceImageUrl, isAllowedMarketplaceVideoUrl } from '../src/modules/shared/marketplace-image-url.mjs';
 import { matchesMarketplaceProductIdentity } from '../src/modules/catalog/product-identity.mjs';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
@@ -20,7 +20,12 @@ const fieldAliases = {
   description: ['description', 'descriptionText', 'descricao'],
   category: ['category', 'categoria'],
   brand: ['brand', 'marca'],
+  rating: ['rating', 'ratingValue', 'rating_value'],
+  reviewsCount: ['reviewsCount', 'reviews_count', 'reviewCount', 'review_count', 'ratingCount', 'rating_count'],
+  specifications: ['specifications', 'specs', 'additionalProperty', 'additional_property'],
   price: ['price', 'currentPrice', 'preco'],
+  pixPrice: ['pixPrice', 'pix_price', 'precoPix'],
+  cardPrice: ['cardPrice', 'card_price', 'precoCartao'],
   oldPrice: ['oldPrice', 'old_price', 'precoAnterior'],
   installments: ['installments', 'installmentsText', 'parcelamento'],
   shipping: ['shipping', 'shippingText', 'frete'],
@@ -67,6 +72,11 @@ function valueOf(source, aliases) {
   return undefined;
 }
 
+function valueOfPresent(source, aliases) {
+  for (const key of aliases) if (Object.hasOwn(source, key)) return source[key];
+  return undefined;
+}
+
 function normalizeIncoming(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('O corpo deve ser um objeto de produto.');
   const platform = String(input.platform || input.marketplace || input.store || '').trim().toLowerCase();
@@ -96,8 +106,40 @@ function normalizeIncoming(input) {
   const result = { platform, id, title };
   for (const [field, aliases] of Object.entries(fieldAliases)) {
     if (['id', 'title'].includes(field)) continue;
-    const value = valueOf(input, aliases);
+    const value = ['pixPrice', 'cardPrice'].includes(field) ? valueOfPresent(input, aliases) : valueOf(input, aliases);
     if (value === undefined) continue;
+    if (['pixPrice', 'cardPrice'].includes(field)) {
+      if (value === null || value === '') {
+        result[field] = null;
+        continue;
+      }
+      const amount = typeof value === 'string' ? Number(value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '')) : value;
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Preço Pix/cartão precisa ser positivo ou null.');
+      result[field] = amount;
+      continue;
+    }
+    if (field === 'rating') {
+      if (value === null || value === '') { result[field] = null; continue; }
+      const rating = Number(value);
+      if (!Number.isFinite(rating) || rating < 0 || rating > 5) throw new Error('Avaliação precisa estar entre 0 e 5 ou null.');
+      result[field] = rating;
+      continue;
+    }
+    if (field === 'reviewsCount') {
+      if (value === null || value === '') { result[field] = null; continue; }
+      const count = Number(value);
+      if (!Number.isSafeInteger(count) || count < 0) throw new Error('Quantidade de avaliações precisa ser um inteiro não negativo ou null.');
+      result[field] = count;
+      continue;
+    }
+    if (field === 'specifications') {
+      const entries = Array.isArray(value) ? value : value && typeof value === 'object' ? Object.entries(value).map(([name, itemValue]) => ({ name, value: itemValue })) : [];
+      result[field] = entries.map((entry) => ({
+        name: String(entry?.name ?? entry?.label ?? '').trim().slice(0, 100),
+        value: String(entry?.value ?? entry?.valueText ?? '').trim().slice(0, 300)
+      })).filter((entry) => entry.name && entry.value && entry.name.toLowerCase() !== entry.value.toLowerCase()).slice(0, 18);
+      continue;
+    }
     if (field === 'stockStatus' && !['in_stock', 'out_of_stock', 'unknown'].includes(value)) {
       throw new Error('Estoque precisa usar in_stock, out_of_stock ou unknown.');
     }
@@ -118,6 +160,22 @@ function normalizeIncoming(input) {
       ? isAllowedMarketplaceImageUrl(platform, url)
       : url.startsWith('https://')))
     .filter((url, index, all) => all.indexOf(url) === index);
+  const rawVideos = valueOf(input, ['videos', 'productVideos', 'product_videos']);
+  const rawPosters = valueOf(input, ['videoPosters', 'video_posters']) ?? [];
+  result.videos = (Array.isArray(rawVideos) ? rawVideos : [])
+    .map((video, index) => {
+      const url = typeof video === 'string' ? video : video?.url || video?.src;
+      const posterUrl = typeof video === 'object' && video
+        ? video.poster_url || video.posterUrl || video.poster
+        : rawPosters[index];
+      if (!isAllowedMarketplaceVideoUrl(platform, url)) return null;
+      return {
+        url,
+        posterUrl: isAllowedMarketplaceImageUrl(platform, posterUrl) ? posterUrl : null
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 1);
   result.bridgeReceivedAt = new Date().toISOString();
   return result;
 }
@@ -140,6 +198,7 @@ async function saveProduct(product) {
     const previous = catalog.products[index];
     merged = { ...previous, ...product };
     if (!product.images.length && previous.images?.length) merged.images = previous.images;
+    if (!product.videos.length && previous.videos?.length) merged.videos = previous.videos;
     catalog.products[index] = merged;
   } else catalog.products.push(merged);
   catalog.updatedAt = new Date().toISOString();

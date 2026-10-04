@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isAllowedMarketplaceImageUrl } from '../src/modules/shared/marketplace-image-url.mjs';
+import { isAllowedMarketplaceImageUrl, isAllowedMarketplaceVideoUrl } from '../src/modules/shared/marketplace-image-url.mjs';
 import { matchesMarketplaceProductIdentity } from '../src/modules/catalog/product-identity.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,7 +19,9 @@ const allowedHosts = {
   mercadolivre: ['mercadolivre.com.br', 'produto.mercadolivre.com.br', 'mercadolivre.com', 'meli.la'],
   magalu: ['magazinevoce.com.br', 'magazineluiza.com.br', 'magalu.com.br', 'a-static.mlcdn.com.br', 'm.magazineluiza.com.br'],
   amazon: ['amazon.com.br', 'amazon.com', 'amzn.to'],
-  shopee: ['shopee.com.br', 'shp.ee', 'shope.ee']
+  shopee: ['shopee.com.br', 'shp.ee', 'shope.ee', 's.shopee.com.br'],
+  benoit: ['benoit.com.br', 'awin1.com'],
+  kabum: ['kabum.com.br', 'awin1.com']
 };
 const exactAffiliateHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
 const unavailableEvidence = 'explicit_not_found_without_title_or_price';
@@ -41,7 +43,12 @@ function normalize(item) {
   const platform = get(item, 'platform', 'marketplace', 'store');
   const externalId = text(get(item, 'external_id', 'externalId', 'id', 'productId'));
   const title = text(get(item, 'title', 'name', 'nome'));
-  const price = toPrice(get(item, 'price', 'currentPrice', 'preco'));
+  const rawPixPrice = get(item, 'pixPrice', 'pix_price', 'precoPix');
+  const price = toPrice(rawPixPrice ?? get(item, 'price', 'currentPrice', 'preco'));
+  const rawRating = get(item, 'rating', 'ratingValue', 'rating_value');
+  const rating = Number(rawRating);
+  const rawReviewsCount = get(item, 'reviewsCount', 'reviews_count', 'reviewCount', 'review_count', 'ratingCount', 'rating_count');
+  const reviewsCount = Number(rawReviewsCount);
   const originalUrl = text(get(item, 'originalUrl', 'original_url', 'url', 'productUrl'));
   const affiliateUrl = text(get(item, 'affiliateUrl', 'affiliate_url', 'shortLink', 'linkAfiliado'));
   const safeUrl = (candidate) => {
@@ -71,13 +78,30 @@ function normalize(item) {
   const imagesRaw = get(item, 'images', 'photos', 'pictures', 'fotos') ?? [get(item, 'image', 'thumbnail', 'imagem')];
   const images = (Array.isArray(imagesRaw) ? imagesRaw : []).map((img) => typeof img === 'string' ? img : get(img, 'url', 'src'))
     .filter((url) => isAllowedMarketplaceImageUrl(platform, url))
+    .slice(0, 3)
     .map((url, index) => ({ url, display_order: index, is_primary: index === 0 }));
+  const videoUrls = get(item, 'videos', 'productVideos', 'product_videos');
+  const videoPosters = get(item, 'videoPosters', 'video_posters') ?? [];
+  const videos = (Array.isArray(videoUrls) ? videoUrls : []).map((video, index) => {
+    const url = typeof video === 'string' ? video : get(video, 'url', 'src');
+    const posterCandidate = typeof video === 'object' && video ? get(video, 'poster_url', 'posterUrl', 'poster') : videoPosters[index];
+    const posterUrl = isAllowedMarketplaceImageUrl(platform, posterCandidate) ? posterCandidate : null;
+    return isAllowedMarketplaceVideoUrl(platform, url) ? { url, poster_url: posterUrl } : null;
+  }).filter(Boolean).slice(0, 1).map((video) => ({ ...video, display_order: 0 }));
+  const rawSpecifications = get(item, 'specifications', 'specs', 'additionalProperty', 'additional_property');
+  const specificationEntries = Array.isArray(rawSpecifications) ? rawSpecifications
+    : rawSpecifications && typeof rawSpecifications === 'object'
+      ? Object.entries(rawSpecifications).map(([name, value]) => ({ name, value })) : [];
+  const specifications = specificationEntries.map((entry) => ({
+    name: text(entry?.name ?? entry?.label)?.slice(0, 100) ?? null,
+    value: text(entry?.value ?? entry?.valueText)?.slice(0, 300) ?? null
+  })).filter((entry) => entry.name && entry.value && entry.name.toLowerCase() !== entry.value.toLowerCase()).slice(0, 18);
   if (!images.length) errors.push('foto_https_ausente');
   const macroStatus = get(item, 'linkStatus', 'link_status');
   const rawStockQuantity = get(item, 'stockQuantity', 'stock_quantity');
   const stockQuantity = Number.isSafeInteger(rawStockQuantity) && rawStockQuantity >= 0 ? rawStockQuantity : null;
   const rawStockStatus = get(item, 'stockStatus', 'stock_status');
-  const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'in_stock';
+  const stockStatus = ['in_stock', 'out_of_stock', 'unknown'].includes(rawStockStatus) ? rawStockStatus : 'unknown';
   // Link checks prove only the affiliate destination is reachable; only timestamps
   // from product/offer collection may freshness-gate price and stock.
   const rawObservedAt = get(item, 'offerObservedAt', 'offer_observed_at', 'observedAt', 'observed_at', 'collectedAt', 'collected_at');
@@ -99,7 +123,7 @@ function normalize(item) {
   })();
   const mercadolivreOfficialUrl = Boolean(affiliate) && new URL(affiliate).hostname.endsWith('meli.la');
   const amazonOfficialUrl = Boolean(affiliate) && affiliate.includes('tag=');
-  const shopeeOfficialUrl = Boolean(affiliate) && (affiliate.includes('shp.ee') || affiliate.includes('shope.ee'));
+  const shopeeOfficialUrl = Boolean(affiliate) && (affiliate.includes('shp.ee') || affiliate.includes('shope.ee') || affiliate.includes('s.shopee.com.br'));
   const verifiedDate = macroVerifiedAt ? new Date(macroVerifiedAt) : null;
   const isReadyStr = macroStatus === 'ready' || (platform === 'amazon' && macroStatus === 'pending_conversion');
   const linkIsReady = isReadyStr && verifiedDate instanceof Date && !Number.isNaN(verifiedDate.getTime()) && (
@@ -111,7 +135,12 @@ function normalize(item) {
   return { errors, row: {
     platform, external_id: externalId, title, description: text(get(item, 'description', 'descriptionText', 'descricao')),
     category: text(get(item, 'category', 'categoria')), brand: text(get(item, 'brand', 'marca')),
-    price, old_price: toPrice(get(item, 'oldPrice', 'old_price', 'precoAnterior')) || null,
+    rating: Number.isFinite(rating) && rating >= 0 && rating <= 5 ? rating : null,
+    reviews_count: Number.isSafeInteger(reviewsCount) && reviewsCount >= 0 ? reviewsCount : null,
+    specifications,
+    price, pix_price: toPrice(rawPixPrice) || null,
+    card_price: toPrice(get(item, 'cardPrice', 'card_price', 'precoCartao')) || null,
+    old_price: toPrice(get(item, 'oldPrice', 'old_price', 'precoAnterior')) || null,
     installments_text: text(get(item, 'installments', 'installmentsText', 'parcelamento')),
     shipping_text: text(get(item, 'shipping', 'shippingText', 'frete')),
     coupon_code: text(get(item, 'coupon', 'couponText', 'cupom')),
@@ -126,7 +155,7 @@ function normalize(item) {
     verified_at: linkIsReady ? verifiedDate.toISOString() : null,
     refresh_due_at: get(item, 'refreshDueAt', 'refresh_due_at') ?? null,
     expires_at: get(item, 'linkExpiresAt', 'expires_at') ?? null,
-    images
+    images, videos
   }};
 }
 
@@ -178,7 +207,7 @@ if (dryRun) {
     output.details = selectedProducts.map((item, index) => {
       if (isUnavailableEvidence(item)) return { index, id: get(item, 'external_id', 'externalId', 'id', 'productId'), platform: get(item, 'platform', 'marketplace', 'store'), archiveCandidate: true, evidence: unavailableEvidence };
       const { row } = normalize(item);
-      return { index, id: row.external_id, platform: row.platform, valid: report[index].valid, publishable: report[index].publishable, imageUrls: row.images.map((image) => image.url), installments: row.installments_text, shipping: row.shipping_text, coupon: row.coupon_code, stockQuantity: row.stock_quantity, stockStatus: row.stock_status, stockEvidence: row.stock_evidence, offerObservedAt: row.observed_at, linkStatus: row.link_status, expiresAt: row.expires_at, refreshDueAt: row.refresh_due_at };
+      return { index, id: row.external_id, platform: row.platform, valid: report[index].valid, publishable: report[index].publishable, imageUrls: row.images.map((image) => image.url), videos: row.videos, pixPrice: row.pix_price, cardPrice: row.card_price, installments: row.installments_text, shipping: row.shipping_text, coupon: row.coupon_code, stockQuantity: row.stock_quantity, stockStatus: row.stock_status, stockEvidence: row.stock_evidence, rating: row.rating, reviewsCount: row.reviews_count, specifications: row.specifications, offerObservedAt: row.observed_at, linkStatus: row.link_status, expiresAt: row.expires_at, refreshDueAt: row.refresh_due_at };
     });
   }
   if (!summaryOnly) output.rejected = [...report.filter((item) => !item.valid), ...rejectedReports];

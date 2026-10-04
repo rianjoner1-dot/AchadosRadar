@@ -43,7 +43,7 @@ Cada etapa deve terminar com um resultado reproduzível: alteração local, test
 
 | Feito | Passo | Procedimento | Validação / evidência |
 | --- | --- | --- | --- |
-| [ ] | B1 | Verificar nos painéis Magalu e ML se esta conta pode divulgar links no domínio próprio; cadastrar/validar o domínio quando exigido. | Registrar regra e status da conta. ML: link deve ser de produto individual e a navegação ao link precisa ser iniciada pelo clique do visitante; não fazer redirecionamento automático. Magalu: confirmar expressamente se a conta autoriza este domínio agregador. |
+| [ ] | B1 | Verificar nos painéis Magalu e ML se esta conta pode divulgar links no domínio próprio; cadastrar/validar o domínio quando exigido.Anotacaominha(naoseisedapracolocarnositeproprio,masissonaoinfluenciaanossaoperacao,detodaformaestaremosseguindoalogicadosassociadosdarolinkeapessoacomprarnopropriosite,omesmovaleparaoinstagran,mesmacoisamasplatafomras                                             | Registrar regra e status da conta. ML: link deve ser de produto individual e a navegação ao link precisa ser iniciada pelo clique do visitante; não fazer redirecionamento automático. Magalu: confirmar expressamente se a conta autoriza este domínio agregador. |
 | [ ] | B2 | Confirmar uso das fotos originais, feed/API permitido e condição de atualização automatizada para cada programa. | Decisão por loja: fonte autorizada, URL direta ou bloqueio de publicação; guardar autorização/regra aplicável. Até lá, não publicar fotos Magalu copiadas nem afirmar que a autorização se estende a domínio externo. |
 | [ ] | B3 | Gerar um link oficial de teste por loja no fluxo autorizado e conferir o destino. | URL pertence ao programa, abre o mesmo produto e mantém o identificador afiliado conforme o painel; registrar horário. |
 | [x] | B5 | Criar projeto Supabase de desenvolvimento e configurar variáveis localmente. | Projeto `rvepsyvhsqumfpemhbba` configurado em US East 1 e buckets `produtos`, `avatars` (2 MB) e `InstagramTemporario` provisionados. Em 01/10/2026, todas as 23/23 migrations locais foram aplicadas e validadas remotamente via `supabase db push` e auditoria SQL em G1.0. |
@@ -170,3 +170,56 @@ Auditoria e sincronização em 01/10/2026 aplicaram com sucesso as 4 migrations 
 - Atualizacao de G1.4: o 504 era cache de dependencia no servidor Astro antigo. A instancia do projeto foi reiniciada; a selecao e previa do avatar passaram em Chromium isolado limpo. Upload e persistencia Supabase autenticados ainda exigem validacao em conta de desenvolvimento; a evidencia anterior de bloqueio foi resolvida localmente, ver `G1.4-avatar-clean-dev-rerun-20261001`.
 
 - Rechecagem adicional do Mercado Livre: Chromium isolado recebeu pagina generica de erro no anuncio MLB5993515528, sem metadados ou corpo de produto. Este resultado nao conta como produto inexistente e nao e motivo para arquivar. Ver `E1.1-ml-access-error-rerun-20261001` em `VALIDACOES.md`.
+
+### Revalidacao local de coleta e detalhes de produto - 03/10/2026
+
+- Portao local aprovado: npm run validate:local passou com Astro check sem diagnosticos, build Vercel, 188/188 testes e orcamento aprovado. Macro: 90/90 testes JavaScript e 11/11 testes Python aprovados.
+- A ponte/importador preserva Pix, cartao/parcelas, rating, quantidade de avaliacoes, especificacoes e um video HTTPS permitido; a migration foi exercitada com PGlite, incluindo RPC e refresh parcial.
+- Pendencias: validar coleta real autenticada por marketplace, aplicar migrations no Supabase pelo fluxo normal, conferir dados remotos e validar preview/deploy. Evidencia E1.6-product-facts-pipeline-20261003 em VALIDACOES.md.
+
+### Revalidacao local de fallback e imagens de categoria - 03/10/2026
+
+- H1.7: fallback global agora espera imagem com URL e preserva `alt=""` para imagens decorativas; testes focados passaram 17/17.
+- Portao completo: `npm run validate:local` passou com Astro check em 121 arquivos sem diagnosticos, build Vercel, 189/189 testes e orcamento aprovado (1 funcao; 2.318.175 bytes estimados no artefato estatico).
+- Playwright confirmou 10/10 imagens de categoria carregadas e visiveis, com texto alternativo vazio. O servidor Astro dedicado nao respondeu nesta rodada; o teste usou o servidor estatico local na porta 4325, que servia o build recem-gerado.
+- Limites: evidencia local apenas; nenhuma publicacao ou deploy; leitor de tela real continua pendente.
+
+### Revalidacao Magalu, suite macro e sessao Awin - 03/10/2026
+
+- Fallback da galeria inclui as familias de classe fornecidas nas capturas, sem remover os seletores `data-testid`; limite permanece em tres fotos.
+- Fixture Magalu confere Pix, cartao, parcelas e preco anterior independentes; teste de video valida poster HTTPS e rejeicao de `blob:`.
+- Suites atuais: site 189/189, macro 91/91 JavaScript e 11/11 Python; build, budget e carga da extensao Chromium aprovados.
+- A sessao Awin foi aberta visivelmente no perfil persistente; aguarda acao manual se a Awin pedir login/verificacao. A tentativa Magalu com perfil temporario veio vazia; nenhum deploy, alteracao Supabase ou escrita de catalogo ocorreu.
+
+### Revalidacao de APIs oficiais Amazon, Shopee e Mercado Livre - 03/10/2026
+
+- Amazon: Creators API fornece catalogo, imagens variantes, ItemInfo e OffersV2, mas requer elegibilidade e credenciais. Maximo de pedido nao e estoque exato; Pix permanece extraido da pagina apenas com rotulo explicito.
+- Mercado Livre: campos genericos de preco em /items estao em processo de descontinuacao segundo a documentacao atual. sale_price/prices pedem Bearer token; sale_price usa contexto do canal, nao meio de pagamento. Preco Pix e parcelas continuam dependendo da PDP.
+- Shopee: nao foi possivel confirmar o schema liberado sem as credenciais do afiliado. Manter coleta DOM e fazer validacao autenticada antes de expandir a API.
+- A tentativa de API ML retornou 403 UNAUTHORIZED no ambiente, sem gravacoes. Testar novamente somente com API/publico acessivel ou token autorizado.
+
+- Awin recheck: perfil persistente ativo e aba Awin presente; DOM nao confirmou Link Builder ou conclusao de login. Titular deve conferir a janela visivel e finalizar autenticacao/verificacao. Nao iniciar geracao de links ate formulario do Link Builder aparecer.
+
+### Checagem final de regressao dos crawlers - 03/10/2026
+
+- Macro: testes JavaScript 94/94, testes Python 11/11 e sintaxe shared/ML aprovados. O fallback Schema.org BRL do Mercado Livre e validado por fixture e representa apenas preco geral observado.
+- Metadados Schema.org comuns (modelo, SKU, ID, GTIN/EAN, cor, tamanho e material) agora entram nas especificacoes sem inferencia; teste de regressao passou junto da suite completa.
+- Site revalidado nesta continuacao: Astro check em 121 arquivos sem diagnosticos, build, 189/189 testes e limite Vercel aprovados.
+- Ao vivo: Amazon bloqueou com tela de verificacao; Shopee variou entre PDP parcial sem preco e desafios de login/idioma; Mercado Livre nao entregou preco na amostra; Magalu segue pendente de PDP real acessivel. Pix, parcelas, estoque e video sem evidencias explicitas permanecem vazios/desconhecidos.
+- Awin: a sessao persistente esta aberta em janela visivel para o titular concluir login/verificacao caso apareca; sem envio de credenciais ou geracao de link.
+- Depois da mudanca do extrator, `npm run verify:extension-load` carregou a extensao e o service worker no Chromium de teste; nenhuma loja abriu e nao houve radar nem sincronizacao.
+
+- Video source recheck: Amazon Creators API current catalog has no documented video resource; ML item video_id requires authorized API context and is not itself a downloadable video URL; Shopee schema remains unknown pending valid credentials. Keep PDP video discovery optional and persist only stable HTTPS media, never blob URLs.
+
+- The read-only PDP verifier now supports Amazon and Shopee. Use only official HTTPS product URLs with known IDs; require ID, title, positive price, and at least one image. Do not save data or follow affiliate links during this validation.
+
+- Live PDP smoke: Amazon bot verification blocked extraction; Shopee gallery fallback now matches a loaded product image, but price remained absent from the browser DOM. Do not treat either platform as fully validated until the browser receives normal title, price, and image data.
+
+- Amazon/Shopee now accept only explicit BRL Schema.org Product Offer prices as a general-price fallback; keep Pix, card price, and installments empty unless the source labels them.
+
+### Awin: sessao e feeds verificados - 03/10/2026
+
+- O login manual foi concluido e a janela persistente chegou ao Link Builder autenticado. Foram confirmados os campos de anunciante, URL de destino e campanha, mais o botao de gerar; campanha e referencia continuam opcionais. Nenhum link foi emitido nesta checagem.
+- O endpoint Feed List oficial respondeu HTTP 200 como CSV: 903 feeds visiveis. KaBuM BR (ID 17729) esta ativo, Feed ID 46967, com 4.850 produtos; Lojas Benoit BR (ID 79974) esta ativo, Feed ID 93022, com 3.390 produtos. Os dois feeds estao em portugues.
+- A lista fornece datas de importacao/verificacao e URLs de download; a documentacao oficial diz que o arquivo e CSV com colunas mapeadas. Nao registrar nem exibir URLs de download/API key. O feed list nao informa a taxa de comissao; a API oficial do Publisher oferece `programmedetails`/`commissiongroups`, que exige access token da API. Ainda nao consultamos valores.
+- Proximo passo tecnico: importar uma amostra controlada dos feeds para verificar produto, deep link, imagens e campos de preco; testar um deep link com PDP real elegivel antes de automatizar lotes. Nao inferir comissao a partir de `commission_group` ou do feed.

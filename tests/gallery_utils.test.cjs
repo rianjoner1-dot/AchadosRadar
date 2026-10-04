@@ -20,7 +20,7 @@ test('catalog image reports retain the original store URL after a fallback sourc
 
 test('global image fallback defers to catalog, product-gallery, spotlight and demo-related handlers', () => {
   assert.equal(shouldUseGlobalImageFallback({ closest: (selector) => selector === '#catalogGrid, #productMainImage, #spotlightGrid, #demoRelatedGrid' ? {} : null }), false);
-  assert.equal(shouldUseGlobalImageFallback({ closest: () => null }), true);
+  assert.equal(shouldUseGlobalImageFallback({ closest: () => null, getAttribute: (name) => name === 'src' ? '/product.jpg' : null }), true);
 });
 
 test('product gallery arrow keys wrap through all images', () => {

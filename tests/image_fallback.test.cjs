@@ -98,6 +98,30 @@ test('Mercado Livre photo check keeps the product when availability is unknown o
   assert.equal(calls, 1);
 });
 
+test('global image fallback waits for a source and preserves intentionally empty alt text', async () => {
+  const { shouldUseGlobalImageFallback, getGlobalImageFallbackAlt } = await import('../src/modules/catalog/image-health.js');
+  const unassignedImage = {
+    getAttribute: () => null,
+    hasAttribute: () => false,
+    closest: () => null,
+  };
+  const decorativeImage = {
+    getAttribute: () => '/images/categories/moda.jpg',
+    hasAttribute: (name) => name === 'alt',
+    alt: '',
+    closest: () => null,
+  };
+  const imageWithoutAlt = {
+    hasAttribute: () => false,
+    alt: undefined,
+  };
+
+  assert.equal(shouldUseGlobalImageFallback(unassignedImage), false);
+  assert.equal(shouldUseGlobalImageFallback(decorativeImage), true);
+  assert.equal(getGlobalImageFallbackAlt(decorativeImage), '');
+  assert.equal(getGlobalImageFallbackAlt(imageWithoutAlt), 'Imagem indisponível');
+});
+
 test('spotlight image preflight distinguishes failed, loaded and timed-out images', async () => {
   const { preloadProductImage } = await import('../src/modules/catalog/image-health.js');
   class LoadedImage {

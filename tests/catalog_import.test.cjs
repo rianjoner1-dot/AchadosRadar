@@ -30,6 +30,38 @@ test('E1: importer rejects credentials embedded in original and affiliate URLs',
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('Magalu: importer carries Pix/card prices, caps gallery and keeps one safe video with poster', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-pix-video-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  const now = new Date().toISOString();
+  fs.writeFileSync(sourcePath, JSON.stringify([{
+    platform: 'magalu', id: 'sku-pix-video', title: 'Produto com preço Pix e vídeo', price: 129,
+    pixPrice: 129, cardPrice: 135.79, oldPrice: 153.8, installments: '2x de R$ 67,90 sem juros',
+    rating: 4.7, reviewsCount: 321, specifications: [{ name: 'Potência', value: '1.500 W' }, { name: 'Voltagem', value: '220 V' }],
+    stockStatus: 'in_stock', images: [1, 2, 3, 4].map((id) => `https://a-static.mlcdn.com.br/img/${id}.jpg`),
+    videos: [
+      { url: 'blob:https://ugc-magalu-videos.magazineluiza.com.br/session', poster_url: 'https://ugc-content-prd.magalu.com/video/thumbnails/sku-pix-video.jpg' },
+      { url: 'https://ugc-content-prd.magalu.com/video/sku-pix-video.mp4', poster_url: 'https://ugc-content-prd.magalu.com/video/thumbnails/sku-pix-video.jpg' },
+      { url: 'https://attacker.invalid/video.mp4' }
+    ],
+    originalUrl: 'https://www.magazineluiza.com.br/p/sku-pix-video/produto',
+    affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/sku-pix-video/produto', storeAffiliateId: 'loja',
+    linkStatus: 'ready', lastCheckedAt: now, offerObservedAt: now
+  }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const item = JSON.parse(result.stdout).details[0];
+  assert.equal(item.pixPrice, 129);
+  assert.equal(item.cardPrice, 135.79);
+  assert.equal(item.installments, '2x de R$ 67,90 sem juros');
+  assert.equal(item.rating, 4.7);
+  assert.equal(item.reviewsCount, 321);
+  assert.deepEqual(item.specifications, [{ name: 'Potência', value: '1.500 W' }, { name: 'Voltagem', value: '220 V' }]);
+  assert.equal(item.imageUrls.length, 3);
+  assert.deepEqual(item.videos, [{ url: 'https://ugc-content-prd.magalu.com/video/sku-pix-video.mp4', poster_url: 'https://ugc-content-prd.magalu.com/video/thumbnails/sku-pix-video.jpg', display_order: 0 }]);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('E1: importer accepts macro fields, preserves image order and only publishes proven, in-stock links', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-import-'));
   const sourcePath = path.join(tempDir, 'catalog.json');
@@ -117,6 +149,18 @@ test('E1a: importer preserves stock evidence and downgrades contradictory in-sto
   assert.equal(normalized.stockQuantity, 0);
   assert.equal(normalized.stockStatus, 'unknown');
   assert.equal(normalized.stockEvidence, '0 unidades');
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('E1a: importer never assumes stock when the crawler did not observe availability', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-stock-unknown-'));
+  const sourcePath = path.join(tempDir, 'catalog.json');
+  fs.writeFileSync(sourcePath, JSON.stringify([{ platform: 'magalu', id: 'stock-unknown', title: 'Produto sem estoque observado', price: 10, images: ['https://a-static.mlcdn.com.br/img/1.jpg'], originalUrl: 'https://www.magazineluiza.com.br/p/stock-unknown/produto', affiliateUrl: 'https://www.magazinevoce.com.br/loja/p/stock-unknown/produto', storeAffiliateId: 'loja', linkStatus: 'ready', lastCheckedAt: new Date().toISOString(), offerObservedAt: new Date().toISOString() }]));
+  const result = spawnSync(process.execPath, [script, sourcePath, '--dry-run', '--summary', '--verbose'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const normalized = JSON.parse(result.stdout).details[0];
+  assert.equal(normalized.stockQuantity, null);
+  assert.equal(normalized.stockStatus, 'unknown');
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 

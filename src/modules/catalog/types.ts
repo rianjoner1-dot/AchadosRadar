@@ -1,6 +1,6 @@
 // src/modules/catalog/types.ts
 
-export type PlatformType = 'mercadolivre' | 'magalu';
+export type PlatformType = 'mercadolivre' | 'magalu' | 'amazon' | 'shopee' | 'benoit' | 'kabum';
 
 export interface Product {
   id: string;

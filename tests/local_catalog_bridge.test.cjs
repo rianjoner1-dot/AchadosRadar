@@ -44,10 +44,13 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     const extensionOrigin = `chrome-extension://${'a'.repeat(32)}`;
     const first = await fetch(`${baseUrl}/api/save_product`, {
       method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
-      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo', originalUrl: 'https://www.magazineluiza.com.br/p/SKU-1/produto', affiliateUrl: 'https://www.magazinevoce.com.br/minhaloja/p/SKU-1', linkStatus: 'ready', price: 19.9, stockStatus: 'unknown', stockEvidence: 'Quantidade não exibida', images: [
+      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo', originalUrl: 'https://www.magazineluiza.com.br/p/SKU-1/produto', affiliateUrl: 'https://www.magazinevoce.com.br/minhaloja/p/SKU-1', linkStatus: 'ready', price: 19.9, pixPrice: 18.9, cardPrice: 19.9, rating: 4.8, reviewsCount: 23, specifications: [{ name: 'Potência', value: '1.500 W' }, { name: 'Voltagem', value: '220 V' }], stockStatus: 'unknown', stockEvidence: 'Quantidade não exibida', images: [
         'https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg',
         'https://user:pass@a-static.mlcdn.com.br/private.jpg', 'https://a-static.mlcdn.com.br:8443/custom-port.jpg',
         'http://a-static.mlcdn.com.br/insecure.jpg', 'https://a-static.mlcdn.com.br.attacker.invalid/lookalike.jpg'
+      ], videos: [
+        { url: 'https://ugc-content-prd.magalu.com/video/product.mp4', posterUrl: 'https://ugc-content-prd.magalu.com/video/poster.jpg' },
+        { url: 'https://attacker.invalid/video.mp4' }
       ], installments: '3x sem juros', shipping: 'Frete grátis', coupon: 'CUPOM10' })
     });
     assert.equal(first.status, 201);
@@ -63,10 +66,26 @@ test('E1: local bridge accepts extension posts, upserts safely, and rejects web 
     assert.equal(catalog.products[0].title, 'Produto exemplo atualizado');
     assert.deepEqual(catalog.products[0].images, ['https://a-static.mlcdn.com.br/1.jpg', 'https://a-static.mlcdn.com.br/2.jpg']);
     assert.equal(catalog.products[0].coupon, 'CUPOM10');
+    assert.equal(catalog.products[0].pixPrice, 18.9, 'the bridge keeps the observed Pix price for catalog import');
+    assert.equal(catalog.products[0].cardPrice, 19.9, 'the bridge keeps the observed card price separately');
+    assert.equal(catalog.products[0].rating, 4.8);
+    assert.equal(catalog.products[0].reviewsCount, 23);
+    assert.deepEqual(catalog.products[0].specifications, [{ name: 'Potência', value: '1.500 W' }, { name: 'Voltagem', value: '220 V' }]);
+    assert.deepEqual(catalog.products[0].videos, [{ url: 'https://ugc-content-prd.magalu.com/video/product.mp4', posterUrl: 'https://ugc-content-prd.magalu.com/video/poster.jpg' }], 'the bridge keeps one safe marketplace video and its approved poster');
     assert.equal(catalog.products[0].installments, '3x sem juros', 'a partial refresh retains installment facts it did not replace');
     assert.equal(catalog.products[0].shipping, 'Frete grátis', 'a partial refresh retains shipping facts it did not replace');
     assert.equal(catalog.products[0].affiliateUrl, 'https://www.magazinevoce.com.br/minhaloja/p/SKU-1', 'a partial refresh retains the saved affiliate destination');
     assert.equal(catalog.products[0].stockStatus, 'unknown', 'omitted stock status is not fabricated during upsert');
+
+    const clearPixPrice = await fetch(`${baseUrl}/api/save_product`, {
+      method: 'POST', headers: { origin: extensionOrigin, 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: 'magalu', id: 'SKU-1', title: 'Produto exemplo atualizado', pixPrice: null })
+    });
+    assert.equal(clearPixPrice.status, 200);
+    const withoutStalePix = JSON.parse(await fs.readFile(dataPath, 'utf8'));
+    assert.equal(withoutStalePix.products[0].pixPrice, null, 'an explicit missing Pix price clears a stale value after re-observation');
+    assert.equal(withoutStalePix.products[0].cardPrice, 19.9, 'a Pix-only update preserves the separate card price');
+    assert.equal(withoutStalePix.products[0].videos.length, 1, 'a partial refresh preserves the previously captured product video');
 
     for (const mismatchedIdentity of [
       { id: 'SKU-ORIGINAL-MISMATCH', originalUrl: 'https://www.magazineluiza.com.br/p/OTHER-SKU/produto', affiliateUrl: 'https://www.magazinevoce.com.br/minhaloja/p/SKU-ORIGINAL-MISMATCH' },

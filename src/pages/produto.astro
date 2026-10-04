@@ -37,21 +37,25 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
 <Layout title={pageTitle} description={pageDescription} canonicalUrl={canonicalUrl} ogImage={socialProduct?.image ?? undefined} ogType={socialProduct ? 'product' : 'website'}>
   <div class="container product-page" data-catalog-ready={catalogReady}>
     <nav class="product-breadcrumb" aria-label="Navegação estrutural"><a href="/">Início</a><span aria-hidden="true">›</span><span id="breadcrumbProduct">Produto</span></nav>
+    <span id="productLoader" class="orb-loader" aria-hidden="true"><i></i><i></i><i></i></span>
     <p id="productStatus" role="status">Carregando detalhes do produto...</p>
     <article id="productContent" hidden>
       <div class="product-overview">
         <section class="product-gallery" aria-label="Fotos do produto">
           <div id="productMainImage" class="product-main-image"></div>
           <div id="productThumbnails" class="product-thumbnails" role="group" aria-label="Fotos do produto"></div>
+          <div id="productVideos" class="product-videos" hidden></div>
           <p id="galleryAnnouncement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
         <section class="product-info">
           <p id="productStore" class="product-store"><img id="productStoreLogo" width="480" height="160" alt="" /><span id="productStoreName"></span></p>
           <h1 id="productTitle"></h1>
           <p id="productSeller" class="product-seller"></p>
+          <p id="productRating" class="product-rating" hidden></p>
           <div id="productPrice" class="product-price-box"></div>
+          <p id="offerObservation" class="offer-observation" data-state="unknown"></p>
           <ul id="productFacts" class="product-facts"></ul>
-          <div id="linkTiming" class="link-timing"></div>
+          <div id="linkTiming" class="link-timing" hidden></div>
           <a id="buyProduct" class="btn-primary product-buy" aria-disabled="true">Link sendo verificado</a>
           <button id="saveProduct" class="btn-secondary" type="button">Salvar na minha lista</button>
           <div class="share-actions" aria-label="Compartilhar produto">
@@ -69,6 +73,10 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         </section>
       </div>
       <section class="product-description"><h2>Sobre esta oferta</h2><p id="productDescription"></p></section>
+      <section id="productSpecifications" class="product-specifications" aria-labelledby="productSpecificationsTitle" hidden>
+        <h2 id="productSpecificationsTitle">Características informadas pela loja</h2>
+        <dl id="productSpecificationsList"></dl>
+      </section>
       <section class="related-section" aria-labelledby="relatedTitle">
         <h2 id="relatedTitle">Mais ofertas para comparar</h2>
         <div id="relatedGrid" class="related-grid"></div>
@@ -87,24 +95,29 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
   import { saveCartItem } from '../modules/cart/store';
   import { evaluateOfferReadiness, formatLinkTiming } from '../modules/outbound/readiness.mjs';
+  import { describeOfferObservation, describeObservedStock } from '../modules/catalog/offer-observation.mjs';
   import { recordProductView } from '../modules/analytics/client';
   const status = document.querySelector<HTMLElement>('#productStatus')!;
+  const productLoader = document.querySelector<HTMLElement>('#productLoader')!;
   const content = document.querySelector<HTMLElement>('#productContent')!;
   const error = document.querySelector<HTMLElement>('#productError')!;
   const id = new URLSearchParams(location.search).get('id');
-  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' } as Record<string, string>)[platform] ?? 'Loja parceira';
+  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' } as Record<string, string>)[platform] ?? 'Loja parceira';
   function saveProduct(product: CatalogProduct) {
     const offer = product.offer;
-    return saveCartItem({ id: product.id, platform: product.platform, title: product.title, price: offer?.price ?? null, priceFormatted: formatPrice(offer?.price), image: product.images?.[0]?.url ?? '', sellerName: offer?.seller_name ?? '', installments: offer?.installments_text ?? '' });
+    const observedPrice = offer?.pix_price ?? offer?.price;
+    return saveCartItem({ id: product.id, platform: product.platform, title: product.title, price: observedPrice ?? null, priceFormatted: formatPrice(observedPrice), image: product.images?.[0]?.url ?? '', sellerName: offer?.seller_name ?? '', installments: offer?.installments_text ?? '' });
   }
   function fact(label: string, value?: unknown) { return value !== null && value !== undefined && value !== '' ? `<li><span>${label}</span><strong>${escapeHtml(value)}</strong></li>` : `<li><span>${label}</span><strong>Consulte na loja</strong></li>`; }
   function renderRelated(product: CatalogProduct) {
     const image = product.images?.[0]?.url;
     const originalImage = product.images?.[0]?.original_url ?? image;
-    return `<article class="related-card" data-product-id="${escapeHtml(product.id)}"><a href="/produto?id=${encodeURIComponent(product.id)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage)}" alt="" loading="lazy" width="220" height="170">` : '<span class="related-image-placeholder" role="img" aria-label="Foto indisponível">Foto indisponível</span>'}<span>${escapeHtml(product.title)}</span></a><strong>${formatPrice(product.offer?.price)}</strong></article>`;
+    const price = product.offer?.pix_price ?? product.offer?.price;
+    return `<article class="related-card" data-product-id="${escapeHtml(product.id)}"><a href="/produto?id=${encodeURIComponent(product.id)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage)}" alt="" loading="lazy" width="220" height="170">` : '<span class="related-image-placeholder" role="img" aria-label="Foto indisponível">Foto indisponível</span>'}<span>${escapeHtml(product.title)}</span></a><strong>${formatPrice(price)}${product.offer?.pix_price ? ' no Pix' : ''}</strong></article>`;
   }
 
   if (!catalogReady || !id) {
+    productLoader.hidden = true;
     status.textContent = !catalogReady ? 'Conecte o Supabase ao projeto para carregar produtos cadastrados. Os itens de demonstração não têm links de compra.' : 'O identificador do produto está ausente.';
     error.hidden = false;
     content.hidden = true;
@@ -113,9 +126,10 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
     void (async () => {
       try {
         const product = await getCatalogProduct(id!, controller.signal);
-        if (!product) { status.hidden = true; error.hidden = false; return; }
+        if (!product) { productLoader.hidden = true; status.hidden = true; error.hidden = false; return; }
         void recordProductView(product.id);
         const offer = product.offer;
+        const observation = describeOfferObservation(offer?.observed_at);
         const store = storeName(product.platform);
         document.title = `${product.title} | Achados Radar`;
         document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', `${product.title}. Confira os detalhes observados e finalize a compra na ${store}.`);
@@ -126,8 +140,23 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         document.querySelector('#productTitle')!.textContent = product.title;
         document.querySelector('#productSeller')!.textContent = `Vendido por ${offer?.seller_name || store}`;
         document.querySelector('#productDescription')!.textContent = product.description || 'A loja parceira pode apresentar informações adicionais sobre este produto.';
-        document.querySelector('#productPrice')!.innerHTML = `<span class="price-observed">Preço observado</span><strong>${formatPrice(offer?.price)}</strong>${offer?.old_price ? `<del>${formatPrice(offer.old_price)}</del>` : ''}${offer?.installments_text ? `<span>${escapeHtml(offer.installments_text)}</span>` : ''}`;
-        document.querySelector('#productFacts')!.innerHTML = [fact('Frete', offer?.shipping_text), fact('Cupom', offer?.coupon_code), fact('Quantidade em estoque', offer?.stock_quantity), fact('Disponibilidade', offer?.stock_status === 'in_stock' ? 'Disponível na última consulta' : offer?.stock_status === 'out_of_stock' ? 'Sem estoque na última consulta' : 'Não confirmada'), fact('Consultado em', offer?.observed_at ? new Date(offer.observed_at).toLocaleString('pt-BR') : null)].join('');
+        const rating = document.querySelector<HTMLElement>('#productRating')!;
+        if (typeof product.rating === 'number' && Number.isFinite(product.rating) && product.rating >= 0 && product.rating <= 5) {
+          const count = Number.isSafeInteger(product.reviews_count) && (product.reviews_count ?? -1) >= 0 ? ` · ${product.reviews_count} avaliações` : '';
+          rating.textContent = `Avaliação observada na loja: ${product.rating.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}/5${count}`;
+          rating.hidden = false;
+        }
+        const specifications = Array.isArray(product.specifications) ? product.specifications.filter((item) => item?.name && item?.value).slice(0, 18) : [];
+        if (specifications.length) {
+          document.querySelector('#productSpecificationsList')!.innerHTML = specifications.map((item) => `<div><dt>${escapeHtml(item.name)}</dt><dd>${escapeHtml(item.value)}</dd></div>`).join('');
+          document.querySelector<HTMLElement>('#productSpecifications')!.hidden = false;
+        }
+        const observedPrice = offer?.pix_price ?? offer?.price;
+        document.querySelector('#productPrice')!.innerHTML = `<span class="price-observed">${offer?.pix_price ? 'À vista no Pix' : 'Preço observado'}</span><strong>${formatPrice(observedPrice)}</strong>${offer?.old_price && observedPrice && offer.old_price > observedPrice ? `<del>De ${formatPrice(offer.old_price)}</del>` : ''}${offer?.card_price ? `<span>No cartão: ${formatPrice(offer.card_price)}</span>` : ''}${offer?.installments_text ? `<span>${escapeHtml(offer.installments_text)}</span>` : ''}`;
+        const observationElement = document.querySelector<HTMLElement>('#offerObservation')!;
+        observationElement.textContent = observation.label;
+        observationElement.dataset.state = observation.state;
+        document.querySelector('#productFacts')!.innerHTML = [fact('Frete', offer?.shipping_text), fact('Cupom', offer?.coupon_code), fact('Quantidade na última consulta', offer?.stock_quantity), fact('Disponibilidade', describeObservedStock(offer?.stock_status, observation.state))].join('');
         const imageHost = document.querySelector('#productMainImage')!;
         const productImages = product.images ?? [];
         imageHost.replaceChildren();
@@ -136,24 +165,61 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         const thumbnails = [...document.querySelectorAll<HTMLButtonElement>('.gallery-thumb')];
         initProductGallery(imageHost, thumbnails, product.title, document.querySelector<HTMLElement>('#galleryAnnouncement'), (imageUrl) => { void reportCatalogImageFailure(product.id, imageUrl); });
 
+        const videoHost = document.querySelector<HTMLElement>('#productVideos')!;
+        const productVideo = product.videos?.find((video) => /^https:\/\//i.test(video.url));
+        if (productVideo) {
+          const poster = productVideo.poster_url && /^https:\/\//i.test(productVideo.poster_url) ? ` poster="${escapeHtml(productVideo.poster_url)}"` : '';
+          videoHost.innerHTML = `<p>Vídeo do produto</p><video controls playsinline preload="metadata"${poster}><source src="${escapeHtml(productVideo.url)}"></video>`;
+          videoHost.hidden = false;
+        }
+
         const timing = document.querySelector<HTMLElement>('#linkTiming')!;
+        timing.hidden = true;
         const link = product.affiliate_link;
         const buy = document.querySelector<HTMLAnchorElement>('#buyProduct')!;
+        const safeLink = link as unknown as Record<string, string> | null;
+        const outUrl = `/api/out/${encodeURIComponent(product.id)}`;
+        const getDestinationUrl = () => safeLink?.affiliate_url || safeLink?.original_url || outUrl;
         const updateTimer = () => {
           timing.textContent = formatLinkTiming(link);
           const currentReadiness = evaluateOfferReadiness({ link, offer });
+          const destination = getDestinationUrl();
           if (!currentReadiness.ready) {
-            buy.removeAttribute('href');
-            buy.removeAttribute('target');
-            buy.removeAttribute('rel');
-            buy.setAttribute('aria-disabled', 'true');
-            buy.textContent = currentReadiness.reason;
+            if (destination) {
+              buy.href = destination;
+              buy.textContent = `Continuar na ${store}`;
+              buy.target = '_blank';
+              buy.rel = 'noopener noreferrer';
+              buy.removeAttribute('aria-disabled');
+            } else {
+              buy.removeAttribute('href');
+              buy.removeAttribute('target');
+              buy.removeAttribute('rel');
+              buy.setAttribute('aria-disabled', 'true');
+              buy.textContent = currentReadiness.reason;
+            }
           }
         };
         updateTimer(); window.setInterval(updateTimer, 60_000);
         const readiness = evaluateOfferReadiness({ link, offer });
-        if (readiness.ready) { buy.href = `/api/out/${encodeURIComponent(product.id)}`; buy.textContent = `Continuar na ${store}`; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.removeAttribute('aria-disabled'); }
-        else { buy.textContent = readiness.reason; buy.setAttribute('aria-disabled', 'true'); buy.addEventListener('click', (event) => event.preventDefault()); }
+        const destination = getDestinationUrl();
+        if (readiness.ready) {
+          buy.href = `/api/out/${encodeURIComponent(product.id)}`;
+          buy.textContent = `Continuar na ${store}`;
+          buy.target = '_blank';
+          buy.rel = 'noopener noreferrer';
+          buy.removeAttribute('aria-disabled');
+        } else if (destination) {
+          buy.href = destination;
+          buy.textContent = `Continuar na ${store}`;
+          buy.target = '_blank';
+          buy.rel = 'noopener noreferrer';
+          buy.removeAttribute('aria-disabled');
+        } else {
+          buy.textContent = readiness.reason;
+          buy.setAttribute('aria-disabled', 'true');
+          buy.addEventListener('click', (event) => event.preventDefault());
+        }
         const saveButton = document.querySelector<HTMLButtonElement>('#saveProduct')!;
         saveButton.addEventListener('click', () => { saveButton.textContent = saveProduct(product) ? 'Salvo na minha lista' : 'Já está na minha lista'; });
         const shareStatus = document.querySelector<HTMLElement>('#shareProductStatus')!;
@@ -166,6 +232,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           shareStatus.textContent = result === 'copied' ? 'Link do produto copiado.' : `Copie o link do produto: ${location.href}`;
         });
         status.hidden = true;
+        productLoader.hidden = true;
         content.hidden = false;
 
         const related = document.querySelector<HTMLElement>('#relatedGrid')!;
@@ -211,6 +278,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         }
         await addRelated();
       } catch {
+        productLoader.hidden = true;
         status.textContent = 'Não foi possível carregar o produto. Tente novamente.';
       }
     })();
@@ -225,6 +293,9 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-main-image { aspect-ratio:1; display:grid; place-items:center; padding:24px; border:1px solid #e1e1e1; border-radius:8px; background:white; }
   .product-main-image img { width:100%; height:100%; object-fit:contain; object-position:center top; }
   .product-thumbnails { display:flex; gap:8px; overflow:auto; padding:10px 0; }
+  .product-videos { margin-top: 12px; padding: 12px; border: 1px solid #d9e2dc; border-radius: 12px; background: #f7faf7; }
+  .product-videos p { margin: 0 0 8px; color: #415347; font-size: .85rem; font-weight: 700; }
+  .product-videos video { display: block; width: min(100%, 420px); max-height: 520px; margin: auto; border-radius: 8px; background: #111; }
   .gallery-thumb { width:72px; height:72px; border:1px solid #ddd; border-radius:5px; padding:4px; flex:0 0 auto; background:white; }
   .gallery-thumb[aria-pressed="true"] { border-color:#333; }
   .gallery-thumb:focus-visible { outline:3px solid #333; outline-offset:2px; }
@@ -235,6 +306,9 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-info h1 { color:#222; font-size:clamp(1.45rem,3vw,2rem); line-height:1.3; }
   .product-seller { color:#666; font-size:.86rem; }
   .product-price-box { display:flex; flex-direction:column; gap:5px; width:100%; background:#f7f7f7; padding:16px; border-radius:7px; }
+  .offer-observation { width:100%; margin:-7px 0 0; padding:10px 12px; border:1px solid #d7e2e9; border-left:4px solid #34749f; border-radius:7px; background:#eff6fa; color:#345267; font-size:.82rem; line-height:1.4; font-weight:650; }
+  .offer-observation[data-state="needs_recheck"] { border-color:#ead9a5; border-left-color:#9b6e00; background:#fbf3db; color:#75550d; }
+  .offer-observation[data-state="unknown"] { border-color:#ddd; border-left-color:#777; background:#f5f5f5; color:#555; }
   .price-observed { color:#666; font-size:.75rem; }
   .product-price-box strong { color:#222; font-size:1.9rem; }
   .product-price-box del { color:#777; font-size:.85rem; }
@@ -260,6 +334,14 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   .product-description, .related-section { margin-top:36px; border-top:1px solid #e5e5e5; padding-top:24px; }
   .product-description h2, .related-section h2 { color:#222; font-size:1.25rem; margin-bottom:12px; }
   .product-description p { color:#555; line-height:1.6; white-space:pre-wrap; }
+  .product-rating { margin:8px 0 0; color:#365b78; font-size:.92rem; }
+  .product-specifications { margin-top:28px; border-top:1px solid #e5e5e5; padding-top:24px; }
+  .product-specifications h2 { color:#222; font-size:1.25rem; margin-bottom:12px; }
+  .product-specifications dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 16px; margin:0; }
+  .product-specifications dl > div { display:grid; grid-template-columns:minmax(100px,.8fr) minmax(0,1.2fr); gap:10px; padding:10px 12px; border-radius:10px; background:#f3f7fa; }
+  .product-specifications dt { color:#566474; }
+  .product-specifications dd { margin:0; color:#202a34; font-weight:600; }
+  @media (max-width:600px) { .product-specifications dl { grid-template-columns:1fr; } }
   .related-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
   .related-card { border:1px solid #e5e5e5; border-radius:7px; overflow:hidden; display:flex; flex-direction:column; padding-bottom:10px; }
   .related-card img { width:100%; height:140px; object-fit:contain; padding:10px; background:white; }

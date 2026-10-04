@@ -17,7 +17,10 @@
     "audit:catalog-images": "node scripts/audit-live-product-images.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.cjs",
     "validate:local": "npm run check && npm run build && npm test && npm run test:budget",
-    "orchestrate": "node scripts/orchestrate-radar.mjs"
+    "orchestrate": "node scripts/orchestrate-radar.mjs",
+    "awin:session": "node scripts/open-awin-session.mjs",
+    "session:shopee": "node scripts/open-robot-session.mjs",
+    "session:robot": "node scripts/open-robot-session.mjs"
   },
   "dependencies": {
     "@astrojs/vercel": "^11.0.11",

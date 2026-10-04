@@ -402,3 +402,63 @@ Modelo para os próximos passos:
 
 | G1.4-avatar-storage-regression-suite-20261001 | 01/10/2026 | Hotfix validado em dev e suíte completa verde | Migration `20261001120000_fix_avatar_storage_upload_rls.sql` aplicada no Supabase linkado ao ref dev e consulta remota `verify-remote-schema.sql` retornou `all_site_migrations_applied=true`, `all_user_tables_have_rls=true`, `avatars_bucket_exists=true`. `npm run validate:local`: Astro 111 arquivos/0 diagnosticos; build Vercel aprovado; 168/168 testes; 1 funcao; 1.351.625 B estaticos estimados (<5 MiB). `git diff --check` sem erros de patch. | API Storage autenticada validada com objeto WebP de teste, nao com a foto real do proprietario pela interface Chrome. Texto amigavel no frontend ainda requer deploy; nenhum deploy ocorreu. |
 | F1-search-sectors-v2-local-20261001 | 01/10/2026 | Implementacao local registrada | Ver [VALIDACOES_BUSCA_SETORES.md](VALIDACOES_BUSCA_SETORES.md) para migration, testes PGlite, smoke Chrome em modo demo e limites da evidencia. | Supabase remoto, EXPLAIN em catalogo representativo e deploy pendentes; nenhuma operacao remota ocorreu. |
+
+## E1.6-product-facts-pipeline-20261003
+
+Validacao local em 03/10/2026: npm run validate:local passou com Astro check em 121 arquivos sem diagnosticos, build Vercel concluido, 188/188 testes e orcamento aprovado (1 funcao; artefato estimado em 2.318.152 bytes). Na extensao robo-afiliados-autonomo, 90/90 testes JavaScript e 11/11 testes Python passaram. Os testes PGlite exercitam a migration e RPC de rating/especificacoes; testes da ponte/importador cobrem Pix, cartao/parcelas, avaliacao, especificacoes e video HTTPS permitido.
+
+Limites: contrato local nao comprova coleta atual em pagina autenticada, gravacao no Supabase remoto, aprovacao afiliada ou deploy. Chrome real, aplicacao remota das migrations, conferencia remota e validacao visual continuam pendentes. Nenhuma conta, banco remoto ou destino externo foi alterado nesta execucao.
+
+| H1.7-image-alt-fallback-fix-20261003 | 03/10/2026 | Fallback global respeita imagens decorativas e espera URL antes de agir | `npm run validate:local`: Astro check 121 arquivos/0 diagnosticos; build Vercel; 189/189 testes; 1 funcao serverless; artefato estatico estimado em 2.318.175 bytes, abaixo de 5 MiB. Playwright no preview local servindo o build verificou as 10 imagens de categoria completas, com naturalWidth > 0, visiveis e alt vazio. | Validacao somente local; nao houve deploy. Uma instancia Astro dedicada na porta 4326 abriu socket mas nao respondeu HTTP, entao a checagem visual foi feita no servidor estatico local 4325 que passou a servir o build novo. A arvore acessivel automatizada nao substitui teste com leitor de tela real. |
+
+| E1.7-macro-regression-rerun-20261003 | 03/10/2026 | Contratos locais da coleta e carga da extensao aprovados | No robo: `node --test tests/*.test.cjs` 90/90; `python -m unittest discover -s tests -p test_*.py` 11/11; `node --check` no service worker e crawlers shared/Magalu/ML. `npm run verify:extension-load` carregou a extensao no Chromium para teste sem abrir marketplaces nem iniciar radar/bridge. | A primeira chamada sem argumentos retornou a precondicao e nenhum produto abriu. Uma reexecucao somente leitura abriu a URL MLB3299039091; o resultado e registrado em E1.7-live-ml-readonly-sample-20261003. O fluxo visivel Awin continua aguardando login/verificacao manual do titular. |
+
+| E1.7-live-ml-readonly-sample-20261003 | 03/10/2026 | Teste real somente leitura identificou produto e imagem, mas nao comprovou preco | `npm run verify:extension-products -- --product=mercadolivre|MLB3299039091|https://produto.mercadolivre.com.br/MLB-3299039091` abriu uma pagina cujo canonical e H1 correspondiam ao ID; crawler retornou titulo e uma imagem, mas preco 0 e estoque desconhecido, logo passou=false. Em uma requisicao independente no Chromium sem extensao, a mesma URL retornou uma pagina generica de erro do Mercado Livre, sem H1/preco. Nenhuma ponte, gravacao no banco, radar ou navegacao afiliada ocorreu. | O acesso inconsistente nao permite concluir que o seletor de preco esta errado nem validar dados comerciais; repetir com URL ativa fornecida pelo titular e pagina acessivel. Nao afirmar que a coleta real esta aprovada. |
+
+| E1.8-magalu-gallery-payment-fixture-20261003 | 03/10/2026 | Seletores de galeria Magalu ampliados a partir das capturas; pagamentos preservados em campos distintos | A coleta PDP inclui fallback para `hMZfhv`, `fqkvVR`, `dYOqWG` e classes gallery/Gallery apos seletores data-testid. Teste fixture confirma Pix R$ 129,00, cartao R$ 135,79, parcelas 2x R$ 67,90 e anterior R$ 153,08 separados. Teste de video confirma HTTPS Magalu e poster em vez de `blob:`. Suite macro 91/91 JS e 11/11 Python; site `npm run validate:local` 189/189, Astro check/build/budget; `verify:extension-load` passou. A janela persistente Awin foi aberta sem preencher credenciais. | Tentativa Magalu em perfil Chromium temporario nao retornou titulo, preco ou imagens; isto nao valida o DOM atual e nao prova falha do seletor. Fazer rechecagem no Chrome real do titular; pagina ML/API tambem retornou 403 nesta rede. Nenhuma coleta ou gravacao remota foi feita. |
+
+## E1.9-official-marketplace-api-recheck-20261003
+
+Documentacao oficial revisada em 03/10/2026: Amazon Creators API disponibiliza recursos Images, ItemInfo e OffersV2, sob elegibilidade e credenciais; maxOrderQuantity nao e estoque exato. Mercado Livre orienta sale_price/prices com Bearer token e contexto do canal, sem campo Pix; available_quantity publico e referencial. Shopee Affiliate API Explorer nao apresentou schema com credencial invalida/ausente.
+
+Probe de leitura da API publica do ML para MLB3299039091: /items, /prices e /sale_price retornaram HTTP 403 UNAUTHORIZED nesta rede. Isto nao prova falha do produto nem seletor. Nenhum dado foi gravado, nenhuma requisicao autenticada foi feita.
+
+Referencias: https://affiliate-program.amazon.com/creatorsapi/docs/en-us/introduction ; https://affiliate-program.amazon.com/creatorsapi/docs/en-us/api-reference/operations/search-items ; https://developers.mercadolivre.com.br/devcenter/api-de-precos ; https://developers.mercadolivre.com.br/pt_br/itens-e-buscas ; https://open-api.affiliate.shopee.com.br/explorer.
+
+## Awin-visible-session-recheck-20261003
+
+O endpoint CDP do perfil persistente respondeu; foram observados dois alvos de pagina e uma aba em ui.awin.com. Checagem DOM limitada retornou um formulario, sem campo de senha/codigo reconhecido e sem texto Link Builder. Estado de autenticacao e verificacao segue inconclusivo; nenhum dado de conta, cookie, URL privada, formulario ou valor digitado foi lido/exibido. Nenhuma acao, credencial ou link foi submetido.
+
+## E1.10-official-product-video-api-recheck-20261003
+
+Amazon Creators API reference lists Images, ItemInfo and OffersV2 resources, but no dedicated product-video resource in the current operation/resource catalog. Mercado Livre item documentation includes video_id and pictures, while API examples require Bearer authorization; an ID alone is not a persistent media URL. Shopee affiliate explorer did not expose its schema without valid credentials. The implemented collection path therefore remains PDP-based for videos, with HTTPS/stable-URL checks and blob rejection.
+
+References: https://affiliate-program.amazon.com/creatorsapi/docs/en-us/api-reference ; https://affiliate-program.amazon.com/creatorsapi/docs/en-us/api-reference/resources/images ; https://developers.mercadolivre.com.br/pt_br/autenticacao-e-autorizacao/publicacao-de-produtos ; https://open-api.affiliate.shopee.com.br/explorer. No authenticated calls, marketplace actions, or writes were made.
+
+## E1.11-readonly-product-verifier-platform-coverage-20261003
+
+The read-only product verifier now accepts official Amazon and Shopee product pages in addition to Magalu and Mercado Livre, with HTTPS host allowlists and platform-specific PDP message types. Acceptance remains strict: exact expected ID, non-empty title, positive price, and at least one image. Real PDP validation is pending; this change only enables an isolated smoke test without saving products or following affiliate links.
+
+## E1.12-live-amazon-shopee-pdp-smoke-20261003
+
+The isolated browser verifier started and opened both official product pages. Amazon returned a Continue shopping verification screen with no product title, price, or image. Shopee returned the expected product ID and title and one loaded 450px product image; existing gallery selectors missed this image, so the crawler now includes the observed Shopee alt/src fallbacks and preserves order, with a three-image cap. The same browser response had no visible R$ price, price candidate, or Product JSON-LD, so the extraction still fails its required positive-price gate. No affiliate link was followed, and no save, bridge, Supabase, or account action occurred. Direct Shopee page content seen via public search result is not a replacement for browser extraction evidence.
+
+## E1.13-shopee-access-variance-20261003
+
+After updating the Shopee gallery selectors, a fresh isolated Chromium attempt extracted the expected product ID/title and three images, but still had no positive price, so overall validation remained false. A subsequent fresh profile request for the same URL returned a Shopee login-required page with no product data. This confirms access varies across public requests; it does not prove the item is unavailable. Amazon continued to return a verification screen. Do not publish offers from these captures; a normal user-visible session or documented authenticated API is still needed for live price validation.
+
+## E1.14-schema-product-price-fallback-20261003
+
+Amazon and Shopee product crawlers now use an explicit Schema.org Product Offer as a fallback when visible DOM price selectors find nothing, accepting BRL only. Pix/card/installments continue to require explicit labeled evidence and are not derived from this general price. Unit tests pass for BRL formatting and rejection of USD, and static crawler-contract tests verify both integrations. This does not resolve pages that return login/verification states without product JSON-LD.
+
+## E1.15-shopee-product-state-inspection-20261003
+
+One Shopee response exposed its public text/mfe-initial-data product state: it carried a product description and seven image identifiers, while the item-level price, price range, and stock fields were null and video_info_list was empty. The DOM smoke then extracted three HTTPS product images but no price. Later requests returned login or language-selection gates. The verifier now labels these access states separately from partial products. Internal state values are not converted to currency or stock without a validated unit/field contract.
+
+## E1.16-shopee-mfe-description-fallback-20261003
+
+The Shopee product crawler now parses the official page's text/mfe-initial-data payload only to fall back to a title/description when the item ID matches the PDP URL. It does not use empty or undocumented internal price/stock fields. A fixture modeled on the observed state confirms description extraction while price stays zero and stock remains unknown; the Shopee crawler test suite passes 7/7.
+
+## E1.17-mercadolivre-schema-price-fallback-20261003
+
+Mercado Livre now shares the BRL-only Schema.org Product Offer fallback when visible price selectors produce no positive value. The captured value remains a general observed price; Pix, card price, and installments still require explicit labels. A crawler fixture confirms BRL formatting and keeps Pix/card fields null. Real current product-page validation remains pending because prior isolated PDP/API requests were blocked or incomplete.

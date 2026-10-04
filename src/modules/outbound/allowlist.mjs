@@ -1,8 +1,17 @@
 const hosts = {
   mercadolivre: ['meli.la'],
-  magalu: ['magazinevoce.com.br', 'magazineluiza.onelink.me']
+  magalu: ['magazinevoce.com.br', 'magazineluiza.onelink.me'],
+  amazon: ['amzn.to', 'amazon.com.br'],
+  shopee: ['s.shopee.com.br', 'shopee.com.br'],
+  benoit: ['benoit.com.br', 'awin1.com'],
+  kabum: ['kabum.com.br', 'awin1.com']
 };
-const exactHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
+const exactHosts = {
+  mercadolivre: ['meli.la'],
+  magalu: ['magazineluiza.onelink.me'],
+  amazon: ['amzn.to'],
+  shopee: ['s.shopee.com.br']
+};
 
 export function isAllowedAffiliateUrl(platform, rawUrl) {
   try {

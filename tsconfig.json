@@ -6,5 +6,6 @@
     "paths": {
       "@/*": ["src/*"]
     }
-  }
+  },
+  "exclude": ["dist", ".astro", ".vercel", "node_modules", "scratch", "data"]
 }

@@ -20,15 +20,37 @@ const demo = demoProducts.map((product) => ({
 <Layout title={title} description={description}>
   <section class="home-intro">
     <div class="container intro-inner">
-      <p class="eyebrow">ACHADOS RADAR</p>
-      <h1>Encontre sua próxima boa compra</h1>
-      <p>Ofertas observadas em lojas parceiras. Compare as informações e finalize diretamente no marketplace.</p>
-      <ul class="intro-points" aria-label="Informações disponíveis nas ofertas">
-        <li><span aria-hidden="true">01</span> Preço e oferta observados</li>
-        <li><span aria-hidden="true">02</span> Frete e parcelas quando disponíveis</li>
-        <li><span aria-hidden="true">03</span> Compra finalizada na loja</li>
-      </ul>
-      {!catalogReady && <p class="demo-notice" role="status">Modo de demonstração: os produtos de exemplo não têm links de compra ativos.</p>}
+      <div class="intro-copy">
+        <p class="eyebrow">ACHADOS RADAR</p>
+        <h1>Encontre sua próxima boa compra</h1>
+        <p>Ofertas observadas em lojas parceiras. Compare as informações e finalize diretamente no marketplace.</p>
+        <ul class="intro-points" aria-label="Informações disponíveis nas ofertas">
+          <li><span aria-hidden="true">01</span> Preço e oferta observados</li>
+          <li><span aria-hidden="true">02</span> Frete e parcelas quando disponíveis</li>
+          <li><span aria-hidden="true">03</span> Compra finalizada na loja</li>
+        </ul>
+        {!catalogReady && <p class="demo-notice" role="status">Modo de demonstração: os produtos de exemplo não têm links de compra ativos.</p>}
+      </div>
+      <aside class="intro-radar-shell" aria-label="Radar de produtos">
+        <div class="radar-heading"><span>RADAR EM AÇÃO</span><span class="radar-live"><i aria-hidden="true"></i> ao vivo</span></div>
+        <div class="intro-radar" role="group" aria-label="Escolha uma bolinha para ver um produto carregado">
+          <span class="radar-ring radar-ring-outer" aria-hidden="true"></span>
+          <span class="radar-ring radar-ring-middle" aria-hidden="true"></span>
+          <span class="radar-ring radar-ring-inner" aria-hidden="true"></span>
+          <span class="radar-sweep" aria-hidden="true"></span>
+          <span class="radar-center" aria-hidden="true"></span>
+          <button class="radar-dot" type="button" data-radar-dot="0" aria-label="Prévia aleatória 1" aria-controls="radarPreview"><span aria-hidden="true">1</span><img alt="" hidden /></button>
+          <button class="radar-dot" type="button" data-radar-dot="1" aria-label="Prévia aleatória 2" aria-controls="radarPreview"><span aria-hidden="true">2</span><img alt="" hidden /></button>
+          <button class="radar-dot" type="button" data-radar-dot="2" aria-label="Prévia aleatória 3" aria-controls="radarPreview"><span aria-hidden="true">3</span><img alt="" hidden /></button>
+          <button class="radar-dot" type="button" data-radar-dot="3" aria-label="Prévia aleatória 4" aria-controls="radarPreview"><span aria-hidden="true">4</span><img alt="" hidden /></button>
+        </div>
+        <div class="radar-preview" id="radarPreview" aria-live="polite" hidden>
+          <img id="radarPreviewImage" alt="" width="56" height="56" hidden />
+          <div class="radar-preview-copy"><span id="radarPreviewStore" class="radar-preview-store"></span><strong id="radarPreviewTitle"></strong><span id="radarPreviewPrice" class="radar-preview-price"></span></div>
+          <a id="radarPreviewLink" href="#catalog-title">Ver produto <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="radar-hint" id="radarHint">Toque numa bolinha para espiar um achado</p>
+      </aside>
     </div>
   </section>
 
@@ -40,6 +62,8 @@ const demo = demoProducts.map((product) => ({
       <button class="marketplace-filter" type="button" data-marketplace-filter="mercadolivre" aria-label="Ver ofertas do Mercado Livre" aria-pressed="false"><img src="/images/marketplaces/mercadolivre.png" alt="" width="480" height="160"><span class="sr-only">Mercado Livre</span></button>
       <button class="marketplace-filter" type="button" data-marketplace-filter="amazon" aria-label="Ver ofertas da Amazon" aria-pressed="false"><img src="/images/marketplaces/amazon.png" alt="" width="480" height="160"><span class="sr-only">Amazon</span></button>
       <button class="marketplace-filter" type="button" data-marketplace-filter="shopee" aria-label="Ver ofertas da Shopee" aria-pressed="false"><img src="/images/marketplaces/shopee.png" alt="" width="480" height="160"><span class="sr-only">Shopee</span></button>
+      <button class="marketplace-filter" type="button" data-marketplace-filter="benoit" aria-label="Ver ofertas da Lojas Benoit" aria-pressed="false"><img src="/images/marketplaces/benoit.png" alt="" width="480" height="160"><span class="sr-only">Lojas Benoit</span></button>
+      <button class="marketplace-filter" type="button" data-marketplace-filter="kabum" aria-label="Ver ofertas do KaBuM!" aria-pressed="false"><img src="/images/marketplaces/kabum.png" alt="" width="480" height="160"><span class="sr-only">KaBuM!</span></button>
     </div>
   </section>
 
@@ -55,17 +79,17 @@ const demo = demoProducts.map((product) => ({
     <div class="catalog-header-wrap">
       <h2 id="catalog-title">Buscar ofertas</h2>
       <div class="sector-filters" role="group" aria-label="Filtrar por categorias">
-        <button type="button" class="sector-btn" data-sector="" aria-pressed="true">🌟 Tudo</button>
-        <button type="button" class="sector-btn" data-sector="eletronicos" aria-pressed="false">💻 Eletrônicos</button>
-        <button type="button" class="sector-btn" data-sector="moda" aria-pressed="false">👗 Moda</button>
-        <button type="button" class="sector-btn" data-sector="moveis" aria-pressed="false">🛋️ Móveis</button>
-        <button type="button" class="sector-btn" data-sector="pc-gamer" aria-pressed="false">🎮 PC Gamer</button>
-        <button type="button" class="sector-btn" data-sector="eletro" aria-pressed="false">🔥 Eletro</button>
-        <button type="button" class="sector-btn" data-sector="jardim" aria-pressed="false">🌿 Jardim</button>
-        <button type="button" class="sector-btn" data-sector="bebes" aria-pressed="false">🧸 Bebês</button>
-        <button type="button" class="sector-btn" data-sector="beleza" aria-pressed="false">💄 Beleza</button>
-        <button type="button" class="sector-btn" data-sector="pet" aria-pressed="false">🐾 Pet</button>
-        <button type="button" class="sector-btn" data-sector="casa" aria-pressed="false">✨ Casa</button>
+        <button type="button" class="sector-btn" data-sector="" aria-pressed="true"><span class="sector-tile-image sector-all-image"><span class="marketplace-all-icon" aria-hidden="true">✦</span></span><span class="sector-tile-label">Tudo</span></button>
+        <button type="button" class="sector-btn" data-sector="eletronicos" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletronicos" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrônicos</span></button>
+        <button type="button" class="sector-btn" data-sector="moda" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moda" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Moda</span></button>
+        <button type="button" class="sector-btn" data-sector="moveis" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moveis" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Móveis</span></button>
+        <button type="button" class="sector-btn" data-sector="pc-gamer" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="pc-gamer" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">PC Gamer</span></button>
+        <button type="button" class="sector-btn" data-sector="eletro" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletro" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrodomésticos</span></button>
+        <button type="button" class="sector-btn" data-sector="jardim" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="jardim" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Jardim</span></button>
+        <button type="button" class="sector-btn" data-sector="bebes" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="bebes" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Bebês</span></button>
+        <button type="button" class="sector-btn" data-sector="beleza" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="beleza" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Beleza</span></button>
+        <button type="button" class="sector-btn" data-sector="pet" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="pet" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Pet</span></button>
+        <button type="button" class="sector-btn" data-sector="casa" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="casa" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Casa</span></button>
       </div>
     </div>
     <form id="catalogFilters" class="catalog-filters">
@@ -75,7 +99,7 @@ const demo = demoProducts.map((product) => ({
       </label>
       <label>Loja
         <select id="platformFilter" name="loja">
-          <option value="all">Todas as lojas</option><option value="mercadolivre">Mercado Livre</option><option value="magalu">Magalu</option><option value="amazon">Amazon</option><option value="shopee">Shopee</option>
+          <option value="all">Todas as lojas</option><option value="mercadolivre">Mercado Livre</option><option value="magalu">Magalu</option><option value="amazon">Amazon</option><option value="shopee">Shopee</option><option value="benoit">Lojas Benoit</option><option value="kabum">KaBuM!</option>
         </select>
       </label>
       <label>Preço mínimo <input id="minPrice" type="number" name="min" min="0" step="0.01" inputmode="decimal" placeholder="R$ 0" /></label>
@@ -86,7 +110,7 @@ const demo = demoProducts.map((product) => ({
       <button class="btn-primary" type="submit">Aplicar</button>
     </form>
 
-    <div class="results-heading"><h2 id="resultsTitle">Ofertas</h2><span id="catalogStatus" aria-live="polite">Carregando...</span></div>
+    <div class="results-heading"><h2 id="resultsTitle">Ofertas</h2><span class="results-status"><span id="catalogLoader" class="orb-loader" aria-hidden="true" hidden><i></i><i></i><i></i></span><span id="catalogStatus" aria-live="polite">Carregando...</span></span></div>
     <div id="catalogGrid" class="catalog-grid" data-loading="true" aria-live="polite">
       {(catalogReady || demo.length === 0) && Array.from({ length: 20 }, () => (
         <article class="catalog-card catalog-skeleton" data-catalog-skeleton aria-hidden="true">
@@ -114,31 +138,145 @@ const demo = demoProducts.map((product) => ({
 
 <script>
   import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, logSearchTermAsync, type CatalogProduct } from '../modules/catalog/client';
-  import { selectSpotlightOffers } from '../modules/catalog/spotlights.mjs';
+  import { selectSpotlightCarouselGroups } from '../modules/catalog/spotlights.mjs';
   import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
   import { isKnownUnavailableMercadoLivreImage, preloadProductImage } from '../modules/catalog/image-health.js';
   import { matchesDemoProduct, matchesDemoSector } from '../modules/catalog/search-utils.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
+  import { describeOfferObservation, describeObservedStock } from '../modules/catalog/offer-observation.mjs';
 
   const form = document.querySelector<HTMLFormElement>('#catalogFilters')!;
   const grid = document.querySelector<HTMLElement>('#catalogGrid')!;
   const status = document.querySelector<HTMLElement>('#catalogStatus')!;
+  const catalogLoader = document.querySelector<HTMLElement>('#catalogLoader')!;
   const empty = document.querySelector<HTMLElement>('#catalogEmpty')!;
   const loadMore = document.querySelector<HTMLButtonElement>('#loadMore')!;
   const sentinel = document.querySelector<HTMLElement>('#catalogSentinel')!;
   const spotlightSection = document.querySelector<HTMLElement>('#spotlightSection')!;
   const spotlightGrid = document.querySelector<HTMLElement>('#spotlightGrid')!;
   const spotlightCount = document.querySelector<HTMLElement>('#spotlightCount')!;
+  const radarDots = [...document.querySelectorAll<HTMLButtonElement>('[data-radar-dot]')];
+  const radarPreview = document.querySelector<HTMLElement>('#radarPreview')!;
+  const radarPreviewImage = document.querySelector<HTMLImageElement>('#radarPreviewImage')!;
+  const radarPreviewStore = document.querySelector<HTMLElement>('#radarPreviewStore')!;
+  const radarPreviewTitle = document.querySelector<HTMLElement>('#radarPreviewTitle')!;
+  const radarPreviewPrice = document.querySelector<HTMLElement>('#radarPreviewPrice')!;
+  const radarPreviewLink = document.querySelector<HTMLAnchorElement>('#radarPreviewLink')!;
+  const radarHint = document.querySelector<HTMLElement>('#radarHint')!;
+  let radarAssignments: HTMLElement[] = [];
+  let spotlightTimer = 0;
+  let spotlightIndices: number[] = [];
+  const syncSpotlightTimer = () => {
+    window.clearInterval(spotlightTimer);
+    if (!document.hidden && spotlightIndices.some((_, index) => (spotlightGrid.querySelectorAll<HTMLElement>('[data-carousel]')[index]?.dataset.slideCount ?? '0') !== '1')) {
+      spotlightTimer = window.setInterval(() => advanceSpotlights(1), 5000);
+    }
+  };
   let spotlightProducts: CatalogProduct[] = [];
   const failedSpotlightImages = new Set<string>();
   const imageDestinationChecks = new Map<string, Promise<boolean>>();
   let spotlightRenderVersion = 0;
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
-  const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' };
+  const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' };
   const marketplaceButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-marketplace-filter]')];
+
+  function refreshRadarDots() {
+    const loadedCards = [...grid.querySelectorAll<HTMLElement>('.catalog-card:not([hidden])')].filter((card) => {
+      const image = card.querySelector<HTMLImageElement>('.catalog-image img');
+      return Boolean(image?.currentSrc && image.complete && image.naturalWidth > 0 && !failedSpotlightImages.has(image.currentSrc));
+    });
+    const randomized = loadedCards.slice();
+    for (let index = randomized.length - 1; index > 0; index--) {
+      const swap = Math.floor(Math.random() * (index + 1));
+      [randomized[index], randomized[swap]] = [randomized[swap], randomized[index]];
+    }
+    radarAssignments = randomized.slice(0, radarDots.length);
+    radarDots.forEach((dot, index) => {
+      const card = radarAssignments[index];
+      dot.hidden = !card;
+      const number = dot.querySelector<HTMLElement>('span');
+      const image = dot.querySelector<HTMLImageElement>('img');
+      if (!card) {
+        dot.setAttribute('aria-label', `Prévia aleatória ${index + 1}`);
+        if (image) { image.hidden = true; image.removeAttribute('src'); }
+        if (number) number.hidden = false;
+        return;
+      }
+      const title = card.querySelector('h3')?.textContent?.trim() || 'Produto carregado';
+      const price = card.querySelector('.catalog-price')?.textContent?.trim();
+      const productImage = card.querySelector<HTMLImageElement>('.catalog-image img');
+      dot.setAttribute('aria-label', `Ver prévia: ${title}${price ? `, ${price}` : ''}`);
+      if (productImage?.currentSrc && productImage.complete && productImage.naturalWidth > 0 && image) {
+        image.src = productImage.currentSrc || productImage.src;
+        image.hidden = false;
+        if (number) number.hidden = true;
+      } else {
+        if (image) { image.hidden = true; image.removeAttribute('src'); }
+        if (number) number.hidden = false;
+      }
+    });
+    if (!radarAssignments.length) {
+      radarPreview.hidden = true;
+      radarHint.textContent = 'Carregando ofertas para abastecer o radar…';
+    } else {
+      radarHint.textContent = 'Toque numa bolinha para espiar um achado';
+    }
+  }
+
+  function showRadarPreview(index: number) {
+    const card = radarAssignments[index];
+    if (!card || !grid.contains(card)) return;
+    const title = card.querySelector('h3')?.textContent?.trim() || 'Produto carregado';
+    const store = card.querySelector('.store-label')?.textContent?.trim() || 'Loja parceira';
+    const price = card.querySelector('.catalog-price')?.textContent?.trim() || 'Preço na página';
+    const image = card.querySelector<HTMLImageElement>('.catalog-image img');
+    const productLink = card.querySelector<HTMLAnchorElement>('h3 a[href]') || card.querySelector<HTMLAnchorElement>('.card-detail-link[href]');
+    radarPreviewStore.textContent = store;
+    radarPreviewTitle.textContent = title;
+    radarPreviewPrice.textContent = price;
+    if (image?.src) {
+      radarPreviewImage.src = image.currentSrc || image.src;
+      radarPreviewImage.alt = '';
+      radarPreviewImage.hidden = false;
+    } else {
+      radarPreviewImage.hidden = true;
+      radarPreviewImage.removeAttribute('src');
+    }
+    radarPreviewLink.href = productLink?.href || '#catalog-title';
+    radarPreview.hidden = false;
+    radarHint.textContent = 'Esse achado já estava carregado na página';
+  }
+
+  radarDots.forEach((dot) => dot.addEventListener('click', () => showRadarPreview(Number(dot.dataset.radarDot))));
   
   const sectorButtons = [...document.querySelectorAll<HTMLButtonElement>('.sector-btn')];
   const sectorFilter = document.querySelector<HTMLInputElement>('#sectorFilter')!;
+  const fixedCategoryImages: Record<string, string> = {
+    eletronicos: '/images/categories/eletronicos.jpg',
+    moda: '/images/categories/moda.jpg',
+    moveis: '/images/categories/moveis.jpg',
+    'pc-gamer': '/images/categories/pc-gamer.jpg',
+    eletro: '/images/categories/eletrodomesticos.jpg',
+    jardim: '/images/categories/jardim.jpg',
+    bebes: '/images/categories/bebes.jpg',
+    beleza: '/images/categories/beleza.jpg',
+    pet: '/images/categories/pet.jpg',
+    casa: '/images/categories/casa.jpg'
+  };
+  for (const button of sectorButtons) {
+    const image = button.querySelector<HTMLImageElement>('[data-sector-image]');
+    const source = fixedCategoryImages[button.dataset.sector || ''];
+    if (!image || !source) continue;
+    image.addEventListener('load', () => { image.hidden = false; button.classList.add('sector-has-image'); }, { once: true });
+    image.addEventListener('error', () => { image.hidden = true; }, { once: true });
+    image.src = source;
+  }
+  grid.addEventListener('load', (event) => {
+    if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) refreshRadarDots();
+  }, true);
+  grid.addEventListener('error', (event) => {
+    if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) refreshRadarDots();
+  }, true);
   function syncSectorButtons() {
     const selected = sectorFilter.value;
     for (const button of sectorButtons) button.setAttribute('aria-pressed', String((button.dataset.sector ?? '') === selected));
@@ -181,12 +319,13 @@ const demo = demoProducts.map((product) => ({
 
   const safeImage = (product: CatalogProduct) => product.images?.[0]?.url ?? '';
   const originalImage = (product: CatalogProduct) => product.images?.[0]?.original_url ?? safeImage(product);
-  function renderSpotlightCard(entry: ReturnType<typeof selectSpotlightOffers>[number], featured = false) {
+  function renderSpotlightCard(entry: ReturnType<typeof selectSpotlightCarouselGroups>[number][number], featured = false) {
     const { product, discountPercent } = entry;
     const id = encodeURIComponent(product.id);
     const image = safeImage(product);
     const store = marketplaceNames[product.platform] || 'Loja parceira';
     const offer = product.offer;
+    const observation = describeOfferObservation(offer?.observed_at);
     const discount = discountPercent
       ? `<span class="spotlight-discount">${discountPercent}% abaixo do preço anterior informado</span><span class="spotlight-old-price">De ${formatPrice(offer?.old_price)}</span>`
       : '';
@@ -200,11 +339,13 @@ const demo = demoProducts.map((product) => ({
       : '<span class="spotlight-image-placeholder" role="img" aria-label="Foto indisponível">Foto indisponível</span>';
     return `<article class="spotlight-card${featured ? ' spotlight-card-featured' : ''}" data-product-id="${id}">
       <a class="spotlight-media" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${imageMarkup}</a>
-      <div class="spotlight-copy"><span class="spotlight-store">${store} · oferta observada</span>
+      <div class="spotlight-copy"><span class="spotlight-store">${store} · oferta observada</span><span class="spotlight-category">${escapeHtml(entry.categoryLabel)}</span>
       ${discount}
       <h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
       <p class="spotlight-detail">${detail}</p>
-      <p class="spotlight-price">${formatPrice(offer?.price)}</p>
+      <p class="spotlight-price">${formatPrice(offer?.pix_price ?? offer?.price)}${offer?.pix_price ? ' <span>no Pix</span>' : ''}</p>
+      <p class="spotlight-observation" data-state="${observation.state}">${escapeHtml(observation.label)}</p>
+      ${offer?.card_price ? `<p class="spotlight-fact">No cartão: ${formatPrice(offer.card_price)}</p>` : ''}
       ${offer?.installments_text ? `<p class="spotlight-fact">${escapeHtml(offer.installments_text)}</p>` : ''}
       <a class="spotlight-action" href="/produto?id=${id}">Conferir este achado <span aria-hidden="true">→</span></a></div></article>`;
   }
@@ -214,27 +355,64 @@ const demo = demoProducts.map((product) => ({
       spotlightProducts = products;
       failedSpotlightImages.clear();
     }
-    const candidates = selectSpotlightOffers(products, products.length, failedSpotlightImages);
-    const selected = candidates.slice(0, 3);
+    const groups = selectSpotlightCarouselGroups(products, 3, 5, failedSpotlightImages);
     spotlightGrid.replaceChildren();
-    if (!selected.length) { spotlightSection.hidden = true; return; }
-    const [featured, ...secondary] = selected;
-    spotlightGrid.dataset.count = String(selected.length);
-    spotlightGrid.insertAdjacentHTML('beforeend', renderSpotlightCard(featured, true));
-    if (secondary.length) {
-      const side = document.createElement('div');
-      side.className = 'spotlight-side';
-      side.innerHTML = secondary.map((entry) => renderSpotlightCard(entry)).join('');
-      spotlightGrid.append(side);
-    }
-    spotlightCount.textContent = `${selected.length} ofertas disponíveis na última consulta`;
+    window.clearInterval(spotlightTimer);
+    if (!groups.length) { spotlightSection.hidden = true; return; }
+    spotlightIndices = groups.map(() => 0);
+    spotlightGrid.dataset.count = String(groups.length);
+    groups.forEach((group, groupIndex) => {
+      const carousel = document.createElement('div');
+      carousel.className = `spotlight-carousel${groupIndex === 0 ? ' spotlight-carousel-featured' : ''}`;
+      carousel.dataset.carousel = String(groupIndex);
+      carousel.dataset.slideCount = String(group.length);
+      carousel.setAttribute('role', 'region');
+      carousel.setAttribute('aria-roledescription', 'carrossel');
+      carousel.setAttribute('aria-label', `Destaques de ${group[0].categoryLabel}`);
+      const slides = group.map((entry, slideIndex) => `<div class="spotlight-slide" data-slide-index="${slideIndex}" aria-hidden="${slideIndex !== 0}"${slideIndex === 0 ? '' : ' inert'}>${renderSpotlightCard(entry, groupIndex === 0)}</div>`).join('');
+      carousel.innerHTML = `<div class="spotlight-viewport"><div class="spotlight-track">${slides}</div></div><div class="spotlight-controls"><button type="button" data-carousel-step="-1" aria-label="Oferta anterior">‹</button><span class="spotlight-carousel-status" aria-live="off">Oferta 1 de ${group.length} · ${escapeHtml(group[0].categoryLabel)}</span><button type="button" data-carousel-step="1" aria-label="Próxima oferta">›</button></div>`;
+      spotlightGrid.append(carousel);
+    });
+    spotlightCount.textContent = `${groups.length} categorias · até 5 ofertas por carrossel`;
     spotlightSection.hidden = false;
     bindImageFailureReporting(spotlightGrid, {
       selector: '.spotlight-image:not([data-fallback-bound])',
       placeholderClass: 'spotlight-image-placeholder',
       reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
     });
+    syncSpotlightTimer();
   }
+
+  function advanceSpotlights(direction: number, onlyGroup?: number, announce = false) {
+    for (const carousel of spotlightGrid.querySelectorAll<HTMLElement>('[data-carousel]')) {
+      const groupIndex = Number(carousel.dataset.carousel);
+      if (onlyGroup !== undefined && groupIndex !== onlyGroup) continue;
+      const slides = [...carousel.querySelectorAll<HTMLElement>('.spotlight-slide')];
+      if (slides.length < 2) continue;
+      const current = spotlightIndices[groupIndex] ?? 0;
+      const next = (current + direction + slides.length) % slides.length;
+      spotlightIndices[groupIndex] = next;
+      slides.forEach((slide, index) => {
+        const active = index === next;
+        slide.setAttribute('aria-hidden', String(!active));
+        if (active) slide.removeAttribute('inert'); else slide.setAttribute('inert', '');
+      });
+      carousel.querySelector<HTMLElement>('.spotlight-track')!.style.transform = `translateX(-${next * 100}%)`;
+      const status = carousel.querySelector<HTMLElement>('.spotlight-carousel-status')!;
+      status.textContent = `Oferta ${next + 1} de ${slides.length} · ${slides[next].querySelector('.spotlight-category')?.textContent ?? ''}`;
+      if (announce) {
+        status.setAttribute('aria-live', 'polite');
+        window.setTimeout(() => status.setAttribute('aria-live', 'off'), 1500);
+      }
+    }
+  }
+
+  spotlightGrid.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-carousel-step]');
+    const group = button?.closest<HTMLElement>('[data-carousel]');
+    if (button && group) advanceSpotlights(Number(button.dataset.carouselStep), Number(group.dataset.carousel), true);
+  });
+  document.addEventListener('visibilitychange', syncSpotlightTimer);
 
   function checkSpotlightImageDestination(imageUrl: string) {
     let check = imageDestinationChecks.get(imageUrl);
@@ -259,7 +437,7 @@ const demo = demoProducts.map((product) => ({
     const version = ++spotlightRenderVersion;
     const inspectedProducts = new Set<string>();
     while (version === spotlightRenderVersion) {
-      const selected = selectSpotlightOffers(products, 3, failedSpotlightImages);
+      const selected = selectSpotlightCarouselGroups(products, 3, 5, failedSpotlightImages).map((group) => group[0]).filter(Boolean);
       const unchecked = selected.filter(({ product }) => {
         const image = safeImage(product);
         return image && !inspectedProducts.has(product.id);
@@ -312,17 +490,19 @@ const demo = demoProducts.map((product) => ({
     const store = marketplaceNames[product.platform] || 'Loja parceira';
     const marketplaceLogo = `/images/marketplaces/${product.platform}.png`;
     const offer = product.offer;
-    const price = formatPrice(offer?.price);
+    const observation = describeOfferObservation(offer?.observed_at);
+    const stockLabel = describeObservedStock(offer?.stock_status, observation.state);
+    const price = formatPrice(offer?.pix_price ?? offer?.price);
+    const originalPrice = offer?.old_price && offer.old_price > (offer.pix_price ?? offer.price)
+      ? `<del class="catalog-old-price">De ${formatPrice(offer.old_price)}</del>` : '';
     const image = safeImage(product);
-    const stockPill = offer?.stock_status === 'in_stock'
-      ? '<span class="stock-pill stock-available">Disponível</span>'
-      : offer?.stock_status === 'out_of_stock'
-        ? '<span class="stock-pill stock-unavailable">Sem estoque</span>'
-        : '<span class="stock-pill stock-check">Consulte a loja</span>';
-    return `<article class="catalog-card" data-product-id="${id}">
+    const stockStyle = observation.state !== 'observed' ? 'stock-check' : offer?.stock_status === 'out_of_stock' ? 'stock-unavailable' : offer?.stock_status === 'in_stock' ? 'stock-available' : 'stock-check';
+    const stockText = observation.state === 'observed' && offer?.stock_status === 'in_stock' ? 'Disponível*' : observation.state === 'observed' && offer?.stock_status === 'out_of_stock' ? 'Sem estoque*' : observation.state === 'needs_recheck' ? 'Rever estoque' : 'Estoque n/i';
+    const stockPill = `<span class="stock-pill ${stockStyle}" aria-label="${escapeHtml(stockLabel)}">${stockText}</span>`;
+    return `<article class="catalog-card" data-product-id="${id}" data-search-title="${escapeHtml(product.title)}" data-search-category="${escapeHtml(product.category ?? '')}">
       <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage(product))}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">` : '<span class="image-placeholder">Imagem indisponível</span>'}</a>
-      <div class="catalog-card-body"><div class="catalog-card-topline"><span class="store-label"><img src="${marketplaceLogo}" alt="" width="480" height="160" loading="lazy">${store}</span>${stockPill}</div><h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
-      <div class="catalog-price-panel"><span class="price-caption">Preço observado</span><p class="catalog-price">${price}</p></div>
+      <div class="catalog-card-body"><div class="catalog-card-topline"><span class="store-label"><img src="${marketplaceLogo}" alt="" width="480" height="160" loading="lazy">${store}</span>${stockPill}</div><p class="offer-observation" data-state="${observation.state}">${escapeHtml(observation.label)}</p><h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
+      <div class="catalog-price-panel"><span class="price-caption">${offer?.pix_price ? 'À vista no Pix' : 'Preço observado'}</span><p class="catalog-price">${price}</p>${originalPrice}${offer?.card_price ? `<span class="catalog-card-price">No cartão: ${formatPrice(offer.card_price)}</span>` : ''}</div>
       <div class="catalog-perks">${offer?.shipping_text ? `<span class="catalog-perk perk-shipping">${escapeHtml(offer.shipping_text)}</span>` : ''}${offer?.installments_text ? `<span class="catalog-perk perk-installments">${escapeHtml(offer.installments_text)}</span>` : ''}${offer?.coupon_code ? `<span class="catalog-perk perk-coupon">Cupom ${escapeHtml(offer.coupon_code)}</span>` : ''}</div>
       <a class="btn-primary card-detail-link" href="/produto?id=${id}">Ver oferta</a></div></article>`;
   }
@@ -333,6 +513,7 @@ const demo = demoProducts.map((product) => ({
   }
 
   function filterDemo() {
+    catalogLoader.hidden = true;
     grid.removeAttribute('data-loading');
     const filters = currentFilters();
     const query = filters.q;
@@ -353,6 +534,7 @@ const demo = demoProducts.map((product) => ({
     }
     status.textContent = `${visible} exemplo${visible === 1 ? '' : 's'} locais · sem links de compra`;
     empty.hidden = visible > 0;
+    refreshRadarDots();
   }
 
   function syncUrl() {
@@ -447,6 +629,8 @@ const demo = demoProducts.map((product) => ({
     }
     if (!catalogReady || loading) return;
     loading = true;
+    grid.setAttribute('data-loading', 'true');
+    catalogLoader.hidden = false;
     loadMore.disabled = true;
     status.textContent = 'Buscando ofertas...';
     const version = requestVersion;
@@ -456,6 +640,7 @@ const demo = demoProducts.map((product) => ({
       if (reset) { grid.replaceChildren(); void prepareSpotlights(fetched, true); }
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
       grid.removeAttribute('data-loading');
+      catalogLoader.hidden = true;
       if (reset) {
         firstPageSettled = true;
         grid.style.removeProperty('min-height');
@@ -467,6 +652,7 @@ const demo = demoProducts.map((product) => ({
         reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
       });
       appendedCount += products.length;
+      refreshRadarDots();
       status.textContent = products.length === 0 && !reset && appendedCount > 0
         ? `Fim das ofertas disponíveis. ${appendedCount} produtos carregados.`
         : `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 20 ? ' · role ou carregue mais' : ''}`;
@@ -484,6 +670,7 @@ const demo = demoProducts.map((product) => ({
         autoLoadEnabled = false;
         if (reset) grid.replaceChildren();
         grid.removeAttribute('data-loading');
+        catalogLoader.hidden = true;
         if (reset) {
           firstPageSettled = true;
           grid.style.removeProperty('min-height');
@@ -532,8 +719,9 @@ const demo = demoProducts.map((product) => ({
   let lastLoggedQuery = '';
   function logCurrentSearch() {
     const currentQ = queryInput.value.trim();
-    if (currentQ && currentQ !== lastLoggedQuery) {
-      lastLoggedQuery = currentQ;
+    const logKey = `${currentQ}|${sectorFilter.value}`;
+    if (currentQ && logKey !== lastLoggedQuery) {
+      lastLoggedQuery = logKey;
       logSearchTermAsync(currentQ, sectorFilter.value);
     }
   }
@@ -573,41 +761,97 @@ const demo = demoProducts.map((product) => ({
 </script>
 
 <style>
-  .home-intro { background: #f1f0e9; border-bottom: 1px solid #e4e0d7; padding: 42px 0 38px; }
-  .intro-inner { max-width: 1240px; position: relative; padding-left: 34px; }
-  .intro-inner::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 0; width: 5px; border-radius: 3px; background: #78917a; }
-  .eyebrow { color: #586e5a; font-size: .75rem; font-weight: 750; letter-spacing: .1em; margin-bottom: 8px; }
+  .home-intro { position: relative; overflow: hidden; background: radial-gradient(ellipse at 85% 18%, rgba(255,190,112,.25), transparent 32%), linear-gradient(112deg, #e8f3fc 0%, #f4f7fb 54%, #fff5e9 100%); border-bottom: 1px solid #d8e3ee; padding: 30px 0 26px; }
+  .intro-inner { max-width: 1240px; position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 270px; align-items: center; gap: 26px; padding-left: 34px; }
+  .intro-copy { min-width: 0; }
+  .intro-inner::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 0; width: 5px; border-radius: 3px; background: linear-gradient(180deg, #0b5da8, #f19a46); }
+  .intro-inner::after { display: none; }
+  .intro-radar-shell { width: 100%; padding: 10px; border: 1px solid rgba(11,93,168,.14); border-radius: 18px; background: rgba(255,255,255,.54); box-shadow: 0 10px 30px rgba(31,79,117,.08); }
+  .radar-heading { display: flex; align-items: center; justify-content: space-between; margin: 0 5px 8px; color: #07549a; font-size: .67rem; font-weight: 850; letter-spacing: .12em; }
+  .radar-live { display: inline-flex; align-items: center; gap: 5px; color: #687986; font-size: .65rem; font-weight: 650; letter-spacing: 0; }
+  .radar-live i { width: 7px; height: 7px; border-radius: 50%; background: #38a772; box-shadow: 0 0 0 3px rgba(56,167,114,.13); animation: radar-live-pulse 1.7s ease-in-out infinite; }
+  .intro-radar { position: relative; isolation: isolate; width: min(100%, 230px); aspect-ratio: 1; margin: auto; overflow: hidden; border: 1px solid rgba(11,93,168,.13); border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.9) 0 5%, transparent 5.5%), linear-gradient(145deg, rgba(231,244,255,.8), rgba(255,247,237,.7)); }
+  .intro-radar::before, .intro-radar::after { content: ''; position: absolute; z-index: 0; border: 1px solid rgba(11,93,168,.18); border-radius: 50%; pointer-events: none; }
+  .intro-radar::before { inset: 17%; }
+  .intro-radar::after { inset: 34%; border-color: rgba(239,150,62,.2); }
+  .radar-ring { position: absolute; z-index: 0; border: 1px solid rgba(11,93,168,.15); border-radius: 50%; pointer-events: none; }
+  .radar-ring-outer { inset: 7%; }
+  .radar-ring-middle { inset: 26%; border-color: rgba(239,150,62,.16); }
+  .radar-ring-inner { inset: 43%; }
+  .radar-sweep { position: absolute; z-index: 1; inset: -1px; border-radius: 50%; transform-origin: 50% 50%; background: conic-gradient(from 0deg, transparent 0 320deg, rgba(11,93,168,.025) 332deg, rgba(11,93,168,.32) 358deg, transparent 360deg); animation: radar-sweep 14s linear infinite; will-change: transform; pointer-events: none; }
+  .radar-center { position: absolute; z-index: 2; left: 50%; top: 50%; width: 12px; height: 12px; transform: translate(-50%,-50%); border: 3px solid #fff; border-radius: 50%; background: #f19a46; box-shadow: 0 1px 10px rgba(239,150,62,.55); }
+  .radar-dot { position: absolute; z-index: 3; display: grid; width: 42px; height: 42px; place-items: center; overflow: hidden; padding: 0; border: 3px solid #fff; border-radius: 50%; background: #0b5da8; color: #fff; box-shadow: 0 2px 12px rgba(11,93,168,.35); cursor: pointer; animation: radar-dot-pulse 3.8s ease-in-out infinite, radar-dot-float 5.5s ease-in-out infinite; transition: transform .18s ease, box-shadow .18s ease; }
+  .radar-dot[hidden] { display: none !important; }
+  .radar-dot:hover, .radar-dot:focus-visible { z-index: 4; transform: scale(1.16); box-shadow: 0 0 0 5px rgba(11,93,168,.19), 0 3px 14px rgba(11,93,168,.3); }
+  .radar-dot:focus-visible { outline: 3px solid #ef963e; outline-offset: 3px; }
+  .radar-dot[data-radar-dot="0"] { left: calc(50% - 21px); top: 8%; }
+  .radar-dot[data-radar-dot="1"] { right: 8%; top: calc(50% - 21px); animation-delay: .35s; }
+  .radar-dot[data-radar-dot="2"] { left: calc(50% - 21px); bottom: 8%; animation-delay: .7s; }
+  .radar-dot[data-radar-dot="3"] { left: 8%; top: calc(50% - 21px); animation-delay: 1.05s; }
+  .radar-dot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .radar-dot img[hidden] { display: none !important; }
+  .radar-preview { display: grid; grid-template-columns: 50px minmax(0,1fr); align-items: center; gap: 8px 10px; margin-top: 9px; padding: 8px; border: 1px solid #cbddee; border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: 0 4px 13px rgba(28,65,94,.09); }
+  .radar-preview[hidden] { display: none !important; }
+  .radar-preview > img { display: block; grid-row: span 2; width: 50px; height: 50px; border-radius: 7px; background: #f5f6f7; object-fit: contain; }
+  .radar-preview > img[hidden] { display: none !important; }
+  .radar-preview:has(> img[hidden]) { grid-template-columns: minmax(0,1fr); }
+  .radar-preview-copy { display: grid; min-width: 0; gap: 2px; }
+  .radar-preview-store { overflow: hidden; color: #667584; font-size: .62rem; text-overflow: ellipsis; white-space: nowrap; }
+  .radar-preview-copy strong { display: -webkit-box; overflow: hidden; color: #293640; font-size: .71rem; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .radar-preview-price { color: #195c38; font-size: .74rem; font-weight: 800; }
+  .radar-preview > a { grid-column: 2; color: #07549a; font-size: .7rem; font-weight: 750; text-decoration: none; }
+  .radar-preview:has(> img[hidden]) > a { grid-column: 1; }
+  .radar-preview > a:hover { text-decoration: underline; }
+  .radar-hint { margin: 7px 0 0; color: #667584; text-align: center; font-size: .65rem; }
+  @keyframes radar-sweep { to { transform: rotate(360deg); } }
+  @keyframes radar-dot-pulse { 0%,100% { box-shadow: 0 2px 12px rgba(11,93,168,.3); } 50% { box-shadow: 0 0 0 5px rgba(11,93,168,.11), 0 3px 14px rgba(11,93,168,.33); } }
+  @keyframes radar-dot-float { 0%,100% { translate: 0 0; } 50% { translate: 0 -4px; } }
+  @keyframes radar-live-pulse { 0%,100% { opacity: .7; } 50% { opacity: 1; box-shadow: 0 0 0 5px rgba(56,167,114,.08); } }
+  .eyebrow { color: #0b5da8; font-size: .75rem; font-weight: 800; letter-spacing: .1em; margin-bottom: 8px; }
   .intro-inner h1 { color: #222; font-size: clamp(1.8rem, 4vw, 2.65rem); letter-spacing: -.03em; }
   .intro-inner > p:not(.eyebrow) { color: #555; margin-top: 10px; max-width: 700px; }
   .intro-points { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 0; padding: 0; list-style: none; }
-  .intro-points li { display: inline-flex; min-height: 38px; align-items: center; gap: 9px; padding: 6px 12px 6px 7px; border: 1px solid #dedbd1; border-radius: 7px; background: #faf9f5; color: #48463f; font-size: .82rem; font-weight: 550; }
-  .intro-points li span { display: grid; width: 24px; height: 24px; flex: 0 0 24px; place-items: center; border-radius: 5px; background: #e8eee7; color: #49664d; font-size: .66rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .intro-points li { display: inline-flex; min-height: 38px; align-items: center; gap: 9px; padding: 6px 12px 6px 7px; border: 1px solid #d4e0eb; border-radius: 9px; background: rgba(255,255,255,.84); color: #3d4d5c; font-size: .82rem; font-weight: 600; box-shadow: 0 4px 12px rgba(32,76,112,.055); }
+  .intro-points li span { display: grid; width: 24px; height: 24px; flex: 0 0 24px; place-items: center; border-radius: 7px; background: #d9ecfb; color: #07549a; font-size: .66rem; font-weight: 800; font-variant-numeric: tabular-nums; }
   .demo-notice { background: #fff8e5; border-left: 3px solid #d69e00; padding: 9px 12px; margin-top: 16px !important; font-size: .88rem; }
-  .marketplace-section { padding-top: 24px; }
+  .marketplace-section { padding-top: 19px; }
   .marketplace-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 12px; }
   .marketplace-heading h2 { margin: 0; color: #282921; font-size: 1.25rem; }
   .marketplace-heading > span { color: #68655f; font-size: .82rem; }
   .marketplace-eyebrow { margin: 0 0 4px; color: #0b4f8a; font-size: .67rem; font-weight: 800; letter-spacing: .12em; }
-  .marketplace-filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-  .marketplace-filter { min-width: 0; min-height: 92px; display: grid; place-items: center; padding: 12px 16px; border: 1px solid #e1e2e5; border-radius: 14px; background: linear-gradient(145deg, #fff, #f6f8fb); box-shadow: 0 3px 12px rgba(26,45,66,.055); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
+  .marketplace-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .marketplace-filter { min-width: 0; min-height: 76px; display: grid; place-items: center; padding: 10px 16px; border: 1px solid #d9e2eb; border-radius: 14px; background: linear-gradient(145deg, #fff, #f3f8fd); box-shadow: 0 3px 12px rgba(26,45,66,.07); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
   .marketplace-filter:hover { transform: translateY(-2px); border-color: #9ab9d4; box-shadow: 0 8px 20px rgba(11,79,138,.12); }
-  .marketplace-filter[aria-pressed="true"] { border: 2px solid #0b4f8a; padding: 11px 15px; background: #edf5fc; box-shadow: 0 4px 16px rgba(11,79,138,.14); }
+  .marketplace-filter[aria-pressed="true"] { border: 2px solid #0b5da8; padding: 9px 15px; background: #e5f2ff; box-shadow: 0 5px 17px rgba(11,79,138,.17); }
+  .marketplace-filter:nth-child(3) { background: linear-gradient(145deg, #fffdf0, #fff7cd); }
+  .marketplace-filter:nth-child(4) { background: linear-gradient(145deg, #fff8ef, #ffe8ce); }
+  .marketplace-filter:nth-child(5) { background: linear-gradient(145deg, #fff7f2, #ffe3d5); }
+  .marketplace-filter[data-marketplace-filter="benoit"] { background: linear-gradient(145deg, #fff8f8, #fde8e8); }
+  .marketplace-filter[data-marketplace-filter="kabum"] { background: linear-gradient(145deg, #f0f7ff, #deedfb); }
   .marketplace-filter img { display: block; width: min(100%, 174px); height: 58px; object-fit: contain; border-radius: 5px; }
   .marketplace-filter:first-child { gap: 6px; color: #303d4b; font-size: .84rem; font-weight: 750; }
   .marketplace-all-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #dcecf9; color: #0b4f8a; font-size: 1.2rem; }
   .catalog-section { padding-top: 32px; padding-bottom: 56px; }
   .catalog-header-wrap { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 4px; }
   .catalog-header-wrap h2 { margin: 0; }
-  .sector-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-  .sector-btn { padding: 7px 14px; border: 1px solid #d1d5db; border-radius: 20px; background: #fff; color: #4b5563; font-size: 0.83rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-  .sector-btn:hover { border-color: #9ca3af; background: #f9fafb; color: #111827; }
-  .sector-btn[aria-pressed="true"] { background: #1f2937; color: #fff; border-color: #1f2937; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .sector-filters { display: flex; flex-wrap: wrap; gap: 9px; }
+  .sector-btn { display: grid; flex: 0 0 90px; grid-template-rows: 61px auto; gap: 5px; min-width: 0; min-height: 98px; padding: 6px; border: 1px solid #d0dfec; border-radius: 14px; background: #fff; color: #3e5265; font-size: .74rem; font-weight: 700; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; box-shadow: 0 2px 5px rgba(16,72,119,.055); }
+  .sector-btn:hover { transform: translateY(-2px); border-color: #80afd6; box-shadow: 0 6px 15px rgba(16,72,119,.12); }
+  .sector-btn[aria-pressed="true"] { border: 2px solid #0b5da8; padding: 6px; box-shadow: 0 4px 12px rgba(11,93,168,.22); }
+  .sector-btn[data-sector="eletro"] .sector-tile-label { font-size: .62rem; letter-spacing: -.025em; }
+  .sector-tile-image { display: grid; width: 100%; height: 61px; place-items: center; overflow: hidden; border-radius: 9px; background: linear-gradient(135deg, #d9ecfb, #ffead5); }
+  .sector-tile-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .sector-tile-image img[hidden] { display: none !important; }
+  .sector-all-image { background: linear-gradient(135deg, #dcecf9, #cce3f8); }
+  .sector-all-image .marketplace-all-icon { width: 34px; height: 34px; margin: 0; border-radius: 0; background: transparent; font-size: 1.4rem; }
+  .sector-tile-label { align-self: center; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
   .catalog-section h2, .results-heading h2 { color: #282921; font-size: 1.35rem; letter-spacing: -.02em; }
-  .catalog-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(120px, 1fr)) auto; gap: 12px; padding: 18px; margin: 14px 0 30px; background: #fff; border: 1px solid #dedede; border-radius: 8px; }
+  .catalog-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(120px, 1fr)) auto; gap: 12px; padding: 18px; margin: 14px 0 30px; background: linear-gradient(135deg, #fff 0%, #f5faff 65%, #fff9f2 100%); border: 1px solid #d9e5ef; border-radius: 12px; box-shadow: 0 5px 18px rgba(23,74,115,.055); }
   .catalog-filters label { display: grid; gap: 6px; color: #444; font-size: .8rem; font-weight: 600; }
   .catalog-filters input, .catalog-filters select { min-width: 0; width: 100%; min-height: 42px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 8px 10px; color: #222; background: #fff; font: inherit; }
   .catalog-filters .btn-primary { align-self: end; }
   .results-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .results-status { display: inline-flex; align-items: center; gap: 9px; min-height: 22px; color: #526779; }
   .results-heading span { color: #666; font-size: .84rem; }
   .catalog-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
   .catalog-card { min-width: 0; overflow: hidden; display: flex; flex-direction: column; background: #fff; border: 1px solid #e4e1d9; border-radius: 11px; transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
@@ -639,6 +883,8 @@ const demo = demoProducts.map((product) => ({
   .catalog-price-panel { display: flex; flex-direction: column; gap: 1px; margin-top: auto; padding: 10px 12px; border: 1px solid #e1e9df; border-radius: 7px; background: #f1f5ef; }
   .price-caption { color: #647263; font-size: .68rem; font-weight: 600; }
   .catalog-price { color: #2e5834; font-size: 1.28rem; line-height: 1.25; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .catalog-old-price { color: #687066; font-size: .72rem; }
+  .catalog-card-price { color: #4c5f4c; font-size: .72rem; }
   .catalog-perks { display: flex; flex-wrap: wrap; gap: 5px; min-height: 0; }
   .catalog-perk { max-width: 100%; overflow: hidden; padding: 4px 7px; border-radius: 5px; font-size: .68rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
   .perk-shipping { background: #edf2f4; color: #45616a; }
@@ -649,7 +895,9 @@ const demo = demoProducts.map((product) => ({
   .load-more { display: flex; margin: 24px auto 0; }
   #catalogSentinel { height: 1px; }
   @media (max-width: 980px) { .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .catalog-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (max-width: 640px) { .home-intro { padding: 28px 0 26px; } .intro-inner { padding-left: 20px; } .intro-inner::before { width: 4px; } .intro-points { gap: 7px; margin-top: 16px; } .intro-points li { min-height: 36px; gap: 7px; padding-right: 9px; font-size: .75rem; } .intro-points li span { width: 22px; height: 22px; flex-basis: 22px; } .marketplace-heading { align-items: flex-start; flex-direction: column; gap: 4px; } .marketplace-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .marketplace-filter { min-height: 76px; padding: 9px; } .marketplace-filter[aria-pressed="true"] { padding: 8px; } .marketplace-filter img { height: 48px; } .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .catalog-card-body { padding: 10px; gap: 8px; } .catalog-image { height: 170px; min-height: 150px; padding: 10px; } .catalog-card h3 { min-height: 2.8em; font-size: .84rem; } .catalog-price-panel { padding: 8px 9px; } .catalog-price { font-size: 1.08rem; } .stock-pill { font-size: .6rem; padding-inline: 6px; } .store-label { font-size: .61rem; padding-inline: 6px; } .store-label img { width: 38px; height: 14px; } .catalog-perk { font-size: .61rem; } .catalog-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 9px; } .catalog-filters .filter-search { grid-column: 1 / -1; } .catalog-filters .btn-primary { min-height: 40px; } }
+  @media (max-width: 760px) { .intro-inner { grid-template-columns: minmax(0, 1fr) 210px; gap: 12px; } .intro-radar-shell { padding: 8px; } .intro-radar { width: 190px; } .radar-dot { width: 36px; height: 36px; } .radar-dot[data-radar-dot="0"] { left: calc(50% - 18px); } .radar-dot[data-radar-dot="1"] { top: calc(50% - 18px); } .radar-dot[data-radar-dot="2"] { left: calc(50% - 18px); } .radar-dot[data-radar-dot="3"] { top: calc(50% - 18px); } }
+  @media (prefers-reduced-motion: reduce) { .radar-dot, .radar-live i { animation: none; } }
+  @media (max-width: 640px) { .home-intro { padding: 22px 0; } .intro-inner { grid-template-columns: minmax(0,1fr); gap: 16px; padding-left: 20px; } .intro-inner::before { width: 4px; } .intro-radar-shell { width: min(100%, 260px); justify-self: center; } .intro-radar { width: 210px; } .intro-points { gap: 7px; margin-top: 16px; } .intro-points li { min-height: 36px; gap: 7px; padding-right: 9px; font-size: .75rem; } .intro-points li span { width: 22px; height: 22px; flex-basis: 22px; } .marketplace-heading { align-items: flex-start; flex-direction: column; gap: 4px; } .marketplace-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .marketplace-filter { min-height: 76px; padding: 9px; } .marketplace-filter[aria-pressed="true"] { padding: 8px; } .marketplace-filter img { height: 48px; } .sector-filters { display: grid; grid-auto-columns: 98px; grid-auto-flow: column; overflow-x: auto; padding-bottom: 5px; scroll-snap-type: x mandatory; } .sector-btn { flex-basis: auto; width: 98px; min-height: 99px; grid-template-rows: 61px auto; scroll-snap-align: start; } .sector-tile-image { height: 61px; } .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .catalog-card-body { padding: 10px; gap: 8px; } .catalog-image { height: 170px; min-height: 150px; padding: 10px; } .catalog-card h3 { min-height: 2.8em; font-size: .84rem; } .catalog-price-panel { padding: 8px 9px; } .catalog-price { font-size: 1.08rem; } .stock-pill { font-size: .6rem; padding-inline: 6px; } .store-label { font-size: .61rem; padding-inline: 6px; } .store-label img { width: 38px; height: 14px; } .catalog-perk { font-size: .61rem; } .catalog-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 9px; } .catalog-filters .filter-search { grid-column: 1 / -1; } .catalog-filters .btn-primary { min-height: 40px; } }
 </style>
 
 <style is:global>
@@ -680,6 +928,7 @@ const demo = demoProducts.map((product) => ({
   .spotlight-copy h3 a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
   .spotlight-detail { margin: 7px 0 0; color: #625f58; font-size: .8rem; line-height: 1.45; }
   .spotlight-price { margin: 12px 0 0; color: #25251f; font-size: 1.3rem; font-variant-numeric: tabular-nums; font-weight: 800; }
+  .spotlight-price span { color: #177a4f; font-size: .72rem; font-weight: 700; }
   .spotlight-card-featured .spotlight-price { font-size: 1.65rem; }
   .spotlight-fact { margin: 3px 0 0; color: #666158; font-size: .76rem; }
   .spotlight-action { display: inline-flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 13px; color: #704c2c; font-size: .82rem; font-weight: 800; text-decoration: none; }
@@ -692,8 +941,34 @@ const demo = demoProducts.map((product) => ({
   .spotlight-side .spotlight-copy h3 { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
   .spotlight-side .spotlight-price { margin-top: 8px; font-size: 1.1rem; }
   .spotlight-side .spotlight-action { padding-top: 9px; }
+  .spotlight-carousel { min-width: 0; overflow: hidden; border-radius: 12px; }
+  .spotlight-carousel[data-carousel="0"] .spotlight-card { border-color: #bad6ee; background: linear-gradient(145deg, #eaf5ff, #dcecff); }
+  .spotlight-carousel[data-carousel="0"] .spotlight-media { background: rgba(255,255,255,.72); }
+  .spotlight-carousel[data-carousel="0"] .spotlight-category { background: #cce5fa; color: #07549a; }
+  .spotlight-carousel[data-carousel="0"] .spotlight-action { color: #07549a; }
+  .spotlight-carousel[data-carousel="1"] .spotlight-card { border-color: #f3cfac; background: linear-gradient(145deg, #fff4e9, #ffe6d2); }
+  .spotlight-carousel[data-carousel="1"] .spotlight-media { background: rgba(255,255,255,.78); }
+  .spotlight-carousel[data-carousel="1"] .spotlight-category { background: #ffdbc0; color: #9c4d18; }
+  .spotlight-carousel[data-carousel="1"] .spotlight-action { color: #994a16; }
+  .spotlight-carousel[data-carousel="2"] .spotlight-card { border-color: #b9dfc7; background: linear-gradient(145deg, #eaf8ef, #d7f0e0); }
+  .spotlight-carousel[data-carousel="2"] .spotlight-media { background: rgba(255,255,255,.78); }
+  .spotlight-carousel[data-carousel="2"] .spotlight-category { background: #ccebd7; color: #23643d; }
+  .spotlight-carousel[data-carousel="2"] .spotlight-action { color: #23643d; }
+  .spotlight-carousel-featured { grid-row: span 2; }
+  .spotlight-viewport { overflow: hidden; border-radius: inherit; }
+  .spotlight-track { display: flex; transition: transform .5s ease; will-change: transform; }
+  .spotlight-slide { flex: 0 0 100%; min-width: 0; }
+  .spotlight-slide[aria-hidden="true"] { pointer-events: none; }
+  .spotlight-slide .spotlight-card { height: 100%; }
+  .spotlight-category { display: inline-flex; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: #f0e5d5; color: #6d4c2e; font-size: .7rem; font-weight: 750; }
+  .spotlight-controls { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 36px; padding: 4px; color: #625f58; font-size: .75rem; }
+  .spotlight-controls button { width: 34px; height: 32px; border: 1px solid #c5d7e7; border-radius: 9px; background: #fff; color: #07549a; font: inherit; font-size: 1.2rem; line-height: 1; cursor: pointer; }
+  .spotlight-controls button:focus-visible { outline: 3px solid #8b4c36; outline-offset: 2px; }
+  .spotlight-carousel-featured .spotlight-card { min-height: 322px; }
+  .spotlight-carousel-featured .spotlight-card-featured .spotlight-media { min-height: 322px; }
   @media (max-width: 900px) {
     .spotlight-grid { grid-template-columns: minmax(0, 1fr); }
+    .spotlight-carousel-featured { grid-row: auto; }
     .spotlight-card-featured { min-height: 280px; }
     .spotlight-card-featured .spotlight-media { min-height: 280px; }
     .spotlight-side { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; }
@@ -702,6 +977,8 @@ const demo = demoProducts.map((product) => ({
     #spotlightSection { margin-top: 20px; }
     .spotlight-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
     .spotlight-count { white-space: normal; }
+    .spotlight-carousel-featured .spotlight-card { min-height: 238px; }
+    .spotlight-carousel-featured .spotlight-card-featured .spotlight-media { min-height: 238px; }
     .spotlight-card-featured { min-height: 238px; grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr); }
     .spotlight-card-featured .spotlight-media { min-height: 238px; padding: 10px; }
     .spotlight-card-featured .spotlight-copy { padding: 14px 12px; }
@@ -713,7 +990,7 @@ const demo = demoProducts.map((product) => ({
     .spotlight-side .spotlight-copy { padding: 10px; }
     .spotlight-side .spotlight-copy h3 { font-size: .9rem; }
   }
-  @media (prefers-reduced-motion: reduce) { .spotlight-card, .spotlight-action span { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .spotlight-track, .spotlight-card, .spotlight-action span { transition: none; } }
 
   /* AJAX-created cards have no Astro scope attribute, so style them through the static grid ID. */
   #catalogGrid .catalog-card { min-width: 0; overflow: hidden; display: flex; flex-direction: column; background: #fff; border: 1px solid #e4e1d9; border-radius: 11px; transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
@@ -730,6 +1007,9 @@ const demo = demoProducts.map((product) => ({
   #catalogGrid .stock-available { background: #edf3ec; color: #346538; }
   #catalogGrid .stock-check { background: #fbf3db; color: #805d16; }
   #catalogGrid .stock-unavailable { background: #f8ecea; color: #8d423a; }
+  #catalogGrid .offer-observation, .spotlight-observation { margin: 0; color: #526274; font-size: .69rem; line-height: 1.35; }
+  #catalogGrid .offer-observation[data-state="needs_recheck"], .spotlight-observation[data-state="needs_recheck"] { color: #855514; font-weight: 700; }
+  #catalogGrid .offer-observation[data-state="unknown"], .spotlight-observation[data-state="unknown"] { color: #62666c; }
   #catalogGrid .catalog-card h3 { min-height: 2.8em; margin: 0; font: 600 .94rem/1.4 var(--font-body); color: #262722; text-wrap: pretty; }
   #catalogGrid .catalog-card h3 a:hover { text-decoration: underline; }
   #catalogGrid .catalog-price-panel { display: flex; flex-direction: column; gap: 1px; margin-top: auto; padding: 10px 12px; border: 1px solid #e1e9df; border-radius: 7px; background: #f1f5ef; }

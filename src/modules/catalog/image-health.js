@@ -66,7 +66,12 @@ export async function isKnownUnavailableMercadoLivreImage(imageUrl, fetchImage =
 }
 
 export function shouldUseGlobalImageFallback(image) {
-return !image?.closest?.('#catalogGrid, #productMainImage, #spotlightGrid, #demoRelatedGrid');
+return Boolean(image?.getAttribute?.('src'))
+  && !image?.closest?.('#catalogGrid, #productMainImage, #spotlightGrid, #demoRelatedGrid');
+}
+
+export function getGlobalImageFallbackAlt(image, fallbackAlt = 'Imagem indisponível') {
+  return image?.hasAttribute?.('alt') ? image.alt : fallbackAlt;
 }
 
 export function getCatalogImageFailureUrl(image) {

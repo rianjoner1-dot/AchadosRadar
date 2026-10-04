@@ -1,7 +1,7 @@
 import path from 'path';
 import os from 'os';
 import { spawn } from 'child_process';
-import { readFile, mkdtemp, access, readdir } from 'fs/promises';
+import { readFile, access, readdir, rm } from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,9 +36,15 @@ async function findBrowser() {
 
 const selectedBrowser = await findBrowser();
 const profilePath = path.join(projectRoot, 'data', 'chrome-profile');
+const portFile = path.join(profilePath, 'DevToolsActivePort');
+const lockFile = path.join(profilePath, 'lockfile');
+await rm(portFile, { force: true }).catch(() => {});
+await rm(lockFile, { force: true }).catch(() => {});
 
 const browser = spawn(selectedBrowser.path, [
   '--window-position=-32000,-32000', '--window-size=10,10', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  '--disable-blink-features=AutomationControlled',
+  '--lang=pt-BR',
   '--remote-debugging-port=0',
   `--user-data-dir=${profilePath}`,
   `--disable-extensions-except=${extensionPath}`,

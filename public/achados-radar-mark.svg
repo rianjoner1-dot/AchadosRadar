@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="radar" x1="5" y1="5" x2="43" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B5DA8"/>
+      <stop offset="1" stop-color="#073B70"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="44" height="44" rx="14" fill="url(#radar)"/>
+  <circle cx="23" cy="24" r="12" stroke="#D6EEFF" stroke-opacity=".52" stroke-width="1.7"/>
+  <circle cx="23" cy="24" r="6.5" stroke="#D6EEFF" stroke-opacity=".72" stroke-width="1.7"/>
+  <path d="M23 24 36 11" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="23" cy="24" r="3.2" fill="#FFB454" stroke="#fff" stroke-width="1.4"/>
+  <path d="m35.8 30.8 1.15 2.33 2.57.37-1.86 1.81.44 2.56-2.3-1.21-2.29 1.21.44-2.56-1.86-1.81 2.57-.37 1.14-2.33Z" fill="#FFCF75"/>
+</svg>

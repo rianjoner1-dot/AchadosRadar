@@ -1,58 +1,140 @@
 # Achados Radar
 
-Vitrine de ofertas do Mercado Livre e da Magalu. O usuário pode salvar produtos, mas cada compra é concluída individualmente no marketplace. O site não cobra, não reserva estoque e não cria pedidos.
+> ⚠️ **PROTOCOLO OBRIGATÓRIO PARA AGENTES DE IA (REGRA DE OURO)**:  
+> Antes de realizar qualquer alteração neste projeto, todo agente de IA **DEVE OBRIGATORIAMENTE LER** a documentação específica da respectiva pasta/módulo a ser modificado e consultar o [Hub Central em docs/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/README.md). Após concluir a tarefa, **DEVE ATUALIZAR** a documentação da pasta refletindo as modificações realizadas. Veja a diretiva completa em [.agents/rules/ai-documentation-protocol.md](file:///c:/Users/joner/Documents/associados/site-afiliados/.agents/rules/ai-documentation-protocol.md).
 
-## Arquitetura
+Vitrine de alta performance para produtos e ofertas do Mercado Livre, Magazine Luiza, Amazon e Shopee. O usuário organiza sua lista de interesses, mas cada compra é finalizada individualmente no marketplace parceiro via links de afiliado auditados. O site não cobra valores, não reserva estoque e não processa pagamentos.
 
-- Astro 7.3.5 com adaptador Vercel 11: rotas de catálogo e saída dinâmicas, com páginas de demonstração pré-renderizadas.
-- Runtime mínimo Node.js 22.12.0; a configuração `engines.node` seleciona uma versão compatível no build e nas funções Vercel.
-- Supabase Postgres, RLS, Auth por email OTP e Storage para avatar. A chave service role fica somente no importador executado em ambiente local confiável.
-- Busca, filtros, paginação e feed relacionados usam `fetch`/AJAX. A primeira consulta é limitada a 20 itens e as imagens vêm das URLs de origem permitidas.
-- Meta de até 4 funções serverless; limite rígido do projeto abaixo de 12. O artefato local atual contém uma função.
-- Orçamento local: JSON inicial de 20 cards até 100 KB e conjunto de assets JS/CSS abaixo de 5 MiB estimados com gzip. As imagens externas dos marketplaces são medidas separadamente. O limite de payload de função Vercel é distinto desse orçamento de transferência.
+---
 
-## Estrutura
+## 🌳 Árvore de Diretórios do Projeto
 
-- `src/pages/`: vitrine, produto, conta, lista salva, rotas API, termos e privacidade.
-- `src/modules/catalog/`: consulta ao catálogo, busca e tipos.
-- `src/modules/cart/`: armazenamento local do carrinho/lista de interesse.
-- `src/modules/auth/`: OTP, perfil, avatar e sincronização de carrinho.
-- `src/modules/outbound/`: validação de domínio e validade de links de saída.
-- `supabase/migrations/`: esquema, políticas RLS, busca e RPC de importação.
-- `scripts/import-catalog.mjs`: dry-run e importação controlada.
-- `scripts/verify-functions.cjs` e `scripts/verify-payload.cjs`: orçamento do build Vercel.
-- `docs/`: arquitetura, contrato de produto, etapas e evidências de validação.
+```text
+site-afiliados/
+├── .agents/                      # Regras e estratégias para agentes autônomos de IA
+│   └── rules/                    # Regras específicas (ex: protocolo de documentação, high-ticket)
+├── .env.example                  # Template das variáveis de ambiente necessárias
+├── astro.config.mjs              # Configuração do framework Astro v7 e adaptador Vercel
+├── AGENTS.md / CLAUDE.md / GEMINI.md # Diretivas para diferentes motores de IA
+├── package.json                  # Dependências, engines e scripts operacionais
+├── tsconfig.json                 # Configuração TypeScript estrita com exclusões de build
+│
+├── docs/                         # 📖 HUB CENTRAL DE DOCUMENTAÇÃO (docs/README.md)
+│   ├── README.md                 # Índice mestre e navegação sistêmica
+│   ├── ARQUITETURA.md            # Diagramas de arquitetura e isolamento de chaves
+│   ├── CONTRATO_PRODUTO.md       # Estrutura obrigatória de produtos, ofertas e imagens
+│   ├── BUSCA_E_SETORES.md        # Engenharia da busca textual e trigramas pg_trgm
+│   ├── ETAPAS_PROCEDURAIS.md     # Checklist dos portões de qualidade e entregas
+│   └── VALIDACOES.md             # Registro histórico e detalhado de testes e evidências
+│
+├── public/                       # 🌐 Assets estáticos servidos diretamente (public/README.md)
+│   ├── exclusao.html             # Instruções de exclusão de dados (LGPD / Meta Platform)
+│   ├── icon.png                  # Ícone de verificação de aplicativo Meta Developers
+│   ├── achados-radar-mark.svg    # Vetor oficial da marca Radar
+│   └── images/marketplaces/      # Logos dos marketplaces (Amazon, Magalu, ML, Shopee)
+│
+├── src/                          # 💻 Código-fonte da aplicação
+│   ├── components/               # Componentes reutilizáveis Astro (src/components/README.md)
+│   │   ├── Header.astro          # Topbar com busca, setores, carrinho e login
+│   │   ├── Footer.astro          # Rodapé institucional, links e avisos legais
+│   │   └── ProductCard.astro     # Card de produto resiliente com preço e botão de salvar
+│   ├── layouts/                  # Layouts base (Layout.astro) com metatags e Speed Insights
+│   ├── pages/                    # Rotas públicas e APIs serverless (src/pages/README.md)
+│   │   ├── index.astro           # Vitrine inicial com carrosséis e paginação contínua
+│   │   ├── produto.astro         # Página de detalhe dinâmico (/produto?id=...)
+│   │   ├── produto/[id].astro    # Rotas pré-renderizadas para SEO (/produto/MLB...)
+│   │   ├── carrinho.astro        # Lista salva (anônima + sincronizada com Supabase)
+│   │   ├── conta.astro           # Painel de perfil, login OTP e upload de avatar WebP
+│   │   ├── painel-admin.astro    # Dashboard protegido de métricas agregadas
+│   │   ├── privacidade.astro     # Política de Privacidade (LGPD)
+│   │   ├── termos.astro          # Termos de Uso e declaração de afiliação
+│   │   └── api/                  # Endpoints serverless (outbound, account/delete, admin/metrics)
+│   ├── styles/                   # Design system e folhas de estilo (src/styles/README.md)
+│   │   ├── global.css            # Reset, grid responsivo e micro-animações
+│   │   └── neutral-theme.css     # Paleta neutra dark mode, tokens HSL e glassmorphism
+│   └── modules/                  # Módulos de lógica de negócio e domínio
+│       ├── catalog/              # Catálogo, RPC v2, carrosséis e fotos (src/modules/catalog/README.md)
+│       ├── auth/                 # OTP, perfis e avatar WebP (src/modules/auth/README.md)
+│       ├── cart/                 # Estado do carrinho e sincronização (src/modules/cart/README.md)
+│       ├── outbound/             # Redirecionamento e allowlist (src/modules/outbound/README.md)
+│       ├── analytics/            # Telemetria sem cookies e métricas (src/modules/analytics/README.md)
+│       ├── search/               # Normalização e classificação (src/modules/search/README.md)
+│       └── shared/               # Configuração Supabase e modo demo (src/modules/shared/README.md)
+│
+├── supabase/                     # 🗄️ Banco de dados e migrações (supabase/README.md)
+│   ├── config.toml               # Configuração local da CLI Supabase
+│   └── migrations/               # 24 migrações SQL com tabelas, RLS, triggers e RPCs
+│
+├── scripts/                      # 🤖 Automação, bridge, testes e importação (scripts/README.md)
+│   ├── local-catalog-bridge.mjs  # Ponte HTTP local na porta 6876 para a extensão
+│   ├── orchestrate-radar.mjs     # Orquestrador do robô Chromium em background
+│   ├── import-catalog.mjs        # Importador controlado com dry-run e service role
+│   ├── verify-functions.cjs      # Auditoria do teto de funções serverless Vercel (<= 4)
+│   └── verify-payload.cjs        # Auditoria de orçamento de payload estático (< 5 MiB)
+│
+└── tests/                        # 🧪 Suíte de 45 testes automatizados (tests/README.md)
+    ├── database_block_d.test.cjs # Teste das migrações SQL completas via PGlite
+    ├── fixtures/                 # Dados de teste (sample_20_cards.json)
+    └── *.test.cjs                # Testes unitários e de integração de 100% dos módulos
+```
 
-## Comandos
+---
+
+## 🚀 Atalhos para Documentação por Pasta
+
+| Pasta | Atalho para Documentação | Escopo Principal |
+| :--- | :--- | :--- |
+| **docs/** | [docs/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/README.md) | **Hub Central**: Arquitetura, Contrato de Produto, Planos e Validações. |
+| **src/modules/catalog/** | [catalog/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/catalog/README.md) | Consumo da RPC v2, carrosséis, paginação por cursor e fotos. |
+| **src/modules/auth/** | [auth/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/auth/README.md) | Login OTP por email, avatar WebP no cliente e LGPD. |
+| **src/modules/cart/** | [cart/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/cart/README.md) | Carrinho local (`localStorage`), fusão remota e prontidão de ofertas. |
+| **src/modules/outbound/** | [outbound/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/outbound/README.md) | Allowlist de lojas, prova anti-adulteração e redirecionamento seguro. |
+| **src/modules/analytics/** | [analytics/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/analytics/README.md) | Visualizações desduplicadas por aba e métricas do administrador. |
+| **src/modules/search/** | [search/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/search/README.md) | Busca textual com trigramas `pg_trgm` e setores independentes. |
+| **src/modules/shared/** | [shared/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/shared/README.md) | Configurações públicas do Supabase e fallback de modo demonstrativo. |
+| **src/components/** | [components/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/components/README.md) | Blocos Astro reutilizáveis: Header, Footer e ProductCard. |
+| **src/pages/** | [pages/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/pages/README.md) | Rotas do site, renderização SSR/SSG e endpoints de API. |
+| **src/styles/** | [styles/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/src/styles/README.md) | Tema dark neutro, tokens CSS e acessibilidade. |
+| **supabase/** | [supabase/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/supabase/README.md) | Esquema relacional, 24 migrações, políticas RLS e Storage. |
+| **scripts/** | [scripts/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/scripts/README.md) | Ponte do robô (6876), importador, orquestrador e orçamentos. |
+| **tests/** | [tests/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/tests/README.md) | Suíte de 179 testes automatizados com Node test runner e PGlite. |
+| **public/** | [public/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/public/README.md) | Assets estáticos, logos dos marketplaces e página legal da Meta. |
+
+---
+
+## ⚡ Comandos Rápidos
 
 ```bash
+# Instalação de dependências
 npm install
+
+# Desenvolvimento local
 npm run dev
+
+# Iniciar ponte local para a extensão coletora (:6876)
 npm run bridge
-npm run check
+
+# Diagnóstico de tipagem (deve retornar 0 erros)
+npx astro check
+
+# Suíte de testes automatizados (179 testes)
 npm test
-npm run build
+
+# Validação de orçamentos Vercel (funções <= 4 e payload < 5 MiB)
 npm run test:budget
+
+# Compilação de produção
+npm run build
+
+# Validação completa local integrada (check + build + test + budget)
+npm run validate:local
 ```
 
-Em outra janela, `npm run bridge` inicia a ponte do site em `127.0.0.1:6876`, separada do servidor Python legado da macro, que continua em `127.0.0.1:6875`. A extensão envia as observações aos dois serviços: preserva o arquivo/catálogo local existente e grava/atualiza `data/catalogo_macro.json` para importação no site. Quando `PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` estão no `.env` local, a ponte do site também processa confirmações explícitas de produto inexistente pelo RPC protegido de arquivamento. Se o Supabase falhar, a confirmação fica na fila local e é tentada novamente. A chave permanece no processo local e nunca é enviada à extensão.
+---
 
-Para conferir uma amostra sem rede nem escrita:
+## 🔒 Princípios de Segurança e Boas Práticas
 
-```bash
-node scripts/import-catalog.mjs <catalogo.json> --dry-run --summary --platform=magalu --limit=1
-node scripts/import-catalog.mjs <catalogo.json> --dry-run --summary --platform=mercadolivre --limit=1
-```
-
-Após iniciar a ponte e receber produtos, use `data/catalogo_macro.json` como `<catalogo.json>`.
-
-A importação real requer `PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` em ambiente local confiável. Nunca coloque a chave secreta na extensão, no site ou no chat.
-
-## Estado
-
-- Base, migrations, RLS e testes locais estão implementados.
-- Importador validado com export existente: 175 registros analisados; 64 registros Magalu/Mercado Livre aceitos pelo contrato, nenhum publicável até confirmar link e estoque.
-- Vitrine, produto, carrinho, OTP e saída têm implementação local. Auth real, sincronização com Supabase, preview/deploy e autorização de uso de links/imagens ainda precisam de validação nos serviços e portais reais.
-- Vercel configurada conforme confirmação do proprietário; URL/ID do preview e validação dos fluxos hospedados ainda precisam ser registrados. Supabase, SMTP e URLs autorizadas de autenticação aguardam a revisão do Antigravity.
-
-Use o [roteiro procedural](docs/ETAPAS_PROCEDURAIS.md) e registre cada resultado em [VALIDACOES.md](docs/VALIDACOES.md). Não marque um portão como concluído apenas porque o código compila.
+1. **Nunca Exponha Chaves Privadas**: `SUPABASE_SERVICE_ROLE_KEY` só existe no `.env` local para scripts confiáveis (`import-catalog.mjs`, `local-catalog-bridge.mjs`). Jamais passe essa chave para o cliente Astro ou extensão.
+2. **Orçamento Rigoroso**: Mantenha o teto de até 4 funções serverless próprias no deploy da Vercel.
+3. **Redirecionamento Confiável**: Todas as saídas de compra devem passar obrigatoriamente por `/api/out/[id]` e serem validadas pela allowlist de domínios permitidos.
+4. **Registro de Validações**: Acompanhe o roteiro em [docs/ETAPAS_PROCEDURAIS.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/ETAPAS_PROCEDURAIS.md) e documente novos marcos em [docs/VALIDACOES.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/VALIDACOES.md).

@@ -4,7 +4,7 @@ SELECT
   current_database() AS database_name,
   current_setting('server_version') AS server_version,
   (
-    SELECT count(*) = 25
+    SELECT count(*) = 29
     FROM supabase_migrations.schema_migrations
     WHERE version IN (
       '20260929180000', '20260929180100', '20260929180200', '20260929180300',
@@ -13,24 +13,33 @@ SELECT
       '20260930140000', '20260930150000', '20260930160000', '20260930170000',
       '20260930180000', '20260930190000', '20260930200000', '20260930210000',
       '20260930220000', '20260930230000', '20261001090000', '20261001120000',
-      '20261001130000'
+      '20261001130000', '20261002140000', '20261002150000', '20261002160000',
+      '20261003100000'
     )
   ) AS all_site_migrations_applied,
   to_regclass('public.products') IS NOT NULL AS products_table_exists,
+  (SELECT count(*) = 3 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'products' AND column_name IN ('rating', 'reviews_count', 'specifications')) AS observed_product_details_exist,
   to_regclass('public.product_images') IS NOT NULL AS product_images_table_exists,
+  to_regclass('public.product_videos') IS NOT NULL AS product_videos_table_exists,
+  (SELECT count(*) = 2 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'offers' AND column_name IN ('pix_price', 'card_price')) AS pix_and_card_price_columns_exist,
   to_regclass('public.offers') IS NOT NULL AS offers_table_exists,
   to_regclass('public.affiliate_links') IS NOT NULL AS affiliate_links_table_exists,
   to_regclass('public.profiles') IS NOT NULL AS profiles_table_exists,
   to_regclass('public.cart_items') IS NOT NULL AS cart_items_table_exists,
   to_regclass('public.catalog_sectors') IS NOT NULL AS catalog_sectors_table_exists,
   to_regclass('public.product_sectors') IS NOT NULL AS product_sectors_table_exists,
+  to_regclass('public.search_term_stats') IS NOT NULL AS anonymous_search_stats_table_exists,
+  to_regclass('public.search_logs') IS NULL AS raw_search_logs_removed,
+  to_regprocedure('public.log_search_term(text,text)') IS NOT NULL AS anonymous_search_rpc_exists,
+  COALESCE(has_function_privilege('anon', to_regprocedure('public.log_search_term(text,text)'), 'EXECUTE'), false) AS anon_can_log_search_terms,
+  COALESCE(to_regclass('public.search_term_stats') IS NOT NULL AND NOT has_table_privilege('anon', to_regclass('public.search_term_stats'), 'SELECT'), false) AS anon_cannot_read_search_aggregates,
   (SELECT count(*) = 10 FROM public.catalog_sectors) AS all_catalog_sectors_seeded,
   (
-    SELECT count(*) = 8
+    SELECT count(*) = 10
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public'
-      AND c.relname IN ('products', 'product_images', 'offers', 'affiliate_links', 'profiles', 'cart_items', 'catalog_sectors', 'product_sectors')
+      AND c.relname IN ('products', 'product_images', 'product_videos', 'offers', 'affiliate_links', 'profiles', 'cart_items', 'catalog_sectors', 'product_sectors', 'search_term_stats')
       AND c.relrowsecurity
   ) AS all_user_tables_have_rls,
   EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'avatars') AS avatars_bucket_exists,

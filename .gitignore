@@ -21,4 +21,8 @@ Thumbs.db
 .vscode/
 supabase/.temp/
 data/chrome-profile/
+data/*.json
 scratch/
+dryrun.json
+*dryrun*.json
+

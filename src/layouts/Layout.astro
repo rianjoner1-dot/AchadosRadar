@@ -33,7 +33,7 @@ const {
     <meta name="description" content={description} />
     <meta name="theme-color" content="#ffffff" />
     {noIndex && <meta name="robots" content="noindex, nofollow" />}
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/achados-radar-mark.svg" />
     
     <!-- Open Graph / Redes Sociais -->
     <meta property="og:type" content={ogType} />
@@ -67,7 +67,7 @@ const {
 
     <script>
       import { readLocalCart, saveCartItem, removeCartItem, updateCartBadge } from '../modules/cart/store';
-      import { shouldUseGlobalImageFallback } from '../modules/catalog/image-health.js';
+      import { getGlobalImageFallbackAlt, shouldUseGlobalImageFallback } from '../modules/catalog/image-health.js';
 
       function syncButtons() {
         const ids = new Set(readLocalCart().map((item) => item.id));
@@ -106,7 +106,7 @@ const {
         if (image.dataset.imageFallback === 'true' || !shouldUseGlobalImageFallback(image)) return;
         image.dataset.imageFallback = 'true';
         image.src = '/product-placeholder.svg';
-        image.alt = image.alt || 'Imagem indisponível';
+        image.alt = getGlobalImageFallbackAlt(image);
       };
       document.addEventListener('error', (event) => {
         if (event.target instanceof HTMLImageElement) useImageFallback(event.target);

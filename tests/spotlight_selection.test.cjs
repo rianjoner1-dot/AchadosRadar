@@ -35,3 +35,41 @@ test('failed spotlight photos fall through to another offer without deleting the
   assert.deepEqual(selectSpotlightOffers(products, 1, ['broken-photo']).map(({ product, discountPercent }) => [product.id, discountPercent]), [['good-photo', 40]]);
   assert.equal(products[0].id, 'broken-photo', 'unavailable photo only removes a product from the visual spotlight selection');
 });
+
+test('spotlight carousels keep one category per lane and cap each lane at five offers', async () => {
+  const { selectSpotlightCarouselGroups } = await import('../src/modules/catalog/spotlights.mjs');
+  const products = ['Category A', 'Category B', 'Category C', 'Category D'].flatMap((category, categoryIndex) =>
+    Array.from({ length: 6 }, (_, index) => ({
+      id: `${category}-${index}`,
+      category,
+      offer: { price: 20 + categoryIndex * 10 + index, stock_status: 'in_stock' }
+    }))
+  );
+  const groups = selectSpotlightCarouselGroups(products, 3, 8);
+  assert.deepEqual(groups.map((group) => group.length), [5, 5, 5]);
+  assert.equal(new Set(groups.flat().map(({ product }) => product.id)).size, 15);
+  assert.equal(new Set(groups.map((group) => group[0].categoryKey)).size, 3);
+  assert.ok(groups.every((group) => new Set(group.map(({ categoryKey }) => categoryKey)).size === 1));
+  assert.deepEqual(groups.map((group) => group[0].categoryLabel), ['Category A', 'Category B', 'Category C']);
+});
+
+test('spotlight carousel does not invent a category and honors exclusions', async () => {
+  const { selectSpotlightCarouselGroups } = await import('../src/modules/catalog/spotlights.mjs');
+  const groups = selectSpotlightCarouselGroups([
+    { id: 'excluded', category: 'Moda', offer: { price: 2, stock_status: 'in_stock' } },
+    { id: 'unknown', offer: { price: 1, stock_status: 'in_stock' } },
+    { id: 'kept', category: 'Móveis', offer: { price: 3, stock_status: 'in_stock' } }
+  ], 3, 5, ['excluded']);
+  assert.deepEqual(groups.flat().map(({ product }) => product.id), ['kept']);
+});
+
+test('spotlights prefer product-title category over stale category keywords', async () => {
+  const { selectSpotlightCarouselGroups } = await import('../src/modules/catalog/spotlights.mjs');
+  const groups = selectSpotlightCarouselGroups([
+    { id: 'dress', title: 'Vestido Midi Canelado', category: 'Móveis sofá rack painel cama', offer: { price: 47, stock_status: 'in_stock' } },
+    { id: 'rack', title: 'Rack para TV com painel', category: 'Moda feminina', offer: { price: 350, stock_status: 'in_stock' } }
+  ], 2, 5);
+  assert.deepEqual(groups.flat().map(({ product, categoryKey }) => [product.id, categoryKey]), [
+    ['dress', 'moda'], ['rack', 'moveis']
+  ]);
+});

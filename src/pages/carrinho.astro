@@ -7,6 +7,7 @@ import Layout from '../layouts/Layout.astro';
     <aside class="cart-notice"><strong>Como funciona:</strong> sua lista não reserva estoque e não cobra pagamentos. Preços e disponibilidade podem mudar na loja.</aside>
     <section id="cartEmpty" class="cart-empty" hidden><h2>Sua lista está vazia</h2><p>Explore as ofertas e salve os produtos que interessam.</p><a href="/" class="btn-primary">Ver ofertas</a></section>
     <section id="cartContent" hidden><div class="cart-topline"><span id="cartCount" aria-live="polite"></span><button type="button" id="clearCart" class="text-button">Limpar lista</button></div><div id="cartItems" class="cart-items"></div></section>
+    <span id="cartLoader" class="orb-loader" aria-hidden="true" hidden><i></i><i></i><i></i></span>
     <p id="cartStatus" role="status" aria-live="polite"></p>
   </div>
 </Layout>
@@ -20,8 +21,10 @@ import Layout from '../layouts/Layout.astro';
   const content = document.querySelector<HTMLElement>('#cartContent')!;
   const list = document.querySelector<HTMLElement>('#cartItems')!;
   const status = document.querySelector<HTMLElement>('#cartStatus')!;
+  const cartLoader = document.querySelector<HTMLElement>('#cartLoader')!;
+  const setStatus = (message: string, loading = false) => { status.textContent = message; cartLoader.hidden = !loading; };
   const validUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id);
-  const storeName = (platform: string) => platform === 'magalu' ? 'Magalu' : 'Mercado Livre';
+  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' } as Record<string, string>)[platform] ?? 'Loja parceira';
   let renderVersion = 0;
   let authSubscriptionReady = false;
 
@@ -54,7 +57,7 @@ import Layout from '../layouts/Layout.astro';
         if (auth) await auth.removeRemoteCartItem(id, ownerId);
         removeCartItemSnapshot(removalSnapshot, ownerId);
       }
-      catch { status.textContent = 'Não foi possível sincronizar a remoção. Tente novamente; o produto continua salvo.'; button.disabled = false; }
+      catch { setStatus('Não foi possível sincronizar a remoção. Tente novamente; o produto continua salvo.'); button.disabled = false; }
     }));
     return items;
   }
@@ -146,8 +149,10 @@ import Layout from '../layouts/Layout.astro';
           : /sem estoque/.test(normalizedReason) ? 'Sem estoque'
           : /estoque|disponibilidade/.test(normalizedReason) ? 'Estoque a confirmar'
           : 'Oferta indisponível';
-        setStatus(label, readiness.ready ? 'available' : label === 'Sem estoque' || label === 'Oferta indisponível' ? 'unavailable' : 'checking', readiness.ready ? 'Oferta verificada. A compra será concluída no site da loja.' : `${reason} O produto continua salvo na sua lista.`);
+        const safeLink = link as unknown as Record<string, string> | null;
+        const targetUrl = safeLink?.affiliate_url || safeLink?.original_url || `/api/out/${encodeURIComponent(item.id)}`;
         if (readiness.ready) { buy.href = `/api/out/${encodeURIComponent(item.id)}`; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.textContent = `Continuar na ${storeName(latest.platform)}`; buy.removeAttribute('aria-disabled'); }
+        else if (targetUrl) { buy.href = targetUrl; buy.target = '_blank'; buy.rel = 'noopener noreferrer'; buy.textContent = `Continuar na ${storeName(latest.platform)}`; buy.removeAttribute('aria-disabled'); }
         else { disableBuy(label); }
       } catch {
         if (version === renderVersion) {
@@ -198,13 +203,13 @@ import Layout from '../layouts/Layout.astro';
   async function render() {
     const version = ++renderVersion;
     let auth: typeof import('../modules/auth/client');
-    status.textContent = 'Carregando sua lista...';
+    setStatus('Carregando sua lista...', true);
     try { auth = await import('../modules/auth/client'); }
     catch {
       const localItems = renderLocalCart(null);
-      status.textContent = localItems.length
+      setStatus(localItems.length
         ? 'Os itens continuam salvos neste navegador. A sincronização da conta não está disponível agora.'
-        : 'A conta não pôde ser carregada. Você ainda pode salvar produtos neste navegador.';
+        : 'A conta não pôde ser carregada. Você ainda pode salvar produtos neste navegador.');
       return;
     }
     if (auth.supabase && !authSubscriptionReady) {
@@ -214,19 +219,21 @@ import Layout from '../layouts/Layout.astro';
     let user = null;
     let sessionLookupFailed = false;
     try { user = await auth.currentUser(); }
-    catch { sessionLookupFailed = true; status.textContent = 'Não foi possível confirmar a sessão; exibindo apenas a lista anônima.'; }
+    catch { sessionLookupFailed = true; setStatus('Não foi possível confirmar a sessão; exibindo apenas a lista anônima.', true); }
     if (version !== renderVersion) return;
     if (user) {
       try {
         await auth.syncCartForUser(user.id);
-      } catch { status.textContent = 'A sincronização não está disponível agora. Os itens salvos neste navegador continuam visíveis.'; }
+      } catch { setStatus('A sincronização não está disponível agora. Os itens salvos neste navegador continuam visíveis.', true); }
       let confirmedUser = null;
       try { confirmedUser = await auth.currentUser(); }
       catch {
         if (version !== renderVersion) return;
         const guestItems = renderLocalCart(null);
         status.textContent = 'Não foi possível confirmar sua sessão. Sua lista da conta permanece salva e oculta até a conexão voltar.';
+        cartLoader.hidden = false;
         await updateOfferStates(guestItems, version);
+        cartLoader.hidden = true;
         return;
       }
       if (version !== renderVersion) return;
@@ -234,8 +241,9 @@ import Layout from '../layouts/Layout.astro';
     }
     if (version !== renderVersion) return;
     const items = renderLocalCart(user?.id ?? null);
-    if (!sessionLookupFailed && !status.textContent.startsWith('A sincronização')) status.textContent = '';
+    if (!sessionLookupFailed && !status.textContent.startsWith('A sincronização')) setStatus('');
     if (version === renderVersion) await updateOfferStates(items, version);
+    cartLoader.hidden = true;
   }
 
   document.querySelector<HTMLButtonElement>('#clearCart')!.addEventListener('click', async () => {
@@ -250,7 +258,7 @@ import Layout from '../layouts/Layout.astro';
         if (auth) await auth.clearRemoteCart(ownerId);
         removeCartItems(clearSnapshot, ownerId);
       }
-      catch { status.textContent = 'Não foi possível sincronizar a limpeza. Os itens continuam salvos.'; }
+      catch { setStatus('Não foi possível sincronizar a limpeza. Os itens continuam salvos.'); }
       finally { button.disabled = false; }
     }
   });

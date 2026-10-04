@@ -46,50 +46,60 @@ function normalizeCategory(value) {
     .replace(/^-|-$/g, '');
 }
 
+const TITLE_CATEGORY_RULES = [
+  ['pc-gamer', /\b(pc gamer|notebook gamer|placa de video|teclado gamer|mouse gamer|headset gamer)\b/],
+  ['moda', /\b(vestido|blusa|camisa|calca|shorts?|saia|conjunto feminino|lingerie|tenis|sapat(o|ilha)|sandalia|bolsa|jaqueta|casaco|meia|roupa)\b/],
+  ['moveis', /\b(sofa|rack|painel|cama|colchao|guarda roupa|mesa|cadeira|poltrona|estante|armario)\b/],
+  ['eletronicos', /\b(celular|smartphone|fone|televisao|smart tv|camera|tablet|monitor|roteador|eletronico)\b/],
+  ['eletro', /\b(geladeira|lavadora|purificador|air fryer|fritadeira|liquidificador|cafeteira|microondas|ventilador|sanduicheira|mixer)\b/],
+  ['jardim', /\b(jardim|planta|mangueira|rocadeira|ferramenta)\b/],
+  ['bebes', /\b(bebe|fralda|carrinho de bebe|mamadeira)\b/],
+  ['beleza', /\b(maquiagem|perfume|skincare|cabelo|cosmetico|creme facial)\b/],
+  ['pet', /\b(pet|cachorro|gato|racao|coleira|arranhador)\b/],
+  ['casa', /\b(cozinha|copo|prato|panela|toalha|lencol|organizador)\b/]
+];
+
 function getCategoryOptions(product) {
   const options = [];
-  const marketplaceCategory = String(product?.category ?? '').trim();
-  if (marketplaceCategory) {
-    const key = normalizeCategory(marketplaceCategory);
-    if (key) options.push({ key, label: marketplaceCategory });
-  }
+  const title = normalizeCategory(product?.title).replace(/-/g, ' ');
+  const titleCategory = TITLE_CATEGORY_RULES.find(([, pattern]) => pattern.test(title))?.[0];
+  if (titleCategory) options.push({ key: titleCategory, label: SECTOR_LABELS[titleCategory] });
   for (const sector of Array.isArray(product?.sectors) ? product.sectors : []) {
     const key = normalizeCategory(sector);
     if (key && !options.some((option) => option.key === key)) {
       options.push({ key, label: SECTOR_LABELS[sector] ?? String(sector) });
     }
   }
+  const marketplaceCategory = String(product?.category ?? '').trim();
+  if (marketplaceCategory) {
+    const key = normalizeCategory(marketplaceCategory);
+    if (key && !options.some((option) => option.key === key)) options.push({ key, label: marketplaceCategory });
+  }
   return options;
 }
 
 /**
- * Creates up to three product lanes, each with at most five offers. A category
- * is used once across the whole selection, so lanes and rotation frames remain
- * category-distinct whenever the catalog has enough classified products.
+ * Creates up to three category lanes with up to five offers per lane. Each lane
+ * stays in one category while its product rotates, matching the three-card
+ * merchandising strip without mixing unrelated offers in a carousel.
  */
 export function selectSpotlightCarouselGroups(products, carouselCount = 3, slidesPerCarousel = 5, excludedProductIds = []) {
   if (!Array.isArray(products) || !Number.isInteger(carouselCount) || carouselCount < 1 ||
       !Number.isInteger(slidesPerCarousel) || slidesPerCarousel < 1) return [];
 
   const maxSlides = Math.min(slidesPerCarousel, 5);
-  const groups = Array.from({ length: carouselCount }, () => []);
-  const usedCategories = new Set();
+  const categoryGroups = new Map();
   const candidates = selectSpotlightOffers(products, products.length, excludedProductIds);
-  let nextGroup = 0;
-
   for (const entry of candidates) {
-    const category = getCategoryOptions(entry.product).find((option) => !usedCategories.has(option.key));
+    const category = getCategoryOptions(entry.product)[0];
     if (!category) continue;
-    let targetGroup = -1;
-    for (let offset = 0; offset < groups.length; offset += 1) {
-      const index = (nextGroup + offset) % groups.length;
-      if (groups[index].length < maxSlides) { targetGroup = index; break; }
-    }
-    if (targetGroup < 0) break;
-    groups[targetGroup].push({ ...entry, categoryKey: category.key, categoryLabel: category.label });
-    usedCategories.add(category.key);
-    nextGroup = (targetGroup + 1) % groups.length;
+    const group = categoryGroups.get(category.key) ?? { category, entries: [] };
+    if (group.entries.length < maxSlides) group.entries.push({ ...entry, categoryKey: category.key, categoryLabel: category.label });
+    categoryGroups.set(category.key, group);
   }
-
-  return groups.filter((group) => group.length > 0);
+  return [...categoryGroups.values()]
+    .filter((group) => group.entries.length > 0)
+    .sort((a, b) => b.entries.length - a.entries.length)
+    .slice(0, carouselCount)
+    .map((group) => group.entries);
 }

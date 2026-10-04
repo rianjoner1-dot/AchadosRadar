@@ -2,6 +2,8 @@ export { normalizeSearch } from './search-utils.js';
 
 export interface CatalogOffer {
   price: number;
+  pix_price?: number | null;
+  card_price?: number | null;
   old_price?: number | null;
   installments_text?: string | null;
   shipping_text?: string | null;
@@ -15,17 +17,33 @@ export interface CatalogOffer {
 
 export interface CatalogProduct {
   id: string;
-  platform: 'mercadolivre' | 'magalu';
+  platform: 'mercadolivre' | 'magalu' | 'amazon' | 'shopee' | 'benoit' | 'kabum';
   external_id: string;
   title: string;
   description?: string | null;
   category?: string | null;
+  rating?: number | null;
+  reviews_count?: number | null;
+  specifications?: { name: string; value: string }[];
   created_at: string;
   images: { url: string; display_order: number; original_url?: string }[];
+  videos?: { url: string; poster_url?: string | null; display_order: number }[];
   offer: CatalogOffer | null;
   affiliate_link: { status: string; expires_at?: string | null; refresh_due_at?: string | null; verified_at?: string } | null;
   sectors?: string[];
   search_score?: number;
+}
+
+async function loadOfferPriceExtras(productIds: string[], signal?: AbortSignal) {
+  const extras = new Map<string, { pix_price?: number | null; card_price?: number | null }>();
+  if (!productIds.length) return extras;
+  const params = new URLSearchParams({ select: 'product_id,pix_price,card_price', product_id: `in.(${productIds.join(',')})`, order: 'observed_at.desc' });
+  try {
+    const response = await fetch(`${config.url}/rest/v1/offers?${params}`, { headers: headers(), signal });
+    if (!response.ok) return extras; // Mantém o catálogo funcional durante a aplicação da migration.
+    for (const offer of await response.json()) if (!extras.has(offer.product_id)) extras.set(offer.product_id, offer);
+  } catch { /* os campos complementares são opcionais até a migration remota */ }
+  return extras;
 }
 
 import { getPublicSupabaseConfig } from '../shared/config';
@@ -68,7 +86,11 @@ export async function searchCatalog(input: {
   if (!response.ok) throw new Error(`Falha ao buscar catálogo (${response.status}).`);
   const products = await response.json();
   if (!Array.isArray(products)) throw new Error('Resposta invÃ¡lida ao buscar catÃ¡logo.');
-  return products.map((product) => sanitizeProductImages(product));
+  const extras = await loadOfferPriceExtras(products.map((product) => product.id), input.signal);
+  return products.map((product) => sanitizeProductImages({
+    ...product,
+    offer: product.offer ? { ...product.offer, ...(extras.get(product.id) ?? {}) } : product.offer
+  }));
 }
 
 export async function getCatalogProduct(id: string, signal?: AbortSignal): Promise<CatalogProduct | null> {
@@ -79,14 +101,24 @@ export async function getCatalogProduct(id: string, signal?: AbortSignal): Promi
   const [product] = await response.json();
   if (!product) return null;
   const relation = new URLSearchParams({ select: 'price,old_price,installments_text,shipping_text,coupon_code,stock_quantity,stock_status,seller_name,store_name,observed_at', product_id: `eq.${id}`, order: 'observed_at.desc', limit: '1' });
-  const [imagesResponse, offersResponse, linkResponse] = await Promise.all([
+  const metadataQuery = new URLSearchParams({ select: 'rating,reviews_count,specifications', id: `eq.${id}`, status: 'eq.published', limit: '1' });
+  const [imagesResponse, offersResponse, linkResponse, videosResponse, metadataResponse] = await Promise.all([
     fetch(`${config.url}/rest/v1/product_images?${new URLSearchParams({ select: 'url,display_order', product_id: `eq.${id}`, order: 'display_order.asc' })}`, { headers: headers(), signal }),
     fetch(`${config.url}/rest/v1/offers?${relation}`, { headers: headers(), signal }),
-    fetch(`${config.url}/rest/v1/rpc/get_public_link_state`, { method: 'POST', headers: headers(), body: JSON.stringify({ target_product_id: id }), signal })
+    fetch(`${config.url}/rest/v1/rpc/get_public_link_state`, { method: 'POST', headers: headers(), body: JSON.stringify({ target_product_id: id }), signal }),
+    fetch(`${config.url}/rest/v1/product_videos?${new URLSearchParams({ select: 'url,poster_url,display_order', product_id: `eq.${id}`, order: 'display_order.asc', limit: '1' })}`, { headers: headers(), signal }).catch(() => null),
+    fetch(`${config.url}/rest/v1/products?${metadataQuery}`, { headers: headers(), signal }).catch(() => null)
   ]);
   if (![imagesResponse, offersResponse, linkResponse].every((result) => result.ok)) throw new Error('Não foi possível carregar todos os dados da oferta.');
-  const [images, offers, link] = await Promise.all([imagesResponse.json(), offersResponse.json(), linkResponse.json()]);
-  return sanitizeProductImages({ ...product, images, offer: offers[0] ?? null, affiliate_link: link ?? null });
+  const [images, offers, link, videos, extras, metadataRows] = await Promise.all([
+    imagesResponse.json(), offersResponse.json(), linkResponse.json(),
+    videosResponse?.ok ? videosResponse.json() : Promise.resolve([]),
+    loadOfferPriceExtras([id], signal),
+    metadataResponse?.ok ? metadataResponse.json() : Promise.resolve([])
+  ]);
+  const offer = offers[0] ? { ...offers[0], ...(extras.get(id) ?? {}) } : null;
+  const [metadata] = Array.isArray(metadataRows) ? metadataRows : [];
+  return sanitizeProductImages({ ...product, ...(metadata ?? {}), images, videos, offer, affiliate_link: link ?? null });
 }
 
 export async function reportCatalogImageFailure(productId: string, imageUrl: string): Promise<void> {
@@ -116,10 +148,12 @@ export function escapeHtml(value: unknown): string {
 }
 
 export function logSearchTermAsync(query?: string, sector?: string) {
-  if (!catalogReady || !query?.trim()) return;
+  const term = query?.trim().replace(/\s+/g, ' ').slice(0, 100) ?? '';
+  if (!catalogReady || term.length < 2 || /\b[^\s@]+@[^\s@]+\.[^\s@]+\b|https?:\/\/|\d{8,}|(?:\+?55[\s.-]*)?(?:\(?\d{2}\)?[\s.-]*)?9?\d{4}[\s.-]?\d{4}/i.test(term)) return;
   fetch(`${config.url}/rest/v1/rpc/log_search_term`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ query: query.trim(), sector: sector || null })
+    body: JSON.stringify({ query: term, sector: sector || null }),
+    signal: AbortSignal.timeout(2500)
   }).catch(() => { /* falha silenciosa, apenas log */ });
 }

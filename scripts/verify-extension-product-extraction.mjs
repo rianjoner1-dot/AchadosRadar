@@ -13,11 +13,15 @@ const productSpecs = process.argv.slice(2)
   .map((argument) => argument.slice('--product='.length))
   .map((value) => {
     const [platform, expectedId, url] = value.split('|');
-    if (!['magalu', 'mercadolivre'].includes(platform) || !expectedId || !url) throw new Error('Use --product=platform|ID|HTTPS_URL.');
+    if (!['amazon', 'magalu', 'mercadolivre', 'shopee'].includes(platform) || !expectedId || !url) throw new Error('Use --product=platform|ID|HTTPS_URL.');
     const parsedUrl = new URL(url);
-    const allowedHost = platform === 'magalu'
-      ? ['magazineluiza.com.br', 'magazinevoce.com.br'].some((host) => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`))
-      : ['mercadolivre.com.br', 'mercadolivre.com'].some((host) => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`));
+    const allowedHosts = {
+      amazon: ['amazon.com.br'],
+      magalu: ['magazineluiza.com.br', 'magazinevoce.com.br'],
+      mercadolivre: ['mercadolivre.com.br', 'mercadolivre.com'],
+      shopee: ['shopee.com.br'],
+    }[platform];
+    const allowedHost = allowedHosts.some((host) => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`));
     if (parsedUrl.protocol !== 'https:' || !allowedHost) throw new Error(`Expected an official HTTPS ${platform} product page.`);
     return { platform, expectedId, url: parsedUrl.href };
   });
@@ -147,8 +151,14 @@ try {
       capturedProducts.push({ platform: spec.platform, expectedId: spec.expectedId, passed: false, error: 'Page or extension content script did not become ready.' });
       continue;
     }
+    await delay(1500);
 
-    const messageType = spec.platform === 'magalu' ? 'CRAWL_MAGALU_PRODUCT' : 'CRAWL_MERCADOLIVRE_PRODUCT';
+    const messageType = {
+      amazon: 'CRAWL_AMAZON_PRODUCT',
+      magalu: 'CRAWL_MAGALU_PRODUCT',
+      mercadolivre: 'CRAWL_MERCADOLIVRE_PRODUCT',
+      shopee: 'CRAWL_SHOPEE_PRODUCT',
+    }[spec.platform];
     const response = await sendTabMessage(tabId, { type: messageType, options: { topicName: 'Validação local' } });
     const item = response?.value?.item;
     const pageDiagnostic = await evaluate(`chrome.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => ({
@@ -157,14 +167,69 @@ try {
       heading: document.querySelector('h1')?.innerText?.trim().slice(0, 180) || null,
       ogTitle: document.querySelector('meta[property="og:title"]')?.content || null,
       ogPrice: document.querySelector('meta[property="product:price:amount"]')?.content || null,
-      textStart: document.body?.innerText?.replace(/\\s+/g, ' ').trim().slice(0, 320) || null
+      textStart: document.body?.innerText?.replace(/\\s+/g, ' ').trim().slice(0, 320) || null,
+      priceCandidates: [...document.querySelectorAll('span, div, p')]
+        .map((element) => element.innerText?.replace(/\\s+/g, ' ').trim())
+        .filter((text) => text && text.length < 100 && /R\\$/.test(text))
+        .slice(0, 12),
+      imageCandidates: [...document.images]
+        .filter((image) => /^https?:/i.test(image.currentSrc || image.src))
+        .slice(0, 12)
+        .map((image) => ({ host: new URL(image.currentSrc || image.src).hostname, loaded: image.complete && image.naturalWidth > 0, width: image.naturalWidth, alt: image.alt?.slice(0, 80) || '', className: String(image.className || '').slice(0, 100), parentClass: String(image.parentElement?.className || '').slice(0, 100) })),
+      bodyPriceMatches: [...(document.body?.innerText || '').matchAll(/R\\$\\s*[\\d.,]+/g)].slice(0, 12).map((match) => match[0]),
+      productContext: (() => { const text = document.body?.innerText || ''; const title = document.querySelector('h1')?.innerText?.trim(); const index = title ? text.indexOf(title) : -1; return index >= 0 ? text.slice(Math.max(0, index - 120), index + title.length + 300).replace(/\\s+/g, ' ') : null; })(),
+      productJsonLd: [...document.querySelectorAll('script[type="application/ld+json"]')].flatMap((script) => {
+        try {
+          const collect = (node, result = []) => {
+            if (!node || typeof node !== 'object') return result;
+            if (Array.isArray(node)) { node.forEach((item) => collect(item, result)); return result; }
+            const types = Array.isArray(node['@type']) ? node['@type'] : [node['@type']];
+            if (types.some((type) => String(type).toLowerCase() === 'product')) result.push(node);
+            Object.values(node).forEach((value) => collect(value, result));
+            return result;
+          };
+          return collect(JSON.parse(script.textContent || ''));
+        } catch { return []; }
+      }).slice(0, 3).map((product) => ({ name: product.name || null, offerPrice: product.offers?.price || product.offers?.[0]?.price || null, currency: product.offers?.priceCurrency || product.offers?.[0]?.priceCurrency || null, imageCount: Array.isArray(product.image) ? product.image.length : (product.image ? 1 : 0) })),
+      matchingStateScripts: (() => {
+        const productId = new URL(location.href).pathname.match(/-i\\.\\d+\\.(\\d+)/)?.[1];
+        if (!productId) return [];
+        return [...document.scripts].filter((script) => script.textContent?.includes(productId)).slice(0, 4).map((script) => {
+          const text = script.textContent || '';
+          const matches = [];
+          try {
+            const collect = (value, key = '', seen = new Set()) => {
+              if (!value || typeof value !== 'object' || seen.has(value)) return;
+              seen.add(value);
+              if (String(value.itemId ?? value.item_id ?? '') === productId || key === productId) matches.push(value);
+              if (Array.isArray(value)) value.forEach((item) => collect(item, '', seen));
+              else Object.entries(value).forEach(([childKey, child]) => collect(child, childKey, seen));
+            };
+            collect(JSON.parse(text));
+          } catch {}
+          const summaries = matches.slice(0, 5).map((item) => Object.fromEntries(Object.entries(item)
+            .filter(([key]) => /price|stock|quantity|image|video|description|install|seller|itemId|item_id|title|name|currency/i.test(key))
+            .map(([key, value]) => [key, Array.isArray(value)
+              ? value.slice(0, 3).map((entry) => entry && typeof entry === 'object'
+                ? Object.fromEntries(Object.entries(entry).filter(([childKey]) => /price|stock|quantity|model|currency/i.test(childKey)).map(([childKey, child]) => [childKey, String(child).slice(0, 80)]))
+                : entry)
+              : value && typeof value === 'object' ? 'object:' + Object.keys(value).slice(0, 8).join(',') : String(value).slice(0, 120)])));
+          return { type: script.type || null, id: script.id || null, length: text.length, parsedProductNodes: summaries };
+        });
+      })()
     }) }).then(results => results[0]?.result || null)`);
     const images = Array.isArray(item?.images) ? item.images : [];
     const passed = Boolean(response?.ok && response.value?.ok && item?.id === spec.expectedId && item.title && Number(item.price) > 0 && images.length > 0);
+    const pageText = String(pageDiagnostic?.textStart || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const accessState = /login necessario|faca login/.test(pageText) ? 'login_required'
+      : /continuar comprando|verify you are|verificacao de seguranca/.test(pageText) ? 'store_verification'
+      : /selecione seu idioma|select your language/.test(pageText) ? 'language_selection'
+      : item?.title ? 'product_partially_loaded' : 'product_data_not_available';
     capturedProducts.push({
       platform: spec.platform,
       expectedId: spec.expectedId,
       passed,
+      accessState,
       capturedId: item?.id || null,
       title: item?.title || null,
       price: Number.isFinite(Number(item?.price)) ? Number(item.price) : null,

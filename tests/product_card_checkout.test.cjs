@@ -70,3 +70,13 @@ test('H1.3: an open product or cart page disables marketplace exit when a deadli
   assert.match(cartPage, /buy\?\.removeAttribute\('rel'\)/);
   assert.match(cartPage, /window\.setInterval\(updateCartLinkTimes, 60_000\)/);
 });
+
+test('product details render only observed ratings and bounded store specifications', () => {
+  const client = fs.readFileSync(path.join(__dirname, '../src/modules/catalog/client.ts'), 'utf8');
+  assert.match(productPage, /id="productRating"/);
+  assert.match(productPage, /observada na loja/);
+  assert.match(productPage, /id="productSpecifications"/);
+  assert.match(productPage, /escapeHtml\(item\.name\).*escapeHtml\(item\.value\)/);
+  assert.match(client, /select: 'rating,reviews_count,specifications'/);
+  assert.match(client, /metadataResponse\?\.ok \? metadataResponse\.json\(\) : Promise\.resolve\(\[\]\)/);
+});
