@@ -12,4 +12,4 @@ export interface SpotlightCarouselOffer extends SpotlightOffer {
   categoryLabel: string;
 }
 
-export function selectSpotlightCarouselGroups(products: CatalogProduct[], carouselCount?: number, slidesPerCarousel?: number, excludedProductIds?: Iterable<string>): SpotlightCarouselOffer[][];
+export function selectSpotlightCarouselGroups(products: CatalogProduct[], carouselCount?: number, slidesPerCarousel?: number, excludedProductIds?: Iterable<string>, diversifyTypes?: boolean): SpotlightCarouselOffer[][];

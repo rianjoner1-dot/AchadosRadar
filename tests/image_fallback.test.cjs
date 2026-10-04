@@ -5,6 +5,20 @@ async function loadModule() {
   return import('../src/modules/catalog/image-fallback.js');
 }
 
+test('catalog hides a missing-photo product and reports its original image once',async()=>{
+ const {bindImageFailureReporting}=await loadModule();let removed=0;const reports=[];
+ const image=makeImage({productId:'missing',originalUrl:'https://a-static.mlcdn.com.br/missing.jpg'});
+ image.closest=()=>({dataset:{productId:'missing'},remove(){removed++;image.isConnected=false;}});
+ bindImageFailureReporting({querySelectorAll:()=>[image]},{selector:'img',hideProduct:true,placeholderClass:'unused',reportFailure:(...args)=>reports.push(args)});
+ image.emit('error');image.emit('error');assert.equal(removed,1);assert.deepEqual(reports,[['missing','https://a-static.mlcdn.com.br/missing.jpg']]);assert.equal(image.replacedWith,null);
+});
+test('official unavailable SVG is detected without treating a normal SVG as missing',async()=>{
+ const {isKnownUnavailableMercadoLivreImage}=await import('../src/modules/catalog/image-health.js');
+ const url='https://http2.mlstatic.com/image.svg';
+ assert.equal(await isKnownUnavailableMercadoLivreImage(url,async()=>new Response('<svg><title>Imagem indisponível</title></svg>',{headers:{'content-type':'image/svg+xml'}})),true);
+ assert.equal(await isKnownUnavailableMercadoLivreImage(url,async()=>new Response('<svg><title>Produto</title></svg>',{headers:{'content-type':'image/svg+xml'}})),false);
+});
+
 function makeImage({ productId, originalUrl, currentSrc = originalUrl, complete = false, naturalWidth = 0, naturalHeight = 0 } = {}) {
   const listeners = new Map();
   return {

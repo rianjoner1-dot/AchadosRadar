@@ -151,6 +151,7 @@ const demo = demoProducts.map((product) => ({
   import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, logSearchTermAsync, type CatalogProduct } from '../modules/catalog/client';
   import { selectSpotlightCarouselGroups } from '../modules/catalog/spotlights.mjs';
   import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
+  import { mixProductVariety, HOME_VARIETY_QUERIES } from '../modules/catalog/variety.js';
   import { isKnownUnavailableMercadoLivreImage, preloadProductImage } from '../modules/catalog/image-health.js';
   import { matchesDemoProduct, matchesDemoSector } from '../modules/catalog/search-utils.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
@@ -327,6 +328,8 @@ const demo = demoProducts.map((product) => ({
   let autoLoadEnabled = true;
   let requestVersion = 0;
   let appendedCount = 0;
+  let displayedProductIds = new Set<string>();
+  let discoveryLoaded = false;
   let firstPageSettled = false;
 
   function reserveFirstPageHeight() {
@@ -380,7 +383,7 @@ const demo = demoProducts.map((product) => ({
       spotlightProducts = products;
       failedSpotlightImages.clear();
     }
-    const groups = selectSpotlightCarouselGroups(products, 3, 5, failedSpotlightImages);
+    const groups = selectSpotlightCarouselGroups(products, 3, 5, failedSpotlightImages, true);
     spotlightGrid.replaceChildren();
     window.clearInterval(spotlightTimer);
     if (!groups.length) { spotlightSection.hidden = true; return; }
@@ -462,7 +465,7 @@ const demo = demoProducts.map((product) => ({
     const version = ++spotlightRenderVersion;
     const inspectedProducts = new Set<string>();
     while (version === spotlightRenderVersion) {
-      const selected = selectSpotlightCarouselGroups(products, 3, 5, failedSpotlightImages).map((group) => group[0]).filter(Boolean);
+      const selected = selectSpotlightCarouselGroups(products, 3, 5, failedSpotlightImages, true).map((group) => group[0]).filter(Boolean);
       const unchecked = selected.filter(({ product }) => {
         const image = safeImage(product);
         return image && !inspectedProducts.has(product.id);
@@ -623,7 +626,8 @@ const demo = demoProducts.map((product) => ({
     if (progress.exhausted) exhaustedPlatforms.add(platform);
     if (progress.cursor) platformCursors.set(platform, progress.cursor);
     if (page.length) {
-      platformBuffers.set(platform, [...buffer, ...page]);
+      const merged = [...buffer, ...page].filter(product => !displayedProductIds.has(product.id));
+      platformBuffers.set(platform, [...new Map(merged.map(product => [product.id, product])).values()]);
     }
     return page;
   }
@@ -633,14 +637,26 @@ const demo = demoProducts.map((product) => ({
     const fetched: CatalogProduct[] = [];
     const shouldMixStores = filters.platform === 'all' && filters.sort === 'recent' && !filters.q.trim();
     if (shouldMixStores) {
+      if (!discoveryLoaded && !filters.sector && !filters.min && !filters.max) {
+        discoveryLoaded = true;
+        const samples = await Promise.all(HOME_VARIETY_QUERIES.map(query =>
+          searchCatalog({ ...filters, ...query, limit: 3, signal: controller?.signal }).catch(() => [] as CatalogProduct[])));
+        if (version !== requestVersion) return { products: [], fetched };
+        for (const product of samples.flat()) {
+          const buffer = platformBuffers.get(product.platform) ?? [];
+          if (!buffer.some(item => item.id === product.id)) platformBuffers.set(product.platform, [...buffer, product]);
+        }
+        fetched.push(...samples.flat());
+      }
       const platformsToFetch = catalogPlatforms.filter((platform) => !exhaustedPlatforms.has(platform) && (platformBuffers.get(platform)?.length ?? 0) < 20);
       const pages = await Promise.all(platformsToFetch.map((platform) => fetchPlatformPage(platform, filters, version)));
       fetched.push(...pages.flat());
       if (version !== requestVersion) return { products: [], fetched };
 
       const candidates = interleaveByPlatform(catalogPlatforms.flatMap((platform) => platformBuffers.get(platform) ?? []));
-      const products = candidates.slice(0, 20);
+      const products = mixProductVariety(candidates).slice(0, 20);
       const selectedIds = new Set(products.map((product) => product.id));
+      products.forEach(product => displayedProductIds.add(product.id));
       for (const platform of catalogPlatforms) {
         platformBuffers.set(platform, (platformBuffers.get(platform) ?? []).filter((product) => !selectedIds.has(product.id)));
       }
@@ -680,6 +696,8 @@ const demo = demoProducts.map((product) => ({
       platformBuffers = new Map();
       exhaustedPlatforms = new Set();
       appendedCount = 0;
+      displayedProductIds = new Set();
+      discoveryLoaded = false;
     }
     if (!catalogReady || loading) return;
     loading = true;
@@ -691,7 +709,7 @@ const demo = demoProducts.map((product) => ({
     try {
       const { products, fetched } = await takeCatalogBatch(version);
       if (version !== requestVersion) return;
-      if (reset) { grid.replaceChildren(); void prepareSpotlights(fetched, true); }
+      if (reset) { grid.replaceChildren(); void prepareSpotlights(mixProductVariety([...new Map(fetched.map(product => [product.id, product])).values()]), true); }
       grid.insertAdjacentHTML('beforeend', products.map(renderCard).join(''));
       grid.removeAttribute('data-loading');
       catalogLoader.hidden = true;
@@ -701,6 +719,7 @@ const demo = demoProducts.map((product) => ({
         window.removeEventListener('resize', reserveFirstPageHeight);
       }
       bindImageFailureReporting(grid, {
+        hideProduct: true,
         selector: '.catalog-image img:not([data-fallback-bound])',
         placeholderClass: 'image-placeholder',
         reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
@@ -760,6 +779,7 @@ const demo = demoProducts.map((product) => ({
   } else {
     filterDemo();
     bindImageFailureReporting(grid, {
+      hideProduct: true,
       selector: '.catalog-image img:not([data-fallback-bound])',
       placeholderClass: 'image-placeholder',
       reportFailure: (productId, imageUrl) => {

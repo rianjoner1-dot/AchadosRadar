@@ -1,6 +1,6 @@
-import { getCatalogImageFailureUrl, isUsableProductImage } from './image-health.js';
+import { getCatalogImageFailureUrl, isUsableProductImage, isKnownUnavailableMercadoLivreImage } from './image-health.js';
 
-/** @param {ParentNode} root @param {{ selector: string, productSelector?: string, placeholderClass: string, reportFailure: (productId: string, imageUrl: string) => void }} options */
+/** @param {ParentNode} root @param {{ selector: string, productSelector?: string, placeholderClass: string, hideProduct?: boolean, reportFailure: (productId: string, imageUrl: string) => void }} options */
 export function bindImageFailureReporting(root, options) {
   const productSelector = options.productSelector || '[data-product-id]';
   for (const image of root.querySelectorAll(options.selector)) {
@@ -14,6 +14,11 @@ export function bindImageFailureReporting(root, options) {
       const imageUrl = getCatalogImageFailureUrl(image);
       if (productId && imageUrl) options.reportFailure(productId, imageUrl);
 
+      if (options.hideProduct) {
+        image.closest(productSelector)?.remove();
+        return;
+      }
+
       const placeholder = document.createElement('span');
       placeholder.className = options.placeholderClass;
       placeholder.setAttribute('role', 'img');
@@ -23,9 +28,11 @@ export function bindImageFailureReporting(root, options) {
     };
 
     image.addEventListener('error', replaceWithPlaceholder, { once: true });
-    image.addEventListener('load', () => {
-      if (!isUsableProductImage(image)) replaceWithPlaceholder();
-    }, { once: true });
-    if (image.complete && !isUsableProductImage(image)) replaceWithPlaceholder();
+    const checkLoadedImage = async () => {
+      if (!isUsableProductImage(image)) { replaceWithPlaceholder(); return; }
+      if (options.hideProduct && await isKnownUnavailableMercadoLivreImage(getCatalogImageFailureUrl(image))) replaceWithPlaceholder();
+    };
+    image.addEventListener('load', () => { void checkLoadedImage(); }, { once: true });
+    if (image.complete) void checkLoadedImage();
   }
 }

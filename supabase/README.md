@@ -47,6 +47,8 @@ Todas as migrações são estritamente versionadas por timestamp `YYYYMMDDHHMMSS
 
 ## 4. Testes de Banco de Dados
 
+`20261004160000_materialize_catalog_search.sql` evita recalcular os ranks de palavras e os escores repetidamente. Preserva assinatura, permissões, RLS, relevância e paginação. Aplicada no projeto remoto: buscas públicas por monitor/teclado passaram de HTTP 500 (timeout 57014) para HTTP 200.
+
 Todas as migrações são executadas em memória via **PGlite** para validação instantânea sem precisar de rede:
 ```bash
 node --test tests/database_block_d.test.cjs

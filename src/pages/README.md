@@ -51,4 +51,6 @@ npm run test:budget
 
 ## Correção da paginação
 
+A página inicial diversifica tipos de produto com amostra temática limitada e mantém um conjunto de IDs apresentados por carregamento. A apresentação aleatória não altera os cursores do banco nem a ordenação solicitada por preço. Home e busca ocultam cards com imagem indisponível confirmada; não removem produtos do banco.
+
 Home e busca preservam a última página parcial e avançam pelo cursor bruto mesmo quando imagens inválidas reduzem a quantidade visível. Antes de remover uma imagem quebrada, reportam a falha ao catálogo remoto.

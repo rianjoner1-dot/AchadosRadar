@@ -72,4 +72,6 @@ Detalhes adicionais observados: a leitura do produto pode incluir rating, quanti
 
 ## Paginação após validação de imagens
 
+A home usa `variety.js` para embaralhar os candidatos e intercalar tipos de produto, incluindo subtipos de eletrônicos. Uma amostra inicial limitada (até três itens por consulta temática) amplia a diversidade; cursores continuam avançando pelas páginas brutas e IDs já exibidos não reaparecem. Filtros e ordenação explícita por preço mantêm seu contrato. Destaques podem dividir eletrônicos em trilhas de teclados, monitores, SSDs etc. `hideProduct` em `bindImageFailureReporting` remove cards de home/busca quando a foto falha ou o CDN confirma placeholder, sem apagar o produto. SVG comum e falhas de CORS não provam ausência de foto.
+
 page-progress.js mantém cursor/exaustão das linhas recebidas do banco, antes da filtragem de imagens. A página parcial final também entra no buffer. Produtos relacionados usam o mesmo contrato. Falhas de imagem são reportadas antes de remover o card.

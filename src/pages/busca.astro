@@ -410,6 +410,7 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
       loaderEl.hidden = true;
 
       bindImageFailureReporting(grid, {
+        hideProduct: true,
         selector: '.catalog-image img:not([data-fallback-bound])',
         placeholderClass: 'image-placeholder',
         reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }

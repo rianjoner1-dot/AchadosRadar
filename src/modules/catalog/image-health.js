@@ -61,13 +61,19 @@ export async function isKnownUnavailableMercadoLivreImage(imageUrl, fetchImage =
     unavailable ||= finalUrl.hostname === 'http2.mlstatic.com' && unavailablePath.test(finalUrl.pathname);
   } catch { /* An unreadable or malformed destination is not proof. */ }
 
+  if (!unavailable && /image\/svg\+xml/i.test(response.headers?.get?.('content-type') ?? '')) {
+    try {
+      const text = await response.text();
+      unavailable = /img[-_]not[-_]available|image[-_ ]not[-_ ]available|imagem indispon[ií]vel|foto indispon[ií]vel/i.test(text);
+    } catch { /* Unreadable SVG stays unknown. */ }
+  }
   try { await response.body?.cancel(); } catch { /* The image itself may already have completed. */ }
   return unavailable;
 }
 
 export function shouldUseGlobalImageFallback(image) {
 return Boolean(image?.getAttribute?.('src'))
-  && !image?.closest?.('#catalogGrid, #productMainImage, #spotlightGrid, #demoRelatedGrid');
+  && !image?.closest?.('#catalogGrid, #feedGrid, #productMainImage, #spotlightGrid, #demoRelatedGrid');
 }
 
 export function getGlobalImageFallbackAlt(image, fallbackAlt = 'Imagem indisponível') {

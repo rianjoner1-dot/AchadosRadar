@@ -82,6 +82,8 @@ node scripts/import-catalog.mjs data/catalogo_macro.json --dry-run --summary
 
 ## Coleta em segundo plano — 04/10/2026
 
+O verificador remoto inclui a migration `20261004160000`, que otimiza a RPC de busca sem mudar assinatura ou permissões.
+
 A coleta HTTP da KaBuM usa o feed oficial Awin (merchant 17729, publisher 3105840). Configure AWIN_FEED_LIST_URL no .env; nunca publique a URL assinada.
 
 - npm run collect:once executa download, leitura CSV, validação de até 500 páginas e importação do lote.

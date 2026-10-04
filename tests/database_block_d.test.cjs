@@ -372,6 +372,7 @@ test('Bloco D — Inicialização e Execução Sequencial das Migrações SQL', 
     await runMigration(db, '20260930230000_keep_archived_product_metrics.sql');
     await runMigration(db, '20261001090000_cart_owner_reads_archived_products.sql');
     await runMigration(db, '20261001130000_catalog_sectors_and_search_v2.sql');
+    await runMigration(db, '20261004160000_materialize_catalog_search.sql');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.profiles', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to profiles');
     assert.equal((await db.query("SELECT has_table_privilege('anon', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, false, 'Anon role has no table-level access to saved carts');
     assert.equal((await db.query("SELECT has_table_privilege('authenticated', 'public.cart_items', 'SELECT') AS allowed")).rows[0].allowed, true, 'Authenticated users retain cart access, filtered by RLS');

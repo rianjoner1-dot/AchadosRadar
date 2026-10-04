@@ -1,3 +1,4 @@
+import { productVarietyKey } from './variety.js';
 function observedDiscount(offer) {
   const price = offer?.price;
   const oldPrice = offer?.old_price;
@@ -83,7 +84,7 @@ function getCategoryOptions(product) {
  * stays in one category while its product rotates, matching the three-card
  * merchandising strip without mixing unrelated offers in a carousel.
  */
-export function selectSpotlightCarouselGroups(products, carouselCount = 3, slidesPerCarousel = 5, excludedProductIds = []) {
+export function selectSpotlightCarouselGroups(products, carouselCount = 3, slidesPerCarousel = 5, excludedProductIds = [], diversifyTypes = false) {
   if (!Array.isArray(products) || !Number.isInteger(carouselCount) || carouselCount < 1 ||
       !Number.isInteger(slidesPerCarousel) || slidesPerCarousel < 1) return [];
 
@@ -91,7 +92,12 @@ export function selectSpotlightCarouselGroups(products, carouselCount = 3, slide
   const categoryGroups = new Map();
   const candidates = selectSpotlightOffers(products, products.length, excludedProductIds);
   for (const entry of candidates) {
-    const category = getCategoryOptions(entry.product)[0];
+    let category = getCategoryOptions(entry.product)[0];
+    if (diversifyTypes && category) {
+      const key = productVarietyKey(entry.product);
+      const labels = {teclados:'Teclados',mouses:'Mouses',monitores:'Monitores',memorias:'Memórias',armazenamento:'SSDs e HDs',processadores:'Processadores','placas-de-video':'Placas de vídeo',gabinetes:'Gabinetes',fontes:'Fontes',fones:'Fones e headsets',notebooks:'Notebooks',mousepad:'Mousepads'};
+      if (labels[key]) category = {key, label:labels[key]};
+    }
     if (!category) continue;
     const group = categoryGroups.get(category.key) ?? { category, entries: [] };
     if (group.entries.length < maxSlides) group.entries.push({ ...entry, categoryKey: category.key, categoryLabel: category.label });

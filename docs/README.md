@@ -90,6 +90,8 @@ Antes de alterar qualquer código, clique no atalho da respectiva pasta e leia s
 
 ## 5. Comandos de Validação Geral
 
+Revisão da vitrine de 04/10: distribuição por tipo de produto na home, ocultação de cards com foto ausente confirmada e otimização de `search_catalog_v2` para eliminar timeout observado em buscas públicas. Os contratos estão nos READMEs de catálogo, páginas e Supabase.
+
 A revisão de `RELATORIO_MELHORIAS_TOPICOS_3_E_4.md` corrigiu redirecionamentos, encerramento do circuito, retenção/recuo das falhas e validação de campos opcionais. O adendo no relatório distingue as correções aplicadas das propostas adiadas.
 
 Para verificar se nenhuma alteração quebrou contratos ou regras:

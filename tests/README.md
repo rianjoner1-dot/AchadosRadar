@@ -69,6 +69,8 @@ node --test tests/spotlight_selection.test.cjs
 
 ## Regressões da coleta
 
+`catalog_variety.test.cjs` verifica alternância de tipos dentro da mesma loja/setor e destaques por tipo. `image_fallback.test.cjs` cobre remoção visual sem placeholder e detecção conservadora de SVG indisponível. A suíte de banco aplica a otimização da busca antes de validar relevância, filtros e cursores.
+
 Os testes também cobrem bloqueio de redirecionamentos antes do acesso, normalização de slug, encerramento da fila com pedidos em andamento, parada após 30 resultados, tabelas e entidades HTML, avaliações ausentes e parcelamento inválido/juros desconhecidos.
 
 collection-regressions.test.cjs cobre CSV com linhas internas, fila concorrente limitada e falhas isoladas, cursor de páginas filtradas, identidade da página KaBuM e segurança dos deep links. observed_product_details_migration.test.cjs também aplica as migrations de plataformas e união de PC Gamer em Eletrônicos. O teste do robô refresh_failure_sync cobre retenção/reenvio da fila durante uma falha da ponte.
