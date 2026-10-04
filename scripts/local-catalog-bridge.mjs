@@ -10,7 +10,7 @@ const dataPath = path.resolve(process.env.LOCAL_CATALOG_BRIDGE_DATA || path.join
 // The legacy Python archive server remains on 6875; keep the site bridge separate.
 const requestedPort = Number(process.env.LOCAL_CATALOG_BRIDGE_PORT || 6876);
 const maxBodyBytes = 1024 * 1024;
-const supportedPlatforms = new Set(['magalu', 'mercadolivre', 'amazon', 'shopee']);
+const supportedPlatforms = new Set(['magalu', 'mercadolivre', 'amazon', 'shopee', 'benoit', 'kabum']);
 const supabaseUrl = String(process.env.PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const canArchiveRemotely = Boolean(supabaseUrl && serviceRoleKey);

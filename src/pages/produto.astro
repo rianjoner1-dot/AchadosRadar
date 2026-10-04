@@ -97,6 +97,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   import { evaluateOfferReadiness, formatLinkTiming } from '../modules/outbound/readiness.mjs';
   import { describeOfferObservation, describeObservedStock } from '../modules/catalog/offer-observation.mjs';
   import { recordProductView } from '../modules/analytics/client';
+  import { currentUser } from '../modules/auth/client';
   const status = document.querySelector<HTMLElement>('#productStatus')!;
   const productLoader = document.querySelector<HTMLElement>('#productLoader')!;
   const content = document.querySelector<HTMLElement>('#productContent')!;
@@ -153,10 +154,31 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         }
         const observedPrice = offer?.pix_price ?? offer?.price;
         document.querySelector('#productPrice')!.innerHTML = `<span class="price-observed">${offer?.pix_price ? 'À vista no Pix' : 'Preço observado'}</span><strong>${formatPrice(observedPrice)}</strong>${offer?.old_price && observedPrice && offer.old_price > observedPrice ? `<del>De ${formatPrice(offer.old_price)}</del>` : ''}${offer?.card_price ? `<span>No cartão: ${formatPrice(offer.card_price)}</span>` : ''}${offer?.installments_text ? `<span>${escapeHtml(offer.installments_text)}</span>` : ''}`;
+        let isMaster = false;
+        try {
+          const usr = await currentUser();
+          isMaster = Boolean(usr?.email && usr.email.toLowerCase() === 'rianjonerparceiros@gmail.com');
+        } catch {}
+
         const observationElement = document.querySelector<HTMLElement>('#offerObservation')!;
-        observationElement.textContent = observation.label;
-        observationElement.dataset.state = observation.state;
-        document.querySelector('#productFacts')!.innerHTML = [fact('Frete', offer?.shipping_text), fact('Cupom', offer?.coupon_code), fact('Quantidade na última consulta', offer?.stock_quantity), fact('Disponibilidade', describeObservedStock(offer?.stock_status, observation.state))].join('');
+        if (isMaster) {
+          observationElement.hidden = false;
+          observationElement.innerHTML = `🛡️ <strong>[PAINEL ADMIN MASTER]</strong> ${escapeHtml(observation.label)}`;
+          observationElement.dataset.state = observation.state;
+        } else {
+          observationElement.hidden = true;
+        }
+
+        const displayAvailability = isMaster
+          ? describeObservedStock(offer?.stock_status, observation.state)
+          : (offer?.stock_status === 'out_of_stock' ? 'Consulte na loja' : 'Disponível na loja');
+
+        document.querySelector('#productFacts')!.innerHTML = [
+          fact('Frete', offer?.shipping_text),
+          fact('Cupom', offer?.coupon_code),
+          fact('Quantidade na última consulta', offer?.stock_quantity),
+          fact('Disponibilidade', displayAvailability)
+        ].join('');
         const imageHost = document.querySelector('#productMainImage')!;
         const productImages = product.images ?? [];
         imageHost.replaceChildren();

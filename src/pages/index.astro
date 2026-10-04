@@ -144,6 +144,15 @@ const demo = demoProducts.map((product) => ({
   import { matchesDemoProduct, matchesDemoSector } from '../modules/catalog/search-utils.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
   import { describeOfferObservation, describeObservedStock } from '../modules/catalog/offer-observation.mjs';
+  import { currentUser } from '../modules/auth/client';
+
+  let isMasterUser = false;
+  void (async () => {
+    try {
+      const usr = await currentUser();
+      isMasterUser = Boolean(usr?.email && usr.email.toLowerCase() === 'rianjonerparceiros@gmail.com');
+    } catch {}
+  })();
 
   const form = document.querySelector<HTMLFormElement>('#catalogFilters')!;
   const grid = document.querySelector<HTMLElement>('#catalogGrid')!;
@@ -344,7 +353,7 @@ const demo = demoProducts.map((product) => ({
       <h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
       <p class="spotlight-detail">${detail}</p>
       <p class="spotlight-price">${formatPrice(offer?.pix_price ?? offer?.price)}${offer?.pix_price ? ' <span>no Pix</span>' : ''}</p>
-      <p class="spotlight-observation" data-state="${observation.state}">${escapeHtml(observation.label)}</p>
+      ${isMasterUser ? `<p class="spotlight-observation" data-state="${observation.state}">🛡️ [ADMIN] ${escapeHtml(observation.label)}</p>` : ''}
       ${offer?.card_price ? `<p class="spotlight-fact">No cartão: ${formatPrice(offer.card_price)}</p>` : ''}
       ${offer?.installments_text ? `<p class="spotlight-fact">${escapeHtml(offer.installments_text)}</p>` : ''}
       <a class="spotlight-action" href="/produto?id=${id}">Conferir este achado <span aria-hidden="true">→</span></a></div></article>`;
@@ -496,12 +505,26 @@ const demo = demoProducts.map((product) => ({
     const originalPrice = offer?.old_price && offer.old_price > (offer.pix_price ?? offer.price)
       ? `<del class="catalog-old-price">De ${formatPrice(offer.old_price)}</del>` : '';
     const image = safeImage(product);
-    const stockStyle = observation.state !== 'observed' ? 'stock-check' : offer?.stock_status === 'out_of_stock' ? 'stock-unavailable' : offer?.stock_status === 'in_stock' ? 'stock-available' : 'stock-check';
-    const stockText = observation.state === 'observed' && offer?.stock_status === 'in_stock' ? 'Disponível*' : observation.state === 'observed' && offer?.stock_status === 'out_of_stock' ? 'Sem estoque*' : observation.state === 'needs_recheck' ? 'Rever estoque' : 'Estoque n/i';
-    const stockPill = `<span class="stock-pill ${stockStyle}" aria-label="${escapeHtml(stockLabel)}">${stockText}</span>`;
+    let stockPill = '';
+    let observationHtml = '';
+
+    if (isMasterUser) {
+      const stockLabel = describeObservedStock(offer?.stock_status, observation.state);
+      const stockStyle = observation.state !== 'observed' ? 'stock-check' : offer?.stock_status === 'out_of_stock' ? 'stock-unavailable' : offer?.stock_status === 'in_stock' ? 'stock-available' : 'stock-check';
+      const stockText = observation.state === 'observed' && offer?.stock_status === 'in_stock' ? 'Disponível*' : observation.state === 'observed' && offer?.stock_status === 'out_of_stock' ? 'Sem estoque*' : observation.state === 'needs_recheck' ? 'Rever estoque (Admin)' : 'Estoque n/i';
+      stockPill = `<span class="stock-pill ${stockStyle}" aria-label="${escapeHtml(stockLabel)}">${stockText}</span>`;
+      observationHtml = `<p class="offer-observation" data-state="${observation.state}">🛡️ [ADMIN] ${escapeHtml(observation.label)}</p>`;
+    } else {
+      const isUnavailable = offer?.stock_status === 'out_of_stock';
+      const stockStyle = isUnavailable ? 'stock-unavailable' : 'stock-available';
+      const stockText = isUnavailable ? 'Consulte na loja' : 'Disponível na loja';
+      stockPill = `<span class="stock-pill ${stockStyle}">${stockText}</span>`;
+      observationHtml = '';
+    }
+
     return `<article class="catalog-card" data-product-id="${id}" data-search-title="${escapeHtml(product.title)}" data-search-category="${escapeHtml(product.category ?? '')}">
       <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage(product))}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">` : '<span class="image-placeholder">Imagem indisponível</span>'}</a>
-      <div class="catalog-card-body"><div class="catalog-card-topline"><span class="store-label"><img src="${marketplaceLogo}" alt="" width="480" height="160" loading="lazy">${store}</span>${stockPill}</div><p class="offer-observation" data-state="${observation.state}">${escapeHtml(observation.label)}</p><h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
+      <div class="catalog-card-body"><div class="catalog-card-topline"><span class="store-label"><img src="${marketplaceLogo}" alt="" width="480" height="160" loading="lazy">${store}</span>${stockPill}</div>${observationHtml}<h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
       <div class="catalog-price-panel"><span class="price-caption">${offer?.pix_price ? 'À vista no Pix' : 'Preço observado'}</span><p class="catalog-price">${price}</p>${originalPrice}${offer?.card_price ? `<span class="catalog-card-price">No cartão: ${formatPrice(offer.card_price)}</span>` : ''}</div>
       <div class="catalog-perks">${offer?.shipping_text ? `<span class="catalog-perk perk-shipping">${escapeHtml(offer.shipping_text)}</span>` : ''}${offer?.installments_text ? `<span class="catalog-perk perk-installments">${escapeHtml(offer.installments_text)}</span>` : ''}${offer?.coupon_code ? `<span class="catalog-perk perk-coupon">Cupom ${escapeHtml(offer.coupon_code)}</span>` : ''}</div>
       <a class="btn-primary card-detail-link" href="/produto?id=${id}">Ver oferta</a></div></article>`;
@@ -613,6 +636,10 @@ const demo = demoProducts.map((product) => ({
 
   async function load(reset: boolean) {
     if (reset) {
+      try {
+        const usr = await currentUser();
+        isMasterUser = Boolean(usr?.email && usr.email.toLowerCase() === 'rianjonerparceiros@gmail.com');
+      } catch {}
       requestVersion++;
       loading = false;
       autoLoadEnabled = true;
