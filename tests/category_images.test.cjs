@@ -16,7 +16,7 @@ const buttons = [...page.matchAll(/<button[^>]*class="sector-btn"[^>]*data-secto
   .filter(Boolean);
 
 test('every illustrated category loads its fixed local image without hidden lazy-load gating', () => {
-  assert.equal(buttons.length, 10, 'all product categories should have an image (the all-products tile uses its icon)');
+  assert.equal(buttons.length, 9, 'all product categories should have an image (the all-products tile uses its icon)');
   for (const [sector, before, imageKey, after] of buttons) {
     const source = imagePaths.get(sector);
     assert.equal(imageKey, sector, `the ${sector} button and image key should match`);

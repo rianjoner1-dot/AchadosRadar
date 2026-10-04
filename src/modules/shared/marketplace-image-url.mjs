@@ -3,7 +3,7 @@ const imageHosts = {
   magalu: ['mlcdn.com.br', 'magazineluiza.com.br', 'magalu.com'],
   amazon: ['media-amazon.com', 'ssl-images-amazon.com', 'images-amazon.com'],
   shopee: ['susercontent.com', 'shopee.com.br', 'shopee.com'],
-  benoit: ['benoit.com.br', 'awin1.com'],
+  benoit: ['benoit.com.br', 'awin1.com', 'cloudfront.net', 'linxcommerce.io'],
   kabum: ['kabum.com.br', 'awin1.com']
 };
 

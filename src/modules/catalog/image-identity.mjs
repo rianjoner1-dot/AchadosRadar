@@ -25,6 +25,7 @@ export function classifyProductImageIdentity(platform, externalId, imageUrl) {
 
   let path;
   try { path = new URL(imageUrl).pathname; } catch { return 'unverifiable'; }
+  if (/MLB-?\d+_\d+/i.test(path)) return 'unverifiable';
   const imageId = path.match(/MLB-?(\d+)/i)?.[1];
   if (!imageId) return 'unverifiable';
   const productId = externalId.match(/^MLB-?(\d+)$/i)?.[1];

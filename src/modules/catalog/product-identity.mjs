@@ -1,6 +1,7 @@
 const hostsByPlatform = {
   magalu: ['magazineluiza.com.br', 'magazinevoce.com.br'],
-  mercadolivre: ['mercadolivre.com.br', 'mercadolivre.com']
+  mercadolivre: ['mercadolivre.com.br', 'mercadolivre.com'],
+  kabum: ['kabum.com.br']
 };
 
 function decodeSegment(segment) {
@@ -23,6 +24,12 @@ export function matchesMarketplaceProductIdentity(platform, externalId, rawUrl) 
   if (platform === 'magalu') {
     const expected = id.toLowerCase();
     return segments.some((segment, index) => segment.toLowerCase() === 'p'
+      && segments[index + 1]?.toLowerCase() === expected);
+  }
+
+  if (platform === 'kabum') {
+    const expected = id.toLowerCase();
+    return segments.some((segment, index) => segment.toLowerCase() === 'produto'
       && segments[index + 1]?.toLowerCase() === expected);
   }
 

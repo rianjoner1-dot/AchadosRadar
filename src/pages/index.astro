@@ -8,7 +8,7 @@ export const prerender = true;
 
 const title = 'Achados Radar | Ofertas para comparar';
 const description = 'Compare ofertas observadas no Mercado Livre e Magalu. A compra é concluída na loja parceira.';
-const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee' };
+const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' };
 const demo = demoProducts.map((product) => ({
   ...product,
   demo: true,
@@ -83,7 +83,6 @@ const demo = demoProducts.map((product) => ({
         <button type="button" class="sector-btn" data-sector="eletronicos" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletronicos" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrônicos</span></button>
         <button type="button" class="sector-btn" data-sector="moda" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moda" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Moda</span></button>
         <button type="button" class="sector-btn" data-sector="moveis" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moveis" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Móveis</span></button>
-        <button type="button" class="sector-btn" data-sector="pc-gamer" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="pc-gamer" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">PC Gamer</span></button>
         <button type="button" class="sector-btn" data-sector="eletro" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletro" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrodomésticos</span></button>
         <button type="button" class="sector-btn" data-sector="jardim" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="jardim" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Jardim</span></button>
         <button type="button" class="sector-btn" data-sector="bebes" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="bebes" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Bebês</span></button>
@@ -264,7 +263,6 @@ const demo = demoProducts.map((product) => ({
     eletronicos: '/images/categories/eletronicos.jpg',
     moda: '/images/categories/moda.jpg',
     moveis: '/images/categories/moveis.jpg',
-    'pc-gamer': '/images/categories/pc-gamer.jpg',
     eletro: '/images/categories/eletrodomesticos.jpg',
     jardim: '/images/categories/jardim.jpg',
     bebes: '/images/categories/bebes.jpg',
@@ -284,7 +282,11 @@ const demo = demoProducts.map((product) => ({
     if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) refreshRadarDots();
   }, true);
   grid.addEventListener('error', (event) => {
-    if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) refreshRadarDots();
+    if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) {
+      const card = event.target.closest('.catalog-card');
+      if (card) card.remove();
+      refreshRadarDots();
+    }
   }, true);
   function syncSectorButtons() {
     const selected = sectorFilter.value;
@@ -302,7 +304,7 @@ const demo = demoProducts.map((product) => ({
   let cursor: CatalogCursor | null = null;
   let catalogBuffer: CatalogProduct[] = [];
   let catalogExhausted = false;
-  const catalogPlatforms = ['mercadolivre', 'magalu', 'amazon', 'shopee'];
+  const catalogPlatforms = ['magalu', 'kabum', 'mercadolivre', 'benoit', 'shopee', 'amazon'];
   let platformCursors = new Map<string, CatalogCursor | null>();
   let platformBuffers = new Map<string, CatalogProduct[]>();
   let exhaustedPlatforms = new Set<string>();
@@ -495,25 +497,38 @@ const demo = demoProducts.map((product) => ({
   }).observe(spotlightGrid, { childList: true, subtree: true });
 
   function renderCard(product: CatalogProduct) {
+    const image = safeImage(product);
+    if (!image) return '';
     const id = encodeURIComponent(product.id);
     const store = marketplaceNames[product.platform] || 'Loja parceira';
     const marketplaceLogo = `/images/marketplaces/${product.platform}.png`;
     const offer = product.offer;
     const observation = describeOfferObservation(offer?.observed_at);
-    const stockLabel = describeObservedStock(offer?.stock_status, observation.state);
-    const price = formatPrice(offer?.pix_price ?? offer?.price);
-    const originalPrice = offer?.old_price && offer.old_price > (offer.pix_price ?? offer.price)
-      ? `<del class="catalog-old-price">De ${formatPrice(offer.old_price)}</del>` : '';
-    const image = safeImage(product);
+    const bestPrice = (offer?.pix_price && offer.pix_price > 0 && offer?.price && offer.pix_price < offer.price)
+      ? offer.pix_price
+      : offer?.price;
+    const hasPixDiscount = Boolean(offer?.pix_price && offer.pix_price > 0 && offer?.price && offer.pix_price < offer.price);
+    const price = formatPrice(bestPrice);
+    const oldPrice = (offer?.old_price && typeof bestPrice === 'number' && offer.old_price > bestPrice)
+      ? offer.old_price
+      : (hasPixDiscount && offer?.price && typeof bestPrice === 'number' && offer.price > bestPrice ? offer.price : null);
+    const originalPrice = oldPrice ? `<del class="catalog-old-price">De ${formatPrice(oldPrice)}</del>` : '';
+    const priceCaption = hasPixDiscount ? 'À vista no Pix' : 'Preço observado';
+
     let stockPill = '';
     let observationHtml = '';
+    let adminAffiliateBadge = '';
 
     if (isMasterUser) {
+      const isLinkActive = product.affiliate_link?.status === 'active';
+      const badgeClass = isLinkActive ? 'admin-badge-active' : 'admin-badge-warning';
+      const badgeText = isLinkActive ? '🛡️ Link afiliado ativo' : '🛡️ Link afiliado pendente';
+      adminAffiliateBadge = `<span class="admin-affiliate-badge ${badgeClass}" title="${escapeHtml(product.affiliate_link?.status ?? 'indefinido')}">${badgeText}</span>`;
       const stockLabel = describeObservedStock(offer?.stock_status, observation.state);
       const stockStyle = observation.state !== 'observed' ? 'stock-check' : offer?.stock_status === 'out_of_stock' ? 'stock-unavailable' : offer?.stock_status === 'in_stock' ? 'stock-available' : 'stock-check';
       const stockText = observation.state === 'observed' && offer?.stock_status === 'in_stock' ? 'Disponível*' : observation.state === 'observed' && offer?.stock_status === 'out_of_stock' ? 'Sem estoque*' : observation.state === 'needs_recheck' ? 'Rever estoque (Admin)' : 'Estoque n/i';
       stockPill = `<span class="stock-pill ${stockStyle}" aria-label="${escapeHtml(stockLabel)}">${stockText}</span>`;
-      observationHtml = `<p class="offer-observation" data-state="${observation.state}">🛡️ [ADMIN] ${escapeHtml(observation.label)}</p>`;
+      observationHtml = `<div class="admin-meta-row">${adminAffiliateBadge}<p class="offer-observation" data-state="${observation.state}">🛡️ [ADMIN] ${escapeHtml(observation.label)}</p></div>`;
     } else {
       const isUnavailable = offer?.stock_status === 'out_of_stock';
       const stockStyle = isUnavailable ? 'stock-unavailable' : 'stock-available';
@@ -523,9 +538,9 @@ const demo = demoProducts.map((product) => ({
     }
 
     return `<article class="catalog-card" data-product-id="${id}" data-search-title="${escapeHtml(product.title)}" data-search-category="${escapeHtml(product.category ?? '')}">
-      <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage(product))}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">` : '<span class="image-placeholder">Imagem indisponível</span>'}</a>
+      <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}"><img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage(product))}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async"></a>
       <div class="catalog-card-body"><div class="catalog-card-topline"><span class="store-label"><img src="${marketplaceLogo}" alt="" width="480" height="160" loading="lazy">${store}</span>${stockPill}</div>${observationHtml}<h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
-      <div class="catalog-price-panel"><span class="price-caption">${offer?.pix_price ? 'À vista no Pix' : 'Preço observado'}</span><p class="catalog-price">${price}</p>${originalPrice}${offer?.card_price ? `<span class="catalog-card-price">No cartão: ${formatPrice(offer.card_price)}</span>` : ''}</div>
+      <div class="catalog-price-panel"><span class="price-caption">${priceCaption}</span><p class="catalog-price">${price}</p>${originalPrice}${offer?.card_price ? `<span class="catalog-card-price">No cartão: ${formatPrice(offer.card_price)}</span>` : ''}</div>
       <div class="catalog-perks">${offer?.shipping_text ? `<span class="catalog-perk perk-shipping">${escapeHtml(offer.shipping_text)}</span>` : ''}${offer?.installments_text ? `<span class="catalog-perk perk-installments">${escapeHtml(offer.installments_text)}</span>` : ''}${offer?.coupon_code ? `<span class="catalog-perk perk-coupon">Cupom ${escapeHtml(offer.coupon_code)}</span>` : ''}</div>
       <a class="btn-primary card-detail-link" href="/produto?id=${id}">Ver oferta</a></div></article>`;
   }
@@ -767,9 +782,23 @@ const demo = demoProducts.map((product) => ({
     debounce = window.setTimeout(() => { syncUrl(); if (catalogReady) void load(true); else filterDemo(); }, 250);
     logDebounce = window.setTimeout(logCurrentSearch, 2000);
   });
-  globalSearch?.form?.addEventListener('submit', (event) => { event.preventDefault(); queryInput.value = globalSearch.value; syncUrl(); logCurrentSearch(); void load(true); });
+  globalSearch?.form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const q = (globalSearch.value || '').trim();
+    location.href = `/busca${q ? `?q=${encodeURIComponent(q)}` : ''}`;
+  });
   form.addEventListener('change', () => { syncMarketplaceButtons(); syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
-  form.addEventListener('submit', (event) => { event.preventDefault(); syncUrl(); logCurrentSearch(); if (catalogReady) void load(true); else filterDemo(); });
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const q = (queryInput.value || '').trim();
+    const sector = sectorFilter.value;
+    const platform = platformFilter.value;
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (sector) params.set('setor', sector);
+    if (platform && platform !== 'all') params.set('loja', platform);
+    location.href = `/busca${params.toString() ? `?${params.toString()}` : ''}`;
+  });
   for (const button of marketplaceButtons) button.addEventListener('click', () => {
     platformFilter.value = button.dataset.marketplaceFilter ?? 'all';
     syncMarketplaceButtons();

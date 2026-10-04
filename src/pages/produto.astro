@@ -112,9 +112,12 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   function fact(label: string, value?: unknown) { return value !== null && value !== undefined && value !== '' ? `<li><span>${label}</span><strong>${escapeHtml(value)}</strong></li>` : `<li><span>${label}</span><strong>Consulte na loja</strong></li>`; }
   function renderRelated(product: CatalogProduct) {
     const image = product.images?.[0]?.url;
+    if (!image) return '';
     const originalImage = product.images?.[0]?.original_url ?? image;
-    const price = product.offer?.pix_price ?? product.offer?.price;
-    return `<article class="related-card" data-product-id="${escapeHtml(product.id)}"><a href="/produto?id=${encodeURIComponent(product.id)}">${image ? `<img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage)}" alt="" loading="lazy" width="220" height="170">` : '<span class="related-image-placeholder" role="img" aria-label="Foto indisponível">Foto indisponível</span>'}<span>${escapeHtml(product.title)}</span></a><strong>${formatPrice(price)}${product.offer?.pix_price ? ' no Pix' : ''}</strong></article>`;
+    const bestPrice = product.offer?.pix_price && product.offer.pix_price > 0 && product.offer.pix_price < product.offer.price
+      ? product.offer.pix_price
+      : product.offer?.price;
+    return `<article class="related-card" data-product-id="${escapeHtml(product.id)}"><a href="/produto?id=${encodeURIComponent(product.id)}"><img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage)}" alt="" loading="lazy" width="220" height="170"><span>${escapeHtml(product.title)}</span></a><strong>${formatPrice(bestPrice)}${product.offer?.pix_price ? ' no Pix' : ''}</strong></article>`;
   }
 
   if (!catalogReady || !id) {
@@ -152,8 +155,14 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
           document.querySelector('#productSpecificationsList')!.innerHTML = specifications.map((item) => `<div><dt>${escapeHtml(item.name)}</dt><dd>${escapeHtml(item.value)}</dd></div>`).join('');
           document.querySelector<HTMLElement>('#productSpecifications')!.hidden = false;
         }
-        const observedPrice = offer?.pix_price ?? offer?.price;
-        document.querySelector('#productPrice')!.innerHTML = `<span class="price-observed">${offer?.pix_price ? 'À vista no Pix' : 'Preço observado'}</span><strong>${formatPrice(observedPrice)}</strong>${offer?.old_price && observedPrice && offer.old_price > observedPrice ? `<del>De ${formatPrice(offer.old_price)}</del>` : ''}${offer?.card_price ? `<span>No cartão: ${formatPrice(offer.card_price)}</span>` : ''}${offer?.installments_text ? `<span>${escapeHtml(offer.installments_text)}</span>` : ''}`;
+        const bestPrice = (offer?.pix_price && offer.pix_price > 0 && offer?.price && offer.pix_price < offer.price)
+          ? offer.pix_price
+          : offer?.price;
+        const hasPixDiscount = Boolean(offer?.pix_price && offer.pix_price > 0 && offer?.price && offer.pix_price < offer.price);
+        const originalOldPrice = (offer?.old_price && typeof bestPrice === 'number' && offer.old_price > bestPrice)
+          ? offer.old_price
+          : (hasPixDiscount && offer?.price && typeof bestPrice === 'number' && offer.price > bestPrice ? offer.price : null);
+        document.querySelector('#productPrice')!.innerHTML = `<span class="price-observed">${hasPixDiscount ? 'À vista no Pix' : 'Preço observado'}</span><strong>${formatPrice(bestPrice)}</strong>${originalOldPrice ? `<del>De ${formatPrice(originalOldPrice)}</del>` : ''}${offer?.card_price ? `<span>No cartão: ${formatPrice(offer.card_price)}</span>` : ''}${offer?.installments_text ? `<span>${escapeHtml(offer.installments_text)}</span>` : ''}`;
         let isMaster = false;
         try {
           const usr = await currentUser();
@@ -163,7 +172,11 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
         const observationElement = document.querySelector<HTMLElement>('#offerObservation')!;
         if (isMaster) {
           observationElement.hidden = false;
-          observationElement.innerHTML = `🛡️ <strong>[PAINEL ADMIN MASTER]</strong> ${escapeHtml(observation.label)}`;
+          const isLinkActive = product.affiliate_link?.status === 'active';
+          const linkBadge = isLinkActive
+            ? '<span class="admin-affiliate-badge admin-badge-active" style="margin-left: 6px;">🛡️ Link afiliado ativo</span>'
+            : '<span class="admin-affiliate-badge admin-badge-warning" style="margin-left: 6px;">🛡️ Link afiliado pendente</span>';
+          observationElement.innerHTML = `🛡️ <strong>[PAINEL ADMIN MASTER]</strong> ${escapeHtml(observation.label)} · ${linkBadge}`;
           observationElement.dataset.state = observation.state;
         } else {
           observationElement.hidden = true;

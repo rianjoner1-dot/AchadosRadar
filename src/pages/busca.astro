@@ -1,0 +1,770 @@
+---
+// src/pages/busca.astro
+import Layout from '../layouts/Layout.astro';
+
+export const prerender = false;
+
+const title = 'Buscar Ofertas e Produtos | Achados Radar';
+const description = 'Feed inteligente de ofertas observadas nas melhores lojas online. Compare preços, frete e parcelas.';
+---
+
+<Layout title={title} description={description}>
+  <main class="search-feed-page">
+    <section class="feed-header-section">
+      <div class="container">
+        <div class="feed-search-bar">
+          <form id="feedSearchForm" class="feed-search-form" action="/busca" method="GET" role="search">
+            <div class="search-input-wrap">
+              <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input
+                id="feedSearchInput"
+                type="search"
+                name="q"
+                placeholder="Buscar no radar (ex: fone jbl, air fryer, vestido, tv)..."
+                autocomplete="off"
+              />
+              <button id="feedClearBtn" type="button" class="feed-clear-btn" aria-label="Limpar busca" hidden>&times;</button>
+            </div>
+            <button type="submit" class="btn-primary search-submit-btn">Buscar</button>
+          </form>
+        </div>
+
+        <div class="feed-filter-bar">
+          <div class="filter-group platforms-filter-group" role="group" aria-label="Filtrar por loja">
+            <span class="filter-label">Loja:</span>
+            <div class="filter-chips">
+              <button type="button" class="filter-chip" data-platform="all" aria-pressed="true">Todas</button>
+              <button type="button" class="filter-chip" data-platform="magalu" aria-pressed="false">Magalu</button>
+              <button type="button" class="filter-chip" data-platform="kabum" aria-pressed="false">KaBuM!</button>
+              <button type="button" class="filter-chip" data-platform="mercadolivre" aria-pressed="false">Mercado Livre</button>
+              <button type="button" class="filter-chip" data-platform="benoit" aria-pressed="false">Lojas Benoit</button>
+              <button type="button" class="filter-chip" data-platform="shopee" aria-pressed="false">Shopee</button>
+              <button type="button" class="filter-chip" data-platform="amazon" aria-pressed="false">Amazon</button>
+            </div>
+          </div>
+
+          <div class="filter-group sectors-filter-group" role="group" aria-label="Filtrar por setor">
+            <span class="filter-label">Setor:</span>
+            <div class="filter-chips">
+              <button type="button" class="filter-chip sector-chip" data-sector="" aria-pressed="true">Tudo</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="eletronicos" aria-pressed="false">Eletrônicos</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="eletro" aria-pressed="false">Eletrodomésticos</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="moveis" aria-pressed="false">Móveis</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="casa" aria-pressed="false">Casa</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="moda" aria-pressed="false">Moda</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="beleza" aria-pressed="false">Beleza</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="bebes" aria-pressed="false">Bebês</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="pet" aria-pressed="false">Pet</button>
+              <button type="button" class="filter-chip sector-chip" data-sector="jardim" aria-pressed="false">Jardim</button>
+            </div>
+          </div>
+
+          <div class="filter-sort-wrap">
+            <label for="feedSortSelect">Ordenar por:</label>
+            <select id="feedSortSelect" class="feed-sort-select">
+              <option value="recent">Mais recentes</option>
+              <option value="price_asc">Menor preço</option>
+              <option value="price_desc">Maior preço</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="container feed-results-section">
+      <div class="feed-status-row">
+        <h1 id="feedTitle" class="feed-results-title">Ofertas Encontradas</h1>
+        <div class="feed-status-meta">
+          <span id="feedLoader" class="orb-loader" aria-hidden="true" hidden><i></i><i></i><i></i></span>
+          <span id="feedStatus" class="feed-status-text" aria-live="polite">Carregando ofertas...</span>
+        </div>
+      </div>
+
+      <div id="feedGrid" class="catalog-grid feed-grid" data-loading="true" aria-live="polite">
+        {Array.from({ length: 16 }, () => (
+          <article class="catalog-card catalog-skeleton" data-skeleton aria-hidden="true">
+            <div class="catalog-image skeleton-image"></div>
+            <div class="catalog-card-body">
+              <span class="skeleton-line skeleton-store"></span>
+              <span class="skeleton-line skeleton-title"></span>
+              <span class="skeleton-line skeleton-price"></span>
+              <span class="skeleton-line skeleton-button"></span>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <p id="feedEmpty" class="feed-empty-message" hidden>
+        Nenhuma oferta encontrada com os filtros selecionados. Tente buscar por outros termos ou remover os filtros.
+      </p>
+
+      <div class="feed-footer-actions">
+        <button type="button" id="feedLoadMoreBtn" class="btn-secondary feed-load-more" hidden>
+          Carregar mais ofertas
+        </button>
+      </div>
+
+      <div id="feedSentinel" class="feed-sentinel" aria-hidden="true"></div>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, logSearchTermAsync, type CatalogProduct } from '../modules/catalog/client';
+  import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
+  import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
+  import { describeOfferObservation, describeObservedStock } from '../modules/catalog/offer-observation.mjs';
+  import { currentUser } from '../modules/auth/client';
+
+  const marketplaceNames: Record<string, string> = {
+    mercadolivre: 'Mercado Livre',
+    magalu: 'Magalu',
+    amazon: 'Amazon',
+    shopee: 'Shopee',
+    benoit: 'Lojas Benoit',
+    kabum: 'KaBuM!'
+  };
+
+  const catalogPlatforms = ['magalu', 'kabum', 'mercadolivre', 'benoit', 'shopee', 'amazon'];
+
+  let isMasterUser = false;
+  void (async () => {
+    try {
+      const usr = await currentUser();
+      isMasterUser = Boolean(usr?.email && usr.email.toLowerCase() === 'rianjonerparceiros@gmail.com');
+    } catch {}
+  })();
+
+  const form = document.querySelector<HTMLFormElement>('#feedSearchForm')!;
+  const searchInput = document.querySelector<HTMLInputElement>('#feedSearchInput')!;
+  const clearBtn = document.querySelector<HTMLButtonElement>('#feedClearBtn')!;
+  const sortSelect = document.querySelector<HTMLSelectElement>('#feedSortSelect')!;
+  const platformChips = [...document.querySelectorAll<HTMLButtonElement>('[data-platform]')];
+  const sectorChips = [...document.querySelectorAll<HTMLButtonElement>('[data-sector]')];
+  const grid = document.querySelector<HTMLElement>('#feedGrid')!;
+  const titleEl = document.querySelector<HTMLElement>('#feedTitle')!;
+  const statusEl = document.querySelector<HTMLElement>('#feedStatus')!;
+  const loaderEl = document.querySelector<HTMLElement>('#feedLoader')!;
+  const emptyEl = document.querySelector<HTMLElement>('#feedEmpty')!;
+  const loadMoreBtn = document.querySelector<HTMLButtonElement>('#feedLoadMoreBtn')!;
+  const sentinel = document.querySelector<HTMLElement>('#feedSentinel')!;
+
+  type CatalogCursor = { created_at: string; id: string; price?: number | null; score?: number | null };
+  let cursor: CatalogCursor | null = null;
+  let catalogBuffer: CatalogProduct[] = [];
+  let catalogExhausted = false;
+  let platformCursors = new Map<string, CatalogCursor | null>();
+  let platformBuffers = new Map<string, CatalogProduct[]>();
+  let exhaustedPlatforms = new Set<string>();
+  let controller: AbortController | null = null;
+  let loading = false;
+  let autoLoadEnabled = true;
+  let requestVersion = 0;
+  let appendedCount = 0;
+
+  // Adaptive Velocity Scroll
+  let lastScrollTop = 0;
+  let lastScrollTime = Date.now();
+  let currentScrollVelocity = 0;
+
+  window.addEventListener('scroll', () => {
+    const now = Date.now();
+    const dt = Math.max(1, now - lastScrollTime);
+    const st = window.scrollY || document.documentElement.scrollTop;
+    const dy = Math.max(0, st - lastScrollTop);
+    currentScrollVelocity = (dy / dt) * 1000; // px/sec
+    lastScrollTop = st;
+    lastScrollTime = now;
+
+    // Se o usuário estiver rolando rápido em direção ao fim, aciona carregamento antecipado
+    if (currentScrollVelocity > 800 && autoLoadEnabled && !loading && !catalogExhausted) {
+      const scrollRemaining = document.documentElement.scrollHeight - (st + window.innerHeight);
+      if (scrollRemaining < 1500) {
+        void load(false);
+      }
+    }
+  }, { passive: true });
+
+  const safeImage = (product: CatalogProduct) => product.images?.[0]?.url ?? '';
+  const originalImage = (product: CatalogProduct) => product.images?.[0]?.original_url ?? safeImage(product);
+
+  function renderCard(product: CatalogProduct) {
+    const image = safeImage(product);
+    if (!image) return ''; // Oculta produtos sem fotos
+
+    const id = encodeURIComponent(product.id);
+    const store = marketplaceNames[product.platform] || 'Loja parceira';
+    const marketplaceLogo = `/images/marketplaces/${product.platform}.png`;
+    const offer = product.offer;
+    const observation = describeOfferObservation(offer?.observed_at);
+
+    // Prioriza menor preço (Pix / à vista)
+    const bestPrice = (offer?.pix_price && offer.pix_price > 0 && offer?.price && offer.pix_price < offer.price)
+      ? offer.pix_price
+      : offer?.price;
+    const hasPixDiscount = Boolean(offer?.pix_price && offer.pix_price > 0 && offer?.price && offer.pix_price < offer.price);
+    const price = formatPrice(bestPrice);
+    const oldPrice = (offer?.old_price && typeof bestPrice === 'number' && offer.old_price > bestPrice)
+      ? offer.old_price
+      : (hasPixDiscount && offer?.price && typeof bestPrice === 'number' && offer.price > bestPrice ? offer.price : null);
+    const originalPrice = oldPrice ? `<del class="catalog-old-price">De ${formatPrice(oldPrice)}</del>` : '';
+    const priceCaption = hasPixDiscount ? 'À vista no Pix' : 'Preço observado';
+
+    let stockPill = '';
+    let observationHtml = '';
+    let adminAffiliateBadge = '';
+
+    if (isMasterUser) {
+      const isLinkActive = product.affiliate_link?.status === 'active';
+      const badgeClass = isLinkActive ? 'admin-badge-active' : 'admin-badge-warning';
+      const badgeText = isLinkActive ? '🛡️ Link afiliado ativo' : '🛡️ Link afiliado pendente';
+      adminAffiliateBadge = `<span class="admin-affiliate-badge ${badgeClass}" title="${escapeHtml(product.affiliate_link?.status ?? 'indefinido')}">${badgeText}</span>`;
+
+      const stockLabel = describeObservedStock(offer?.stock_status, observation.state);
+      const stockStyle = observation.state !== 'observed' ? 'stock-check' : offer?.stock_status === 'out_of_stock' ? 'stock-unavailable' : offer?.stock_status === 'in_stock' ? 'stock-available' : 'stock-check';
+      const stockText = observation.state === 'observed' && offer?.stock_status === 'in_stock' ? 'Disponível*' : observation.state === 'observed' && offer?.stock_status === 'out_of_stock' ? 'Sem estoque*' : observation.state === 'needs_recheck' ? 'Rever estoque (Admin)' : 'Estoque n/i';
+      stockPill = `<span class="stock-pill ${stockStyle}" aria-label="${escapeHtml(stockLabel)}">${stockText}</span>`;
+      observationHtml = `<div class="admin-meta-row">${adminAffiliateBadge}<p class="offer-observation" data-state="${observation.state}">🛡️ [ADMIN] ${escapeHtml(observation.label)}</p></div>`;
+    } else {
+      const isUnavailable = offer?.stock_status === 'out_of_stock';
+      const stockStyle = isUnavailable ? 'stock-unavailable' : 'stock-available';
+      const stockText = isUnavailable ? 'Consulte na loja' : 'Disponível na loja';
+      stockPill = `<span class="stock-pill ${stockStyle}">${stockText}</span>`;
+      observationHtml = '';
+    }
+
+    return `<article class="catalog-card" data-product-id="${id}" data-search-title="${escapeHtml(product.title)}" data-search-category="${escapeHtml(product.category ?? '')}">
+      <a class="catalog-image" href="/produto?id=${id}" aria-label="Ver ${escapeHtml(product.title)}">
+        <img src="${escapeHtml(image)}" data-original-image-url="${escapeHtml(originalImage(product))}" alt="${escapeHtml(product.title)}" width="320" height="260" loading="lazy" decoding="async">
+      </a>
+      <div class="catalog-card-body">
+        <div class="catalog-card-topline">
+          <span class="store-label"><img src="${marketplaceLogo}" alt="" width="480" height="160" loading="lazy">${store}</span>
+          ${stockPill}
+        </div>
+        ${observationHtml}
+        <h3><a href="/produto?id=${id}">${escapeHtml(product.title)}</a></h3>
+        <div class="catalog-price-panel">
+          <span class="price-caption">${priceCaption}</span>
+          <p class="catalog-price">${price}</p>
+          ${originalPrice}
+          ${offer?.card_price ? `<span class="catalog-card-price">No cartão: ${formatPrice(offer.card_price)}</span>` : ''}
+        </div>
+        <div class="catalog-perks">
+          ${offer?.shipping_text ? `<span class="catalog-perk perk-shipping">${escapeHtml(offer.shipping_text)}</span>` : ''}
+          ${offer?.installments_text ? `<span class="catalog-perk perk-installments">${escapeHtml(offer.installments_text)}</span>` : ''}
+          ${offer?.coupon_code ? `<span class="catalog-perk perk-coupon">Cupom ${escapeHtml(offer.coupon_code)}</span>` : ''}
+        </div>
+        <a class="btn-primary card-detail-link" href="/produto?id=${id}">Ver oferta</a>
+      </div>
+    </article>`;
+  }
+
+  // Remove card immediately se imagem falhar
+  grid.addEventListener('error', (event) => {
+    if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) {
+      const card = event.target.closest('.catalog-card');
+      if (card) card.remove();
+    }
+  }, true);
+
+  function getActiveFilters() {
+    const q = searchInput.value.trim();
+    const activePlatformBtn = platformChips.find((b) => b.getAttribute('aria-pressed') === 'true');
+    const platform = activePlatformBtn?.dataset.platform || 'all';
+    const activeSectorBtn = sectorChips.find((b) => b.getAttribute('aria-pressed') === 'true');
+    const sector = activeSectorBtn?.dataset.sector || '';
+    const sort = sortSelect.value || 'recent';
+    return { q, platform, sector, sort };
+  }
+
+  function syncUrl() {
+    const filters = getActiveFilters();
+    const params = new URLSearchParams();
+    if (filters.q) params.set('q', filters.q);
+    if (filters.platform && filters.platform !== 'all') params.set('loja', filters.platform);
+    if (filters.sector) params.set('setor', filters.sector);
+    if (filters.sort && filters.sort !== 'recent') params.set('ordem', filters.sort);
+    history.replaceState(null, '', `${location.pathname}${params.size ? `?${params.toString()}` : ''}`);
+    updateTitle();
+  }
+
+  function updateTitle() {
+    const filters = getActiveFilters();
+    if (filters.q) {
+      titleEl.textContent = `Resultados para "${filters.q}"`;
+      document.title = `Busca: "${filters.q}" | Achados Radar`;
+    } else if (filters.sector) {
+      const chip = sectorChips.find((b) => b.dataset.sector === filters.sector);
+      titleEl.textContent = `Ofertas de ${chip?.textContent || 'Categoria'}`;
+      document.title = `${chip?.textContent || 'Ofertas'} | Achados Radar`;
+    } else if (filters.platform !== 'all') {
+      const store = marketplaceNames[filters.platform] || filters.platform;
+      titleEl.textContent = `Ofertas em ${store}`;
+      document.title = `Ofertas ${store} | Achados Radar`;
+    } else {
+      titleEl.textContent = 'Todas as Ofertas';
+      document.title = 'Buscar Ofertas | Achados Radar';
+    }
+  }
+
+  async function fetchCatalogPage(filters: ReturnType<typeof getActiveFilters>, version: number) {
+    const page = await searchCatalog({ ...filters, cursor, limit: 16, signal: controller?.signal });
+    if (version !== requestVersion) return [];
+    if (!page.length || page.length < 16) catalogExhausted = true;
+    else {
+      const last = page[page.length - 1];
+      cursor = { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null };
+      catalogBuffer.push(...page);
+    }
+    return page;
+  }
+
+  async function fetchPlatformPage(platform: string, filters: ReturnType<typeof getActiveFilters>, version: number) {
+    const page = await searchCatalog({ ...filters, platform, cursor: platformCursors.get(platform) ?? null, limit: 16, signal: controller?.signal });
+    if (version !== requestVersion) return [];
+    const buffer = platformBuffers.get(platform) ?? [];
+    if (!page.length || page.length < 16) exhaustedPlatforms.add(platform);
+    if (page.length) {
+      const last = page[page.length - 1];
+      platformCursors.set(platform, { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null });
+      platformBuffers.set(platform, [...buffer, ...page]);
+    }
+    return page;
+  }
+
+  async function takeCatalogBatch(version: number) {
+    const filters = getActiveFilters();
+    const fetched: CatalogProduct[] = [];
+    const shouldMixStores = filters.platform === 'all' && filters.sort === 'recent' && !filters.q.trim();
+
+    if (shouldMixStores) {
+      const platformsToFetch = catalogPlatforms.filter((platform) => !exhaustedPlatforms.has(platform) && (platformBuffers.get(platform)?.length ?? 0) < 16);
+      const pages = await Promise.all(platformsToFetch.map((platform) => fetchPlatformPage(platform, filters, version)));
+      fetched.push(...pages.flat());
+      if (version !== requestVersion) return { products: [], fetched };
+
+      const candidates = interleaveByPlatform(catalogPlatforms.flatMap((platform) => platformBuffers.get(platform) ?? []));
+      const products = candidates.slice(0, 16);
+      const selectedIds = new Set(products.map((product) => product.id));
+      for (const platform of catalogPlatforms) {
+        platformBuffers.set(platform, (platformBuffers.get(platform) ?? []).filter((product) => !selectedIds.has(product.id)));
+      }
+      return { products, fetched };
+    }
+
+    while (!catalogExhausted && catalogBuffer.length < 16) {
+      const page = await fetchCatalogPage(filters, version);
+      fetched.push(...page);
+      if (!page.length || version !== requestVersion) break;
+    }
+
+    if (version !== requestVersion) return { products: [], fetched };
+    const candidates = catalogBuffer;
+    const products = candidates.slice(0, 16);
+    const remainingIds = new Set(products.map((product) => product.id));
+    catalogBuffer = candidates.filter((product) => !remainingIds.has(product.id));
+    return { products, fetched };
+  }
+
+  async function load(reset: boolean) {
+    if (reset) {
+      try {
+        const usr = await currentUser();
+        isMasterUser = Boolean(usr?.email && usr.email.toLowerCase() === 'rianjonerparceiros@gmail.com');
+      } catch {}
+      requestVersion++;
+      loading = false;
+      autoLoadEnabled = true;
+      loadMoreBtn.textContent = 'Carregar mais ofertas';
+      controller?.abort();
+      controller = new AbortController();
+      cursor = null;
+      catalogBuffer = [];
+      catalogExhausted = false;
+      platformCursors = new Map();
+      platformBuffers = new Map();
+      exhaustedPlatforms = new Set();
+      appendedCount = 0;
+    }
+
+    if (!catalogReady || loading) return;
+    loading = true;
+    grid.setAttribute('data-loading', 'true');
+    loaderEl.hidden = false;
+    loadMoreBtn.disabled = true;
+    statusEl.textContent = 'Carregando ofertas...';
+    const version = requestVersion;
+
+    try {
+      const { products } = await takeCatalogBatch(version);
+      if (version !== requestVersion) return;
+      if (reset) grid.replaceChildren();
+
+      // Renderiza apenas itens com fotos válidas
+      const validCardsHtml = products.map(renderCard).filter(Boolean).join('');
+      grid.insertAdjacentHTML('beforeend', validCardsHtml);
+      grid.removeAttribute('data-loading');
+      loaderEl.hidden = true;
+
+      bindImageFailureReporting(grid, {
+        selector: '.catalog-image img:not([data-fallback-bound])',
+        placeholderClass: 'image-placeholder',
+        reportFailure: (productId, imageUrl) => { void reportCatalogImageFailure(productId, imageUrl); }
+      });
+
+      appendedCount += products.length;
+      statusEl.textContent = products.length === 0 && !reset && appendedCount > 0
+        ? `Fim das ofertas disponíveis (${appendedCount} produtos carregados).`
+        : `${appendedCount} oferta${appendedCount === 1 ? '' : 's'}${products.length === 16 ? ' · role para carregar mais' : ''}`;
+
+      emptyEl.hidden = appendedCount > 0;
+      const filters = getActiveFilters();
+      const shouldMix = filters.platform === 'all' && filters.sort === 'recent' && !filters.q.trim();
+      const mixedHasMore = catalogPlatforms.some((platform) => !exhaustedPlatforms.has(platform) || (platformBuffers.get(platform)?.length ?? 0) > 0);
+      loadMoreBtn.hidden = shouldMix ? !mixedHasMore : catalogExhausted && catalogBuffer.length === 0;
+      autoLoadEnabled = true;
+      loadMoreBtn.textContent = 'Carregar mais ofertas';
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        autoLoadEnabled = false;
+        loaderEl.hidden = true;
+        grid.removeAttribute('data-loading');
+        statusEl.textContent = 'Falha ao buscar ofertas. Tente novamente.';
+        loadMoreBtn.hidden = false;
+        loadMoreBtn.textContent = 'Tentar novamente';
+      }
+    } finally {
+      if (version === requestVersion) {
+        loading = false;
+        loadMoreBtn.disabled = false;
+      }
+    }
+  }
+
+  // Inicializa parâmetros da URL
+  const initParams = new URLSearchParams(location.search);
+  const initialQ = initParams.get('q') || '';
+  const initialPlatform = initParams.get('loja') || 'all';
+  const initialSector = initParams.get('setor') || '';
+  const initialSort = initParams.get('ordem') || 'recent';
+
+  searchInput.value = initialQ;
+  clearBtn.hidden = !initialQ;
+  sortSelect.value = initialSort;
+
+  platformChips.forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.platform === initialPlatform));
+  });
+
+  sectorChips.forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.sector === initialSector));
+  });
+
+  updateTitle();
+
+  // Listeners de busca e filtros
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    syncUrl();
+    const q = searchInput.value.trim();
+    if (q) logSearchTermAsync(q, getActiveFilters().sector);
+    void load(true);
+  });
+
+  searchInput.addEventListener('input', () => {
+    clearBtn.hidden = !searchInput.value;
+  });
+
+  clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    clearBtn.hidden = true;
+    syncUrl();
+    void load(true);
+  });
+
+  sortSelect.addEventListener('change', () => {
+    syncUrl();
+    void load(true);
+  });
+
+  platformChips.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      platformChips.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      syncUrl();
+      void load(true);
+    });
+  });
+
+  sectorChips.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      sectorChips.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      syncUrl();
+      void load(true);
+    });
+  });
+
+  loadMoreBtn.addEventListener('click', () => {
+    autoLoadEnabled = true;
+    loadMoreBtn.textContent = 'Carregando mais...';
+    void load(false);
+  });
+
+  // Infinite Scroll Adaptativo
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      if (autoLoadEnabled && entries.some((entry) => entry.isIntersecting) && !loadMoreBtn.hidden) {
+        void load(false);
+      }
+    }, { rootMargin: '800px' });
+    observer.observe(sentinel);
+  }
+
+  // Carrega catálogo inicial
+  if (catalogReady) {
+    void load(true);
+  }
+</script>
+
+<style>
+  .search-feed-page {
+    min-height: 80vh;
+    padding-bottom: 60px;
+  }
+
+  .feed-header-section {
+    background: linear-gradient(180deg, #eaf3fb 0%, #f7f9fb 100%);
+    border-bottom: 1px solid #dce5ee;
+    padding: 24px 0 16px;
+    position: sticky;
+    top: 72px;
+    z-index: 40;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .feed-search-bar {
+    max-width: 800px;
+    margin: 0 auto 16px;
+  }
+
+  .feed-search-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .search-input-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #c7d5e2;
+    border-radius: var(--radius-md);
+    padding: 4px 12px;
+    box-shadow: 0 2px 6px rgba(11, 79, 138, 0.06);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .search-input-wrap:focus-within {
+    border-color: var(--action);
+    box-shadow: 0 0 0 3px rgba(11, 79, 138, 0.15);
+  }
+
+  .search-icon {
+    color: #71879c;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+
+  .search-input-wrap input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 1rem;
+    padding: 8px 0;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .feed-clear-btn {
+    border: none;
+    background: transparent;
+    font-size: 1.3rem;
+    color: #8fa0b0;
+    padding: 0 6px;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .feed-clear-btn:hover {
+    color: #444;
+  }
+
+  .search-submit-btn {
+    flex-shrink: 0;
+    padding: 0 24px;
+    height: 48px;
+  }
+
+  .feed-filter-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+
+  .filter-group::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-label {
+    font-size: 0.78rem;
+    font-weight: 750;
+    color: #4b6276;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .filter-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .filter-chip {
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    border: 1px solid #cbd7e2;
+    background: #fff;
+    color: #334e68;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .filter-chip:hover {
+    background: #f0f6fb;
+    border-color: #a4bed5;
+  }
+
+  .filter-chip[aria-pressed="true"] {
+    background: var(--action);
+    border-color: var(--action);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(11, 79, 138, 0.25);
+  }
+
+  .filter-sort-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #4b6276;
+  }
+
+  .feed-sort-select {
+    padding: 5px 10px;
+    border: 1px solid #cbd7e2;
+    border-radius: var(--radius-sm);
+    background: #fff;
+    font-size: 0.84rem;
+    color: var(--text-primary);
+  }
+
+  .feed-results-section {
+    padding-top: 24px;
+  }
+
+  .feed-status-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .feed-results-title {
+    font-size: 1.45rem;
+    font-weight: 850;
+    margin: 0;
+  }
+
+  .feed-status-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .feed-status-text {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  .feed-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+  }
+
+  @media (max-width: 640px) {
+    .feed-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+  }
+
+  .admin-meta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 4px 0;
+  }
+
+  .feed-empty-message {
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 1.05rem;
+    color: var(--text-muted);
+    background: #fff;
+    border: 1px dashed #d0dbe5;
+    border-radius: var(--radius-md);
+    margin: 30px 0;
+  }
+
+  .feed-footer-actions {
+    display: flex;
+    justify-content: center;
+    margin: 36px 0 20px;
+  }
+
+  .feed-load-more {
+    min-width: 220px;
+  }
+
+  .feed-sentinel {
+    height: 20px;
+  }
+</style>
