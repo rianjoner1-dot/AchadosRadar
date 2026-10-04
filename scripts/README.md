@@ -28,6 +28,13 @@ Esta pasta reúne ferramentas de automação, pipelines de importação, verific
   - Lê automaticamente o CSV mais recente em `~/Downloads` (padrão `BatchProductLinks*.csv`).
   - Combina o link de afiliado oficial encurtado (`s.shopee.com.br`) e comissão de 20-30% com fotos em alta resolução, especificações e avaliações extraídas.
   - Sincroniza em `data/shopee_imported_batch.json` e realiza upsert atômico direto no `data/catalogo_macro.json`.
+- [kabum-page.mjs](file:///c:/Users/joner/Documents/associados/site-afiliados/scripts/kabum-page.mjs): Extrator estruturado de páginas de produto da KaBuM via payload Next.js (`__NEXT_DATA__`).
+  - Enriquece preço Pix (`pixPrice`), cartão (`cardPrice`), parcelamento real (`installments`), avaliações (`rating`, `reviewsCount`), marca e especificações técnicas sem inventar dados fictícios.
+  - Suporta normalização de URL canônica e extração de vídeos autorizados.
+- [collect-kabum-background.mjs](file:///c:/Users/joner/Documents/associados/site-afiliados/scripts/collect-kabum-background.mjs): Coletor e validador em segundo plano com pool de concorrência (`concurrency=3`).
+  - Suporta redirecionamento 301/302 para slugs canônicos preservando a identidade do SKU.
+  - Rastreamento e quarentena de falhas (`retryCount`, `firstFailedAt`) e circuit breaker contra bloqueios/alterações de layout.
+- [collect-background.mjs](file:///c:/Users/joner/Documents/associados/site-afiliados/scripts/collect-background.mjs): Daemon orquestrador de coleta contínua com trava de processo (`collection-background.lock`) e importação atômica em lotes.
 
 ### 📊 Orçamento e Validação de Build Vercel
 - [verify-functions.cjs](file:///c:/Users/joner/Documents/associados/site-afiliados/scripts/verify-functions.cjs): Audita a contagem de funções serverless em `.vercel/output/functions` (meta: <= 4, teto rígido: 12).
