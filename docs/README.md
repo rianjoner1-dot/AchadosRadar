@@ -6,6 +6,8 @@
 
 ## 1. Visão Geral do Sistema
 
+A revisão da coleta em segundo plano está registrada em [RELATORIO_COLETA_2026-10-04.md](RELATORIO_COLETA_2026-10-04.md). Consulte também [scripts/README.md](../scripts/README.md) para os comandos do pipeline KaBuM/Awin.
+
 O **Achados Radar** é uma vitrine inteligente de produtos e ofertas de alto valor e giro rápido dos maiores marketplaces do Brasil (Mercado Livre, Magazine Luiza, Amazon e Shopee).
 - **Sem intermediação financeira**: O usuário salva produtos no carrinho local ou sincronizado, mas cada compra é finalizada no próprio marketplace por meio de links de afiliado auditados e validados.
 - **Stack**: Astro v7 (SSR via `@astrojs/vercel`), TypeScript estrito, PostgreSQL Supabase com RLS rigoroso e PGlite em testes.

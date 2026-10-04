@@ -69,3 +69,7 @@ Documentação central relacionada:
 - [docs/IMPLEMENTACAO_BUSCA_CATEGORIA_CARROSSEL.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/IMPLEMENTACAO_BUSCA_CATEGORIA_CARROSSEL.md)
 
 Detalhes adicionais observados: a leitura do produto pode incluir rating, quantidade de avaliações e especificações fornecidos pela loja. Esses campos são opcionais, preservam ausência como desconhecida e só aparecem no detalhe quando retornados pelo schema atualizado. O fallback global de imagens aguarda uma URL antes de agir e preserva `alt=""` em imagens decorativas.
+
+## Paginação após validação de imagens
+
+page-progress.js mantém cursor/exaustão das linhas recebidas do banco, antes da filtragem de imagens. A página parcial final também entra no buffer. Produtos relacionados usam o mesmo contrato. Falhas de imagem são reportadas antes de remover o card.

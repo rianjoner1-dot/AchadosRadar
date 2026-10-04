@@ -50,3 +50,7 @@ node --test tests/offer_readiness.test.cjs
 node --test tests/redirect_handler.test.cjs
 node --test tests/link_timing.test.cjs
 ```
+
+## Links KaBuM/Awin
+
+São aceitos cread.php com merchant 17729, publisher 3105840 e destino HTTPS de produto KaBuM; ou pclick.php com esses IDs e produto Awin numérico. Domínios parecidos, portas, credenciais na URL, destinos externos e URLs diretas sem afiliado são recusados. O link Awin é um deep link, não necessariamente um link encurtado.

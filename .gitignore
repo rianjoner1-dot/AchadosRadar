@@ -22,6 +22,10 @@ Thumbs.db
 supabase/.temp/
 data/chrome-profile/
 data/*.json
+data/*.csv.gz
+data/*.sql
+data/*.lock
+data/*.tmp
 scratch/
 dryrun.json
 *dryrun*.json

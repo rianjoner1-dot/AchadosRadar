@@ -10,11 +10,15 @@ const extensionPath = path.resolve(projectRoot, '..', 'robo-afiliados-autonomo')
 
 // 1. Spawns the bridge server if not already running
 console.log('🚀 Iniciando ponte local (local-catalog-bridge)...');
-const bridge = spawn('node', ['--env-file-if-exists=.env', 'scripts/local-catalog-bridge.mjs'], {
+const bridgeOnline = await fetch('http://127.0.0.1:6876/api/health', { signal:AbortSignal.timeout(1500) })
+  .then(async response => response.ok && (await response.json()).status === 'online').catch(() => false);
+const bridge = bridgeOnline ? null : spawn(process.execPath, ['--env-file-if-exists=.env', 'scripts/local-catalog-bridge.mjs'], {
   cwd: projectRoot,
   stdio: 'inherit',
   windowsHide: true
 });
+process.on('exit', () => bridge?.kill());
+bridge?.on('error', error => { console.error(error.message); process.exit(1); });
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 await delay(2000); // Wait for bridge to start
@@ -37,11 +41,11 @@ async function findBrowser() {
 const selectedBrowser = await findBrowser();
 const profilePath = path.join(projectRoot, 'data', 'chrome-profile');
 const portFile = path.join(profilePath, 'DevToolsActivePort');
-const lockFile = path.join(profilePath, 'lockfile');
-await rm(portFile, { force: true }).catch(() => {});
-await rm(lockFile, { force: true }).catch(() => {});
+const existingTargets = await getTargets();
+if (!existingTargets.length) await rm(portFile, { force: true }).catch(() => {});
+// Chromium owns profile locks; never remove a lock from another browser process.
 
-const browser = spawn(selectedBrowser.path, [
+const browser = existingTargets.length ? null : spawn(selectedBrowser.path, [
   '--window-position=-32000,-32000', '--window-size=10,10', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--disable-blink-features=AutomationControlled',
   '--lang=pt-BR',
@@ -52,14 +56,14 @@ const browser = spawn(selectedBrowser.path, [
   'about:blank'
 ], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
 
-browser.on('exit', (code, signal) => {
+browser?.on('exit', (code, signal) => {
   console.error(`❌ [Falha Crítica] Navegador Chromium foi encerrado (Código: ${code}, Sinal: ${signal}).`);
-  bridge.kill();
+  bridge?.kill();
   process.exit(1);
 });
 
 let stderr = '';
-browser.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-5000); });
+browser?.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-5000); });
 
 // 3. Connect to CDP to start the robot
 async function getTargets() {
@@ -73,7 +77,7 @@ async function getTargets() {
 console.log('⏳ Aguardando Service Worker da extensão...');
 let worker;
 const deadline = Date.now() + 15000;
-while (Date.now() < deadline && browser.exitCode === null) {
+while (Date.now() < deadline && (!browser || browser.exitCode === null)) {
   const targets = await getTargets();
   worker = targets.find((target) => target.type === 'service_worker'
     && target.url.startsWith('chrome-extension://')
@@ -84,8 +88,8 @@ while (Date.now() < deadline && browser.exitCode === null) {
 
 if (!worker) {
   console.error('❌ Service worker não iniciou. Chrome stderr:', stderr || '(vazio)');
-  browser.kill();
-  bridge.kill();
+  browser?.kill();
+  bridge?.kill();
   process.exit(1);
 }
 
@@ -132,28 +136,38 @@ socket.addEventListener('message', (event) => {
   if (!message.id) return;
   const pending = pendingCommands.get(message.id);
   if (!pending) return;
-  pending(message.result || message.error);
+  pendingCommands.delete(message.id);
+  pending(message.error ? { error: message.error.message || 'CDP error' } : message.result);
 });
 
 async function send(method, params = {}) {
   const id = ++commandId;
-  return new Promise((resolve) => {
-    pendingCommands.set(id, resolve);
+  return new Promise((resolve, reject) => {
+    pendingCommands.set(id, result => result?.error ? reject(new Error(String(result.error))) : resolve(result));
     socket.send(JSON.stringify({ id, method, params }));
+    setTimeout(() => {
+      if (!pendingCommands.has(id)) return;
+      pendingCommands.delete(id);
+      reject(new Error('CDP command timeout'));
+    }, 15000).unref();
   });
 }
 
 socket.addEventListener('open', async () => {
   await send('Runtime.enable');
   const triggerScript = `runAutoPilot().catch(err => console.error(err))`;
-  await send('Runtime.evaluate', { expression: triggerScript, awaitPromise: true });
+  await send('Runtime.evaluate', { expression: triggerScript, awaitPromise: false });
   console.log('🟢 Orquestrador rodando! O robô agora está coletando e renovando produtos em background.');
   console.log('Pressione Ctrl+C para encerrar o radar e a ponte local.');
 });
 
 process.on('SIGINT', () => {
   console.log('Encerrando...');
-  browser.kill();
-  bridge.kill();
+  browser?.kill();
+  bridge?.kill();
   process.exit(0);
 });
+process.on('SIGTERM', () => { browser?.kill(); bridge?.kill(); process.exit(0); });
+process.on('exit', () => { browser?.kill(); bridge?.kill(); });
+socket.addEventListener('error', () => { console.error('CDP connection error'); process.exit(1); });
+socket.addEventListener('close', () => { console.error('CDP connection closed'); process.exit(1); });

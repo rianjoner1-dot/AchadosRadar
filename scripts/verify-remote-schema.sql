@@ -4,7 +4,7 @@ SELECT
   current_database() AS database_name,
   current_setting('server_version') AS server_version,
   (
-    SELECT count(*) = 29
+    SELECT count(*) = 31
     FROM supabase_migrations.schema_migrations
     WHERE version IN (
       '20260929180000', '20260929180100', '20260929180200', '20260929180300',
@@ -14,7 +14,7 @@ SELECT
       '20260930180000', '20260930190000', '20260930200000', '20260930210000',
       '20260930220000', '20260930230000', '20261001090000', '20261001120000',
       '20261001130000', '20261002140000', '20261002150000', '20261002160000',
-      '20261003100000'
+      '20261003100000', '20261004133000', '20261004134500'
     )
   ) AS all_site_migrations_applied,
   to_regclass('public.products') IS NOT NULL AS products_table_exists,
@@ -33,7 +33,7 @@ SELECT
   to_regprocedure('public.log_search_term(text,text)') IS NOT NULL AS anonymous_search_rpc_exists,
   COALESCE(has_function_privilege('anon', to_regprocedure('public.log_search_term(text,text)'), 'EXECUTE'), false) AS anon_can_log_search_terms,
   COALESCE(to_regclass('public.search_term_stats') IS NOT NULL AND NOT has_table_privilege('anon', to_regclass('public.search_term_stats'), 'SELECT'), false) AS anon_cannot_read_search_aggregates,
-  (SELECT count(*) = 10 FROM public.catalog_sectors) AS all_catalog_sectors_seeded,
+  (SELECT count(*) = 9 FROM public.catalog_sectors) AS all_catalog_sectors_seeded,
   (
     SELECT count(*) = 10
     FROM pg_class c

@@ -1,5 +1,7 @@
 # Achados Radar
 
+A coleta HTTP em lote da KaBuM pode ser executada com `npm run collect:once` ou `npm run collect:background`. Configure `AWIN_FEED_LIST_URL` no `.env`; detalhes, limites e checkpoints estão em [scripts/README.md](scripts/README.md).
+
 > ⚠️ **PROTOCOLO OBRIGATÓRIO PARA AGENTES DE IA (REGRA DE OURO)**:  
 > Antes de realizar qualquer alteração neste projeto, todo agente de IA **DEVE OBRIGATORIAMENTE LER** a documentação específica da respectiva pasta/módulo a ser modificado e consultar o [Hub Central em docs/README.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/README.md). Após concluir a tarefa, **DEVE ATUALIZAR** a documentação da pasta refletindo as modificações realizadas. Veja a diretiva completa em [.agents/rules/ai-documentation-protocol.md](file:///c:/Users/joner/Documents/associados/site-afiliados/.agents/rules/ai-documentation-protocol.md).
 

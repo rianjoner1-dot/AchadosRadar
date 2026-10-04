@@ -1,3 +1,4 @@
+import { getCatalogPageProgress } from './page-progress.js';
 export const RELATED_PAGE_SIZE = 12;
 export const RELATED_DOM_LIMIT = 60;
 
@@ -14,17 +15,15 @@ export function createRelatedFeed({ currentProductId, searchPage, appendProducts
     loading = true;
     try {
       const items = await searchPage({ cursor, limit: RELATED_PAGE_SIZE });
-      if (items.length) {
-        const last = items.at(-1);
-        cursor = { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null };
-      }
+      const progress = getCatalogPageProgress(items, RELATED_PAGE_SIZE);
+      if (progress.cursor) cursor = progress.cursor;
       const fresh = items.filter((item) => !seenIds.has(item.id));
       fresh.forEach((item) => seenIds.add(item.id));
       appendProducts(fresh);
       trimOldest(RELATED_DOM_LIMIT, (removedId) => {
         if (removedId && removedId !== currentProductId) seenIds.delete(removedId);
       });
-      hasMore = items.length === RELATED_PAGE_SIZE;
+      hasMore = !progress.exhausted;
       setHasMore(hasMore);
       autoLoadPaused = false;
       return { loaded: fresh.length, hasMore, cursor };

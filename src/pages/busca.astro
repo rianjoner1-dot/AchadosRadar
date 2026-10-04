@@ -112,6 +112,7 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
 </Layout>
 
 <script>
+  import { getCatalogPageProgress } from '../modules/catalog/page-progress.js';
   import { catalogReady, escapeHtml, formatPrice, reportCatalogImageFailure, searchCatalog, logSearchTermAsync, type CatalogProduct } from '../modules/catalog/client';
   import { interleaveByPlatform } from '../modules/catalog/platform-mix.js';
   import { bindImageFailureReporting } from '../modules/catalog/image-fallback.js';
@@ -265,6 +266,8 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
   grid.addEventListener('error', (event) => {
     if (event.target instanceof HTMLImageElement && event.target.matches('.catalog-image img')) {
       const card = event.target.closest('.catalog-card');
+      const productId = (card as HTMLElement | null)?.dataset.productId;
+      if (productId) void reportCatalogImageFailure(productId, event.target.dataset.originalImageUrl || event.target.src);
       if (card) card.remove();
     }
   }, true);
@@ -312,12 +315,10 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
   async function fetchCatalogPage(filters: ReturnType<typeof getActiveFilters>, version: number) {
     const page = await searchCatalog({ ...filters, cursor, limit: 16, signal: controller?.signal });
     if (version !== requestVersion) return [];
-    if (!page.length || page.length < 16) catalogExhausted = true;
-    else {
-      const last = page[page.length - 1];
-      cursor = { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null };
-      catalogBuffer.push(...page);
-    }
+    const progress = getCatalogPageProgress(page, 16);
+    catalogExhausted = progress.exhausted;
+    if (progress.cursor) cursor = progress.cursor;
+    catalogBuffer.push(...page);
     return page;
   }
 
@@ -325,10 +326,10 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
     const page = await searchCatalog({ ...filters, platform, cursor: platformCursors.get(platform) ?? null, limit: 16, signal: controller?.signal });
     if (version !== requestVersion) return [];
     const buffer = platformBuffers.get(platform) ?? [];
-    if (!page.length || page.length < 16) exhaustedPlatforms.add(platform);
+    const progress = getCatalogPageProgress(page, 16);
+    if (progress.exhausted) exhaustedPlatforms.add(platform);
+    if (progress.cursor) platformCursors.set(platform, progress.cursor);
     if (page.length) {
-      const last = page[page.length - 1];
-      platformCursors.set(platform, { created_at: last.created_at, id: last.id, price: last.offer?.price ?? null, score: last.search_score ?? null });
       platformBuffers.set(platform, [...buffer, ...page]);
     }
     return page;
@@ -357,7 +358,7 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
     while (!catalogExhausted && catalogBuffer.length < 16) {
       const page = await fetchCatalogPage(filters, version);
       fetched.push(...page);
-      if (!page.length || version !== requestVersion) break;
+      if (version !== requestVersion) break;
     }
 
     if (version !== requestVersion) return { products: [], fetched };

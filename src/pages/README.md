@@ -48,3 +48,7 @@ Antes de criar qualquer nova rota em `src/pages/api/`, verifique se ela não ult
 ```bash
 npm run test:budget
 ```
+
+## Correção da paginação
+
+Home e busca preservam a última página parcial e avançam pelo cursor bruto mesmo quando imagens inválidas reduzem a quantidade visível. Antes de remover uma imagem quebrada, reportam a falha ao catálogo remoto.

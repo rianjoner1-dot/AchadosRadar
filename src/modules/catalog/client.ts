@@ -50,6 +50,7 @@ import { getPublicSupabaseConfig } from '../shared/config';
 import { canReportCatalogImageFailure, markCatalogImageFailureReport } from './image-health.js';
 import { sanitizeCatalogProductImages } from './image-identity.mjs';
 import { buildCatalogSearchRequest } from './search-request.js';
+import { attachCatalogPageProgress } from './page-progress.js';
 
 const supabaseConfig = getPublicSupabaseConfig();
 const config = {
@@ -91,10 +92,10 @@ export async function searchCatalog(input: {
     ...product,
     offer: product.offer ? { ...product.offer, ...(extras.get(product.id) ?? {}) } : product.offer
   }));
-  return sanitized.filter((product) => {
+  return attachCatalogPageProgress(sanitized.filter((product) => {
     if (!product.images || !Array.isArray(product.images) || product.images.length === 0) return false;
     return product.images.some((img: { url: string }) => typeof img?.url === 'string' && img.url.trim() !== '' && !img.url.includes('placeholder'));
-  });
+  }), products, input.limit ?? 20);
 }
 
 export async function getCatalogProduct(id: string, signal?: AbortSignal): Promise<CatalogProduct | null> {

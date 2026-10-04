@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isAllowedMarketplaceImageUrl, isAllowedMarketplaceVideoUrl } from '../src/modules/shared/marketplace-image-url.mjs';
 import { matchesMarketplaceProductIdentity } from '../src/modules/catalog/product-identity.mjs';
+import { isAllowedAffiliateUrl } from '../src/modules/outbound/allowlist.mjs';
+import { runCollectionPool } from './collection-pool.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseUrl = process.env.PUBLIC_SUPABASE_URL;
@@ -58,7 +60,7 @@ function normalize(item) {
       const allowed = allowedHosts[platform]?.some((host) =>
         (exactAffiliateHosts[platform] ?? []).includes(host) ? hostname === host : hostname === host || hostname.endsWith(`.${host}`)
       );
-      return parsed.protocol === 'https:' && !parsed.username && !parsed.password && allowed ? parsed.href : null;
+      return parsed.protocol === 'https:' && !parsed.port && !parsed.username && !parsed.password && allowed ? parsed.href : null;
     } catch { return null; }
   };
   const errors = [];
@@ -129,6 +131,7 @@ function normalize(item) {
     platform === 'magalu' ? magaluOfficialUrl : 
     platform === 'amazon' ? amazonOfficialUrl :
     platform === 'shopee' ? shopeeOfficialUrl :
+    platform === 'kabum' ? (officialFlag && isAllowedAffiliateUrl(platform, affiliate)) :
     (officialFlag && mercadolivreOfficialUrl)
   );
   return { errors, row: {
@@ -226,7 +229,7 @@ let archived = 0;
 const requestImport = async (body) => {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/rest/v1/rpc/import_catalog_item`, {
     method: 'POST', headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ p_item: body })
+    body: JSON.stringify({ p_item: body }), signal: AbortSignal.timeout(15000)
   });
   if (!response.ok) throw new Error(`import_catalog_item: HTTP ${response.status} ${await response.text()}`);
   return response.status === 204 ? null : response.json();
@@ -234,7 +237,7 @@ const requestImport = async (body) => {
 const requestArchive = async (platform, externalId) => {
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/rest/v1/rpc/archive_unavailable_catalog_item`, {
     method: 'POST', headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ p_platform: platform, p_external_id: externalId })
+    body: JSON.stringify({ p_platform: platform, p_external_id: externalId }), signal: AbortSignal.timeout(15000)
   });
   if (!response.ok) throw new Error(`archive_unavailable_catalog_item: HTTP ${response.status} ${await response.text()}`);
   return response.status === 204 ? null : response.json();
@@ -278,23 +281,27 @@ for (const report of dryRun ? [] : unavailableReports) {
   } catch (error) { rejected.push({ id: get(report, 'external_id', 'externalId', 'id', 'productId'), errors: [String(error.message)] }); }
 }
 
-for (const [index, item] of selectedProducts.entries()) {
+async function importItem(item, index) {
   if (item?.marketplaceUnavailable === true) {
     const platform = get(item, 'platform', 'marketplace', 'store');
     const externalId = text(get(item, 'external_id', 'externalId', 'id', 'productId'));
-    if (!isUnavailableEvidence(item)) { rejected.push({ index, id: externalId, errors: ['evidencia_de_indisponibilidade_ausente_ou_invalida'] }); continue; }
+    if (!isUnavailableEvidence(item)) { rejected.push({ index, id: externalId, errors: ['evidencia_de_indisponibilidade_ausente_ou_invalida'] }); return; }
     try { await requestArchive(platform, externalId); archived++; }
     catch (error) { rejected.push({ index, id: externalId, errors: [String(error.message)] }); }
-    continue;
+    return;
   }
   const { errors, row } = normalize(item);
-  if (errors.length) { rejected.push({ index, id: get(item, 'id', 'external_id'), errors }); continue; }
+  if (errors.length) { rejected.push({ index, id: get(item, 'id', 'external_id'), errors }); return; }
   try {
     const isAvailable = row.stock_status === 'in_stock';
     await requestImport({ ...row, status: row.link_is_official && isAvailable ? 'published' : 'draft', link_status: row.link_is_official ? 'active' : 'broken' });
     imported++;
   } catch (error) { rejected.push({ index, id: row.external_id, errors: [String(error.message)] }); }
 }
+const concurrencyArg = process.argv.find(arg => arg.startsWith('--concurrency='));
+await runCollectionPool(selectedProducts, Number(concurrencyArg?.split('=')[1] ?? 4), importItem, result => {
+  if (!result.ok) rejected.push({ index:result.index, errors:[result.error] });
+});
 console.log(JSON.stringify({ input_total: products.length, selected_total: selectedProducts.length, imported, archived, rejected_count: rejected.length, rejected }, null, 2));
 if (rejected.length) process.exitCode = 1;
 }

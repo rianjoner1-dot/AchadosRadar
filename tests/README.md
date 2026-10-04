@@ -66,3 +66,7 @@ npm test
 # Executa um arquivo de teste isolado
 node --test tests/spotlight_selection.test.cjs
 ```
+
+## Regressões da coleta
+
+collection-regressions.test.cjs cobre CSV com linhas internas, fila concorrente limitada e falhas isoladas, cursor de páginas filtradas, identidade da página KaBuM e segurança dos deep links. observed_product_details_migration.test.cjs também aplica as migrations de plataformas e união de PC Gamer em Eletrônicos. O teste do robô refresh_failure_sync cobre retenção/reenvio da fila durante uma falha da ponte.
