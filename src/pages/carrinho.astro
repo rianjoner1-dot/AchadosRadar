@@ -24,7 +24,7 @@ import Layout from '../layouts/Layout.astro';
   const cartLoader = document.querySelector<HTMLElement>('#cartLoader')!;
   const setStatus = (message: string, loading = false) => { status.textContent = message; cartLoader.hidden = !loading; };
   const validUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(id);
-  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' } as Record<string, string>)[platform] ?? 'Loja parceira';
+  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', kabum: 'KaBuM!' } as Record<string, string>)[platform] ?? 'Loja parceira';
   let renderVersion = 0;
   let authSubscriptionReady = false;
 

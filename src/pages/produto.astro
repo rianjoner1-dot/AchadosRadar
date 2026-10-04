@@ -103,7 +103,7 @@ const canonicalUrl = requestedId ? new URL(`/produto?id=${encodeURIComponent(req
   const content = document.querySelector<HTMLElement>('#productContent')!;
   const error = document.querySelector<HTMLElement>('#productError')!;
   const id = new URLSearchParams(location.search).get('id');
-  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' } as Record<string, string>)[platform] ?? 'Loja parceira';
+  const storeName = (platform: string) => ({ mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', kabum: 'KaBuM!' } as Record<string, string>)[platform] ?? 'Loja parceira';
   function saveProduct(product: CatalogProduct) {
     const offer = product.offer;
     const observedPrice = offer?.pix_price ?? offer?.price;

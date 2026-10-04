@@ -19,7 +19,7 @@ Este módulo é o coração da vitrine e da navegação de produtos do **Achados
 
 | Arquivo | Descrição |
 | :--- | :--- |
-| [client.ts](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/catalog/client.ts) | Cliente TypeScript para chamadas ao catálogo; invoca `search_catalog_v2` ou ativa modo mock local em `PUBLIC_CATALOG_DEMO`. |
+| [client.ts](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/catalog/client.ts) | Cliente TypeScript para chamadas ao catálogo; invoca `search_catalog_v2`, higieniza imagens, filtra produtos sem fotos (julgados como indisponíveis/esgotados) e ativa modo mock local em `PUBLIC_CATALOG_DEMO`. |
 | [spotlights.mjs](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/catalog/spotlights.mjs) | Algoritmo determinístico para seleção de carrosséis temáticos (até 5 produtos por trilha) priorizando maiores descontos reais. |
 | [spotlights.d.mts](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/catalog/spotlights.d.mts) | Declarações de tipos estritos para as trilhas de destaque. |
 | [platform-mix.js](file:///c:/Users/joner/Documents/associados/site-afiliados/src/modules/catalog/platform-mix.js) | Balanceador de vitrine que intercala produtos de diferentes lojas mantendo a ordem relativa de pontuação. |

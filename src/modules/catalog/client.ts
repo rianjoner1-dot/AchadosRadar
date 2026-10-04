@@ -87,10 +87,14 @@ export async function searchCatalog(input: {
   const products = await response.json();
   if (!Array.isArray(products)) throw new Error('Resposta invÃ¡lida ao buscar catÃ¡logo.');
   const extras = await loadOfferPriceExtras(products.map((product) => product.id), input.signal);
-  return products.map((product) => sanitizeProductImages({
+  const sanitized = products.map((product) => sanitizeProductImages({
     ...product,
     offer: product.offer ? { ...product.offer, ...(extras.get(product.id) ?? {}) } : product.offer
   }));
+  return sanitized.filter((product) => {
+    if (!product.images || !Array.isArray(product.images) || product.images.length === 0) return false;
+    return product.images.some((img: { url: string }) => typeof img?.url === 'string' && img.url.trim() !== '' && !img.url.includes('placeholder'));
+  });
 }
 
 export async function getCatalogProduct(id: string, signal?: AbortSignal): Promise<CatalogProduct | null> {
@@ -118,7 +122,11 @@ export async function getCatalogProduct(id: string, signal?: AbortSignal): Promi
   ]);
   const offer = offers[0] ? { ...offers[0], ...(extras.get(id) ?? {}) } : null;
   const [metadata] = Array.isArray(metadataRows) ? metadataRows : [];
-  return sanitizeProductImages({ ...product, ...(metadata ?? {}), images, videos, offer, affiliate_link: link ?? null });
+  const sanitized = sanitizeProductImages({ ...product, ...(metadata ?? {}), images, videos, offer, affiliate_link: link ?? null });
+  if (!sanitized.images || !sanitized.images.length || sanitized.images.every((img: { url: string }) => !img?.url || img.url.includes('placeholder'))) {
+    return null;
+  }
+  return sanitized;
 }
 
 export async function reportCatalogImageFailure(productId: string, imageUrl: string): Promise<void> {

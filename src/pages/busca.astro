@@ -40,7 +40,6 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
               <button type="button" class="filter-chip" data-platform="magalu" aria-pressed="false">Magalu</button>
               <button type="button" class="filter-chip" data-platform="kabum" aria-pressed="false">KaBuM!</button>
               <button type="button" class="filter-chip" data-platform="mercadolivre" aria-pressed="false">Mercado Livre</button>
-              <button type="button" class="filter-chip" data-platform="benoit" aria-pressed="false">Lojas Benoit</button>
               <button type="button" class="filter-chip" data-platform="shopee" aria-pressed="false">Shopee</button>
               <button type="button" class="filter-chip" data-platform="amazon" aria-pressed="false">Amazon</button>
             </div>
@@ -124,11 +123,10 @@ const description = 'Feed inteligente de ofertas observadas nas melhores lojas o
     magalu: 'Magalu',
     amazon: 'Amazon',
     shopee: 'Shopee',
-    benoit: 'Lojas Benoit',
     kabum: 'KaBuM!'
   };
 
-  const catalogPlatforms = ['magalu', 'kabum', 'mercadolivre', 'benoit', 'shopee', 'amazon'];
+  const catalogPlatforms = ['magalu', 'kabum', 'mercadolivre', 'shopee', 'amazon'];
 
   let isMasterUser = false;
   void (async () => {

@@ -8,7 +8,7 @@ export const prerender = true;
 
 const title = 'Achados Radar | Ofertas para comparar';
 const description = 'Compare ofertas observadas no Mercado Livre e Magalu. A compra é concluída na loja parceira.';
-const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' };
+const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', kabum: 'KaBuM!' };
 const demo = demoProducts.map((product) => ({
   ...product,
   demo: true,
@@ -62,8 +62,29 @@ const demo = demoProducts.map((product) => ({
       <button class="marketplace-filter" type="button" data-marketplace-filter="mercadolivre" aria-label="Ver ofertas do Mercado Livre" aria-pressed="false"><img src="/images/marketplaces/mercadolivre.png" alt="" width="480" height="160"><span class="sr-only">Mercado Livre</span></button>
       <button class="marketplace-filter" type="button" data-marketplace-filter="amazon" aria-label="Ver ofertas da Amazon" aria-pressed="false"><img src="/images/marketplaces/amazon.png" alt="" width="480" height="160"><span class="sr-only">Amazon</span></button>
       <button class="marketplace-filter" type="button" data-marketplace-filter="shopee" aria-label="Ver ofertas da Shopee" aria-pressed="false"><img src="/images/marketplaces/shopee.png" alt="" width="480" height="160"><span class="sr-only">Shopee</span></button>
-      <button class="marketplace-filter" type="button" data-marketplace-filter="benoit" aria-label="Ver ofertas da Lojas Benoit" aria-pressed="false"><img src="/images/marketplaces/benoit.png" alt="" width="480" height="160"><span class="sr-only">Lojas Benoit</span></button>
       <button class="marketplace-filter" type="button" data-marketplace-filter="kabum" aria-label="Ver ofertas do KaBuM!" aria-pressed="false"><img src="/images/marketplaces/kabum.png" alt="" width="480" height="160"><span class="sr-only">KaBuM!</span></button>
+    </div>
+  </section>
+
+  <section class="container categories-section" aria-labelledby="categoriesTitle">
+    <div class="categories-heading">
+      <div>
+        <p class="categories-eyebrow">EXPLORE POR DEPARTAMENTO</p>
+        <h2 id="categoriesTitle">Categorias em destaque</h2>
+      </div>
+      <span>Escolha uma categoria para filtrar o catálogo</span>
+    </div>
+    <div class="sector-filters" role="group" aria-label="Filtrar por categorias">
+      <button type="button" class="sector-btn" data-sector="" aria-pressed="true"><span class="sector-tile-image sector-all-image"><span class="marketplace-all-icon" aria-hidden="true">✦</span></span><span class="sector-tile-label">Tudo</span></button>
+      <button type="button" class="sector-btn" data-sector="eletronicos" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletronicos" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrônicos</span></button>
+      <button type="button" class="sector-btn" data-sector="moda" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moda" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Moda</span></button>
+      <button type="button" class="sector-btn" data-sector="moveis" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moveis" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Móveis</span></button>
+      <button type="button" class="sector-btn" data-sector="eletro" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletro" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrodomésticos</span></button>
+      <button type="button" class="sector-btn" data-sector="jardim" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="jardim" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Jardim</span></button>
+      <button type="button" class="sector-btn" data-sector="bebes" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="bebes" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Bebês</span></button>
+      <button type="button" class="sector-btn" data-sector="beleza" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="beleza" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Beleza</span></button>
+      <button type="button" class="sector-btn" data-sector="pet" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="pet" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Pet</span></button>
+      <button type="button" class="sector-btn" data-sector="casa" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="casa" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Casa</span></button>
     </div>
   </section>
 
@@ -76,20 +97,10 @@ const demo = demoProducts.map((product) => ({
   </section>
 
   <section class="container catalog-section" aria-labelledby="catalog-title">
-    <div class="catalog-header-wrap">
+    <div class="catalog-heading">
+      <p class="catalog-eyebrow">TODAS AS OFERTAS</p>
       <h2 id="catalog-title">Buscar ofertas</h2>
-      <div class="sector-filters" role="group" aria-label="Filtrar por categorias">
-        <button type="button" class="sector-btn" data-sector="" aria-pressed="true"><span class="sector-tile-image sector-all-image"><span class="marketplace-all-icon" aria-hidden="true">✦</span></span><span class="sector-tile-label">Tudo</span></button>
-        <button type="button" class="sector-btn" data-sector="eletronicos" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletronicos" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrônicos</span></button>
-        <button type="button" class="sector-btn" data-sector="moda" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moda" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Moda</span></button>
-        <button type="button" class="sector-btn" data-sector="moveis" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="moveis" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Móveis</span></button>
-        <button type="button" class="sector-btn" data-sector="eletro" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="eletro" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Eletrodomésticos</span></button>
-        <button type="button" class="sector-btn" data-sector="jardim" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="jardim" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Jardim</span></button>
-        <button type="button" class="sector-btn" data-sector="bebes" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="bebes" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Bebês</span></button>
-        <button type="button" class="sector-btn" data-sector="beleza" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="beleza" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Beleza</span></button>
-        <button type="button" class="sector-btn" data-sector="pet" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="pet" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Pet</span></button>
-        <button type="button" class="sector-btn" data-sector="casa" aria-pressed="false"><span class="sector-tile-image"><img data-sector-image="casa" alt="" loading="eager" decoding="async" /></span><span class="sector-tile-label">Casa</span></button>
-      </div>
+      <p class="catalog-subhead">Pesquise por termo, filtre por loja ou ordene por preço.</p>
     </div>
     <form id="catalogFilters" class="catalog-filters">
       <input type="hidden" id="sectorFilter" name="setor" value="" />
@@ -98,7 +109,7 @@ const demo = demoProducts.map((product) => ({
       </label>
       <label>Loja
         <select id="platformFilter" name="loja">
-          <option value="all">Todas as lojas</option><option value="mercadolivre">Mercado Livre</option><option value="magalu">Magalu</option><option value="amazon">Amazon</option><option value="shopee">Shopee</option><option value="benoit">Lojas Benoit</option><option value="kabum">KaBuM!</option>
+          <option value="all">Todas as lojas</option><option value="mercadolivre">Mercado Livre</option><option value="magalu">Magalu</option><option value="amazon">Amazon</option><option value="shopee">Shopee</option><option value="kabum">KaBuM!</option>
         </select>
       </label>
       <label>Preço mínimo <input id="minPrice" type="number" name="min" min="0" step="0.01" inputmode="decimal" placeholder="R$ 0" /></label>
@@ -185,7 +196,7 @@ const demo = demoProducts.map((product) => ({
   const imageDestinationChecks = new Map<string, Promise<boolean>>();
   let spotlightRenderVersion = 0;
   const queryInput = document.querySelector<HTMLInputElement>('#catalogSearch')!;
-  const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', benoit: 'Lojas Benoit', kabum: 'KaBuM!' };
+  const marketplaceNames: Record<string, string> = { mercadolivre: 'Mercado Livre', magalu: 'Magalu', amazon: 'Amazon', shopee: 'Shopee', kabum: 'KaBuM!' };
   const marketplaceButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-marketplace-filter]')];
 
   function refreshRadarDots() {
@@ -304,7 +315,7 @@ const demo = demoProducts.map((product) => ({
   let cursor: CatalogCursor | null = null;
   let catalogBuffer: CatalogProduct[] = [];
   let catalogExhausted = false;
-  const catalogPlatforms = ['magalu', 'kabum', 'mercadolivre', 'benoit', 'shopee', 'amazon'];
+  const catalogPlatforms = ['magalu', 'kabum', 'mercadolivre', 'shopee', 'amazon'];
   let platformCursors = new Map<string, CatalogCursor | null>();
   let platformBuffers = new Map<string, CatalogProduct[]>();
   let exhaustedPlatforms = new Set<string>();
@@ -790,14 +801,12 @@ const demo = demoProducts.map((product) => ({
   form.addEventListener('change', () => { syncMarketplaceButtons(); syncUrl(); if (catalogReady) void load(true); else filterDemo(); });
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    const q = (queryInput.value || '').trim();
-    const sector = sectorFilter.value;
-    const platform = platformFilter.value;
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (sector) params.set('setor', sector);
-    if (platform && platform !== 'all') params.set('loja', platform);
-    location.href = `/busca${params.toString() ? `?${params.toString()}` : ''}`;
+    window.clearTimeout(debounce);
+    window.clearTimeout(logDebounce);
+    syncUrl();
+    logCurrentSearch();
+    if (catalogReady) void load(true); else filterDemo();
+    document.querySelector('#resultsTitle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   for (const button of marketplaceButtons) button.addEventListener('click', () => {
     platformFilter.value = button.dataset.marketplaceFilter ?? 'all';
@@ -882,14 +891,20 @@ const demo = demoProducts.map((product) => ({
   .marketplace-filter:nth-child(3) { background: linear-gradient(145deg, #fffdf0, #fff7cd); }
   .marketplace-filter:nth-child(4) { background: linear-gradient(145deg, #fff8ef, #ffe8ce); }
   .marketplace-filter:nth-child(5) { background: linear-gradient(145deg, #fff7f2, #ffe3d5); }
-  .marketplace-filter[data-marketplace-filter="benoit"] { background: linear-gradient(145deg, #fff8f8, #fde8e8); }
   .marketplace-filter[data-marketplace-filter="kabum"] { background: linear-gradient(145deg, #f0f7ff, #deedfb); }
   .marketplace-filter img { display: block; width: min(100%, 174px); height: 58px; object-fit: contain; border-radius: 5px; }
   .marketplace-filter:first-child { gap: 6px; color: #303d4b; font-size: .84rem; font-weight: 750; }
   .marketplace-all-icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #dcecf9; color: #0b4f8a; font-size: 1.2rem; }
+  .categories-section { padding-top: 24px; }
+  .categories-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 12px; }
+  .categories-heading h2 { margin: 0; color: #282921; font-size: 1.25rem; letter-spacing: -.02em; }
+  .categories-heading > span { color: #68655f; font-size: .82rem; }
+  .categories-eyebrow { margin: 0 0 4px; color: #805c38; font-size: .67rem; font-weight: 800; letter-spacing: .12em; }
   .catalog-section { padding-top: 32px; padding-bottom: 56px; }
-  .catalog-header-wrap { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-bottom: 4px; }
-  .catalog-header-wrap h2 { margin: 0; }
+  .catalog-heading { margin-bottom: 8px; }
+  .catalog-eyebrow { margin: 0 0 4px; color: #0b4f8a; font-size: .67rem; font-weight: 800; letter-spacing: .12em; }
+  .catalog-heading h2 { margin: 0; color: #282921; font-size: 1.35rem; letter-spacing: -.02em; }
+  .catalog-subhead { margin: 4px 0 0; color: #68655f; font-size: .85rem; }
   .sector-filters { display: flex; flex-wrap: wrap; gap: 9px; }
   .sector-btn { display: grid; flex: 0 0 90px; grid-template-rows: 61px auto; gap: 5px; min-width: 0; min-height: 98px; padding: 6px; border: 1px solid #d0dfec; border-radius: 14px; background: #fff; color: #3e5265; font-size: .74rem; font-weight: 700; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; box-shadow: 0 2px 5px rgba(16,72,119,.055); }
   .sector-btn:hover { transform: translateY(-2px); border-color: #80afd6; box-shadow: 0 6px 15px rgba(16,72,119,.12); }
@@ -901,7 +916,7 @@ const demo = demoProducts.map((product) => ({
   .sector-all-image { background: linear-gradient(135deg, #dcecf9, #cce3f8); }
   .sector-all-image .marketplace-all-icon { width: 34px; height: 34px; margin: 0; border-radius: 0; background: transparent; font-size: 1.4rem; }
   .sector-tile-label { align-self: center; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-  .catalog-section h2, .results-heading h2 { color: #282921; font-size: 1.35rem; letter-spacing: -.02em; }
+  .results-heading h2 { color: #282921; font-size: 1.35rem; letter-spacing: -.02em; }
   .catalog-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(120px, 1fr)) auto; gap: 12px; padding: 18px; margin: 14px 0 30px; background: linear-gradient(135deg, #fff 0%, #f5faff 65%, #fff9f2 100%); border: 1px solid #d9e5ef; border-radius: 12px; box-shadow: 0 5px 18px rgba(23,74,115,.055); }
   .catalog-filters label { display: grid; gap: 6px; color: #444; font-size: .8rem; font-weight: 600; }
   .catalog-filters input, .catalog-filters select { min-width: 0; width: 100%; min-height: 42px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 8px 10px; color: #222; background: #fff; font: inherit; }
@@ -964,7 +979,7 @@ const demo = demoProducts.map((product) => ({
   .spotlight-heading p:not(.spotlight-eyebrow) { max-width: 62ch; margin: 5px 0 0; color: #625f58; font-size: .9rem; }
   .spotlight-eyebrow { margin: 0 0 5px; color: #805c38; font-size: .7rem; font-weight: 800; letter-spacing: .13em; }
   .spotlight-count { padding-bottom: 3px; color: #6d6a63; font-size: .78rem; white-space: nowrap; }
-  .spotlight-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .85fr); gap: 14px; }
+  .spotlight-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .85fr); gap: 14px; align-items: stretch; }
   .spotlight-grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
   .spotlight-card { min-width: 0; overflow: hidden; display: grid; grid-template-columns: minmax(140px, .78fr) minmax(0, 1fr); align-items: stretch; border: 1px solid #ddd4c6; border-radius: 12px; background: #faf8f4; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
   .spotlight-card:hover { border-color: #bba88e; box-shadow: 0 8px 24px rgba(62, 48, 31, .1); transform: translateY(-2px); }
@@ -1010,12 +1025,20 @@ const demo = demoProducts.map((product) => ({
   .spotlight-carousel[data-carousel="2"] .spotlight-media { background: rgba(255,255,255,.78); }
   .spotlight-carousel[data-carousel="2"] .spotlight-category { background: #ccebd7; color: #23643d; }
   .spotlight-carousel[data-carousel="2"] .spotlight-action { color: #23643d; }
-  .spotlight-carousel-featured { grid-row: span 2; }
+  .spotlight-carousel-featured { grid-row: span 2; display: flex; flex-direction: column; height: 100%; }
   .spotlight-viewport { overflow: hidden; border-radius: inherit; }
+  .spotlight-carousel-featured .spotlight-viewport { flex: 1; display: flex; height: 100%; }
   .spotlight-track { display: flex; transition: transform .5s ease; will-change: transform; }
+  .spotlight-carousel-featured .spotlight-track { flex: 1; display: flex; height: 100%; }
   .spotlight-slide { flex: 0 0 100%; min-width: 0; }
+  .spotlight-carousel-featured .spotlight-slide { height: 100%; display: flex; }
   .spotlight-slide[aria-hidden="true"] { pointer-events: none; }
   .spotlight-slide .spotlight-card { height: 100%; }
+  .spotlight-carousel-featured .spotlight-slide .spotlight-card { height: 100%; flex: 1; }
+  .spotlight-carousel-featured .spotlight-card-featured { height: 100%; min-height: 100%; flex: 1; }
+  .spotlight-carousel-featured .spotlight-card-featured .spotlight-media { height: 100%; min-height: 100%; }
+  .spotlight-carousel-featured .spotlight-card-featured .spotlight-copy { height: 100%; justify-content: center; }
+  .spotlight-carousel-featured .spotlight-image { max-height: 100%; }
   .spotlight-category { display: inline-flex; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: #f0e5d5; color: #6d4c2e; font-size: .7rem; font-weight: 750; }
   .spotlight-controls { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 36px; padding: 4px; color: #625f58; font-size: .75rem; }
   .spotlight-controls button { width: 34px; height: 32px; border: 1px solid #c5d7e7; border-radius: 9px; background: #fff; color: #07549a; font: inherit; font-size: 1.2rem; line-height: 1; cursor: pointer; }

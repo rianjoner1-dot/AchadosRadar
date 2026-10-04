@@ -20,7 +20,6 @@ const allowedHosts = {
   magalu: ['magazinevoce.com.br', 'magazineluiza.com.br', 'magalu.com.br', 'a-static.mlcdn.com.br', 'm.magazineluiza.com.br'],
   amazon: ['amazon.com.br', 'amazon.com', 'amzn.to'],
   shopee: ['shopee.com.br', 'shp.ee', 'shope.ee', 's.shopee.com.br'],
-  benoit: ['benoit.com.br', 'awin1.com'],
   kabum: ['kabum.com.br', 'awin1.com']
 };
 const exactAffiliateHosts = { mercadolivre: ['meli.la'], magalu: ['magazineluiza.onelink.me'] };
