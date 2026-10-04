@@ -37,9 +37,17 @@ test('observed product ratings and specifications migration constrains and store
     const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20261003100000_product_observed_ratings_and_specs.sql'), 'utf8');
     await db.exec(migration);
     await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/20261004133000_supported_import_platforms.sql'), 'utf8'));
+    await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/20261004135000_idempotent_offer_import.sql'), 'utf8'));
+    await db.exec('ALTER TABLE offers ADD COLUMN id uuid DEFAULT gen_random_uuid()');
+    await db.exec(fs.readFileSync(path.join(__dirname, '../supabase/migrations/20261004135500_restore_offer_cursor_grant.sql'), 'utf8'));
+    assert.equal((await db.query("SELECT has_column_privilege('anon','offers','id','SELECT') AS allowed")).rows[0].allowed,true);
+    assert.equal((await db.query("SELECT has_column_privilege('anon','offers','seller_id','SELECT') AS allowed")).rows[0].allowed,false);
     for (const platform of ['kabum', 'amazon', 'shopee']) {
-      const result = await db.query('SELECT public.import_catalog_item($1::jsonb) AS id', [JSON.stringify({ platform, external_id:`test-${platform}`, title:'Produto real de teste', price:10, images:[], videos:[], stock_status:'unknown', link_status:'broken', original_url:'https://example.test', affiliate_url:'', status:'draft' })]);
+      const item=JSON.stringify({ platform, external_id:`test-${platform}`, title:'Produto real de teste', price:10, observed_at:'2026-10-04T10:00:00Z', images:[], videos:[], stock_status:'unknown', link_status:'broken', original_url:'https://example.test', affiliate_url:'', status:'draft' });
+      const result = await db.query('SELECT public.import_catalog_item($1::jsonb) AS id', [item]);
       assert.ok(result.rows[0].id, `${platform} supported by import RPC`);
+      await db.query('SELECT public.import_catalog_item($1::jsonb)',[item]);
+      assert.equal((await db.query('SELECT count(*)::int AS count FROM offers WHERE product_id=$1',[result.rows[0].id])).rows[0].count,1,'retry does not duplicate the same observation');
     }
     await db.query("INSERT INTO public.products(id, platform, external_id, title, rating, reviews_count, specifications) VALUES (gen_random_uuid(), 'magalu', 'SKU-1', 'Product', 4.75, 12, '[{\"name\":\"Potência\",\"value\":\"1500 W\"}]'::jsonb)");
     const { rows } = await db.query("SELECT rating, reviews_count, specifications FROM public.products WHERE external_id = 'SKU-1'");

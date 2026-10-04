@@ -8,7 +8,8 @@
 - Lote maior: 500 páginas, 496 sucessos, quatro pendências, 166 segundos, três requisições simultâneas.
 - Os 115 produtos restantes do CSV antigo foram revisados em 38 segundos, sem falhas; dados fictícios de parcelamento foram substituídos por valores ausentes quando não observados.
 - Após corrigir o banco, 514 registros da primeira coleta e 115 revisões foram importados sem rejeições. Registros repetidos mantêm o mesmo produto; não representam 629 produtos novos.
-- Contagem final confirmada: 940 publicados (619 KaBuM, 252 Magalu, 68 Mercado Livre, um Shopee), dez rascunhos e seis arquivados. Crescimento de 483 publicados.
+- Teste do comando integrado: mais 500 páginas em 167 segundos, 491 sucessos e nove pendências; 491 registros importados sem rejeições.
+- Contagem final confirmada: 1.423 publicados (1.102 KaBuM, 252 Magalu, 68 Mercado Livre, um Shopee), 18 rascunhos e seis arquivados. Crescimento de 966 publicados sobre os 457 iniciais.
 
 ## Erros encontrados e corrigidos
 
@@ -17,10 +18,12 @@
 - A categoria PC Gamer havia sido apagada, mas o classificador continuava retornando esse ID. Isso impediu 153 importações. A migration une hardware/gaming em Eletrônicos.
 - CSV antigo inventava estoque disponível e “Até 10x”. Também ignorava descrições com quebras de linha e escrevia sobre o arquivo usado pela ponte. Novo leitor filtra anunciante/identidade, preserva campos desconhecidos e usa arquivo separado.
 - Falhas da ponte não tinham fila persistente de reenvio. Agora o robô só reconhece a entrega após sucesso; mantém revisão mais nova e tenta novamente a cada minuto.
+- O pipeline também preserva o lote pendente até sua importação concluir. A RPC não duplica a mesma observação de oferta durante retries.
 - Deduplicação por nomes parecidos podia excluir SKUs distintos e custava comparações sucessivas. Agora é opt-in; o padrão conserva identidade por ID.
 - Conversor/allowlist Awin aceitavam validações fracas de domínio. Agora merchant, publisher e destino são conferidos.
 - Orquestrador removia locks do perfil, iniciava outra ponte e aguardava indefinidamente o loop do robô. Agora preserva locks, reutiliza processos ativos e limita comandos CDP.
 - Cards removidos por falha de imagem não notificavam o catálogo. Agora reportam antes da remoção.
+- Conferência remota encontrou as migrations de vídeos, preços e buscas anônimas sem aplicação completa. Foram aplicadas em uma transação, preservando a leitura do cursor e restaurando as correções do importador. O verificador remoto passou em todas as checagens de tabelas, funções, histórico e permissões.
 
 ## Decisão sobre o relatório de arquitetura
 
@@ -43,7 +46,11 @@ Arquivos locais data/*.json, feeds, SQL de auditoria, locks e temporários não 
 
 ## Pendências
 
-- Quatro páginas do lote maior falharam; ficam pendentes, sem arquivamento automático.
+- Nove páginas ficaram pendentes ao final do teste integrado, incluindo os quatro casos anteriores; não foram arquivadas automaticamente.
 - A coleta massiva de todas as lojas ainda depende de suas integrações e sessões. Este pipeline massivo foi implementado e medido para KaBuM.
 - Parcelamento, cupons, Pix explícito, avaliações, especificações e vídeos não são inventados pelo novo leitor HTTP. Campos ainda não mapeados ficam ausentes; o robô existente continua responsável por sua extração adicional.
 - Testes não significam imunidade a alterações dos marketplaces, quedas de rede ou falta de disco. A fila, checkpoints e logs permitem recuperar e identificar falhas.
+
+## Publicação
+
+Código enviado para main; o primeiro deploy foi confirmado pela Vercel e a busca de teclados KaBuM foi conferida na URL pública. O banco já contém as novas importações e migrations. Alterações do robô geral estão nos arquivos locais e entram em vigor quando a extensão é recarregada/reiniciada. O pipeline CLI é separado e pode ser iniciado pelos comandos documentados.

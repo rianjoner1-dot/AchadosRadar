@@ -20,18 +20,24 @@ const run=script=>new Promise((resolve,reject)=>{
  child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error(`Etapa ${script[0]} terminou com código ${code}`)));
 });
 let stopped=false;
+const batchPath=path.join(root,'data/catalogo_kabum_verified.json.batch.json');
+async function deliverPendingBatch(){
+ try{await fs.access(batchPath);}catch(e){if(e.code==='ENOENT')return;throw e;}
+ await run(['scripts/import-catalog.mjs','data/catalogo_kabum_verified.json.batch.json','--concurrency=4','--summary']);
+ await fs.unlink(batchPath);
+}
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stopped=true;child?.kill();});
 try{
  do{
   try{
+   await deliverPendingBatch();
    await run(['scripts/download-awin-kabum.mjs']);
    await run(['scripts/import-kabum-feed.mjs','data/awin-kabum.csv.gz']);
    // Code 1 preserves successful observations and records pending items.
-   await fs.unlink(path.join(root,'data/catalogo_kabum_verified.json.batch.json')).catch(error => { if(error.code !== 'ENOENT')throw error; });
    try{await run(['scripts/collect-kabum-background.mjs','--limit=500','--concurrency=3']);}
    catch(e){console.warn(e.message);}
    if(stopped)break;
-   await run(['scripts/import-catalog.mjs','data/catalogo_kabum_verified.json.batch.json','--concurrency=4','--summary']);
+   await deliverPendingBatch();
   }catch(e){console.error(e.message);if(process.argv.includes('--once')){process.exitCode=1;break;}}
   if(process.argv.includes('--once'))break;
   // Release to the event loop and respond promptly to shutdown signals.
