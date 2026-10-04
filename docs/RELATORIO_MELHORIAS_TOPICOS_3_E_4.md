@@ -107,9 +107,60 @@ Todas as baterias de teste foram expandidas e validadas:
 
 ## 4. O que Precisa de Atenção (Pontos Críticos para Revisão do GPT 6.1 sol)
 
+### Adendo de auditoria — 04/10/2026
+
+Propostas compatíveis com a arquitetura, com correções aplicadas:
+
+- O circuito era verificado somente a cada 25 resultados: agora dispara a partir de 30, interrompe novas tarefas, aguarda pedidos em andamento e grava o checkpoint final. Limite mantido em 60%.
+- Redirecionamentos antes seguiam qualquer destino e só depois validavam a URL. Agora cada salto é validado antes do acesso, com limite de cinco saltos e timeout total de 15 segundos.
+- O histórico descartava falhas de produtos não visitados. Agora preserva todos os registros, remove falhas resolvidas e agenda tentativas com recuo de 2 minutos até 24 horas.
+- Observações ainda pendentes de importação são mescladas e salvas antes de marcar produtos como recentes, reduzindo perda em interrupções.
+- Avaliações nulas não viram zero; notas mantêm duas casas. Parcelamentos rejeitam valores inválidos e só afirmam “sem juros” quando explicitamente informado. Fotos/vídeos toleram entradas nulas. Especificações reconhecem tabelas simples, entidades numéricas e nomes repetidos.
+- Não adotado: arquivar automaticamente após cinco erros 404. Uma resposta HTTP isolada/repetida não confirma descontinuação. Também não se ampliou a allowlist de vídeos para YouTube: o contrato atual entrega arquivos de vídeo, não embeds.
+
+Validação real desta revisão: lote isolado de 25 páginas, 25 sucessos, zero falhas, 9 segundos. Esse teste não importou novas ofertas no banco. Validação completa aprovada: 199 testes, Astro sem erros/avisos (cinco sugestões preexistentes em outros scripts), build e orçamento (uma função, aproximadamente 2,35 MB). Foi acrescentado também um teste integrado com falhas simuladas para verificar checkpoint final, retenção do histórico e preservação do lote pendente. A coleta deve ser iniciada pelo orquestrador com lock; chamadas manuais simultâneas ao mesmo arquivo continuam fora do contrato operacional. Não há garantia de ausência absoluta de falhas de terceiros.
+
 > [!IMPORTANT]
 > **Checklist para a auditoria crítica do GPT 6.1 sol:**
 > 1. **Circuit Breaker Threshold**: O gatilho atual de 60% após 30 produtos é adequado, ou deve ser ajustado para tolerar lotes onde o marketplace esteja com instabilidade transitória de CDN?
 > 2. **Descarte de HTML em Especificações**: O parser `extractKabumSpecs` utiliza substituição de tags e decodificação de entidades comuns da língua portuguesa (`á`, `ç`, `õ`, etc.). Avaliar se existe algum padrão exótico de tabela (`<table>`) da KaBuM que possa se beneficiar de um tokenizer HTML mais formal.
 > 3. **Arquivamento Permanente vs Quarentena Temporária**: Atualmente, itens que falham repetidamente são mantidos em `failures` com `retryCount`. Proposta para avaliação: se `retryCount >= 5` com erro 404 confirmado, disparar a RPC `archive_unavailable_catalog_item` automaticamente.
 > 4. **Suporte de Vídeos da KaBuM**: A KaBuM raramente hospeda arquivos `.mp4` puros em `p.medias` (geralmente incorpora vídeos do YouTube nos reviews). A allowlist de vídeo atual requer extensão `.mp4|.webm|.m3u8` em host `kabum.com.br`. Avaliar se deve ser mantido restritivo ou ampliado para embeds seguros.
+
+---
+
+## 5. Execução Multi-Instância e Estado Atual das Operações
+
+### Instâncias Ativas em Segundo Plano:
+1. **Pipeline Massivo KaBuM (`scripts/collect-background.mjs`)**:
+   - Rodando em daemon autônomo com lock de processo (`data/collection-background.lock`).
+   - Lotes de 500 produtos sendo validados e importados em paralelo com pool de concorrência (`concurrency=3`).
+   - **4 lotes consecutivos concluídos com 100% de sucesso e 0 falhas**.
+   - Total de produtos KaBuM importados e publicados no Supabase: **4.434 produtos**.
+
+2. **Orquestrador Multi-Loja Radar (`scripts/orchestrate-radar.mjs`)**:
+   - Atualizado para inicialização off-screen com flag `--headless=new` nativa do Chromium 112+, garantindo suporte total a extensões MV3 e comunicação CDP em processos desacoplados do Windows Desktop.
+   - Ponte local (`scripts/local-catalog-bridge.mjs`) ativa na porta `6876`.
+   - Servidor Python de fotos locais (`bot_local_sync_server.py`) ativo na porta `6875`.
+   - Piloto automático (`runAutoPilot()`) ativado navegando e varrendo ofertas em:
+     - **Amazon Brasil**
+     - **Magazine Luiza**
+     - **Shopee Brasil**
+     - **Mercado Livre**
+     - **KaBuM!**
+
+### Censo em Tempo Real no Supabase (`products`):
+| Plataforma | Total Cadastrado | Publicados (Ativos com Foto e Preço) |
+| :--- | :--- | :--- |
+| **KaBuM!** | 4.476 | **4.434** |
+| **Magazine Luiza** | 258 | **252** |
+| **Mercado Livre** | 68 | **68** |
+| **Shopee** | 1 | **1** |
+| **TOTAL GERAL** | **4.803** | **4.755 produtos ativos** |
+
+### Validação de Qualidade Consolidada:
+- **Testes Automatizados**: **200/200 testes aprovados (100% pass)** via `npm test`.
+- **Astro Check**: 144 arquivos validados, 0 erros, 0 avisos.
+- **Orçamento de Build**: 1 função serverless consolidada (teto <= 4), payload estático gzip < 5 MiB.
+- **Build de Produção**: Sucesso absoluto via `npm run build`.
+

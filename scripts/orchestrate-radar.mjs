@@ -46,7 +46,7 @@ if (!existingTargets.length) await rm(portFile, { force: true }).catch(() => {})
 // Chromium owns profile locks; never remove a lock from another browser process.
 
 const browser = existingTargets.length ? null : spawn(selectedBrowser.path, [
-  '--window-position=-32000,-32000', '--window-size=10,10', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--disable-blink-features=AutomationControlled',
   '--lang=pt-BR',
   '--remote-debugging-port=0',

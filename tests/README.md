@@ -69,4 +69,6 @@ node --test tests/spotlight_selection.test.cjs
 
 ## Regressões da coleta
 
+Os testes também cobrem bloqueio de redirecionamentos antes do acesso, normalização de slug, encerramento da fila com pedidos em andamento, parada após 30 resultados, tabelas e entidades HTML, avaliações ausentes e parcelamento inválido/juros desconhecidos.
+
 collection-regressions.test.cjs cobre CSV com linhas internas, fila concorrente limitada e falhas isoladas, cursor de páginas filtradas, identidade da página KaBuM e segurança dos deep links. observed_product_details_migration.test.cjs também aplica as migrations de plataformas e união de PC Gamer em Eletrônicos. O teste do robô refresh_failure_sync cobre retenção/reenvio da fila durante uma falha da ponte.

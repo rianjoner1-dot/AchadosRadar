@@ -4,8 +4,11 @@ import { isAllowedAffiliateUrl } from '../src/modules/outbound/allowlist.mjs';
 function extractKabumSpecs(technicalInformation) {
   const specs = [];
   if (!technicalInformation) return specs;
-  const rawText = typeof technicalInformation === 'string' ? technicalInformation : technicalInformation.text || '';
+  const rawText = typeof technicalInformation === 'string' ? technicalInformation : typeof technicalInformation.text === 'string' ? technicalInformation.text : '';
   const clean = rawText
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/(?:td|th)>\s*<(?:td|th)\b[^>]*>/gi, ': ')
+    .replace(/<\/(?:tr|li|div)>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<[^>]+>/g, '')
@@ -14,7 +17,11 @@ function extractKabumSpecs(technicalInformation) {
     .replace(/&oacute;/gi, 'ó').replace(/&uacute;/gi, 'ú').replace(/&atilde;/gi, 'ã')
     .replace(/&otilde;/gi, 'õ').replace(/&ccedil;/gi, 'ç').replace(/&ocirc;/gi, 'ô')
     .replace(/&ecirc;/gi, 'ê').replace(/&quot;/gi, '"').replace(/&acirc;/gi, 'â')
-    .replace(/&#8203;/g, '');
+    .replace(/&#(?:x([0-9a-f]+)|(\d+));/gi, (_, hex, decimal) => {
+      const code = parseInt(hex || decimal, hex ? 16 : 10);
+      return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : '';
+    })
+    .replace(/&amp;/gi, '&').replace(/[\u200b\u200c\u200d]/g, '');
   for (const line of clean.split(/\r?\n/).map(l => l.trim().replace(/^[-•*]\s*/, '')).filter(Boolean)) {
     const idx = line.indexOf(':');
     if (idx > 1 && idx < 80) {
@@ -35,16 +42,17 @@ function extractKabumSpecs(technicalInformation) {
       specs.push({ name: 'Peso Bruto', value: technicalInformation.weight.trim().slice(0, 300) });
     }
   }
-  return specs.slice(0, 18);
+  return [...new Map(specs.map(spec => [spec.name.toLowerCase(), spec])).values()].slice(0, 18);
 }
 
 function formatKabumInstallments(installment) {
-  if (!installment || !Number.isSafeInteger(installment.installment) || installment.installment < 1 || !installment.amount) {
+  if (!installment || !Number.isSafeInteger(installment.installment) || installment.installment < 1
+    || installment.installment > 60 || !Number.isFinite(Number(installment.amount)) || Number(installment.amount) <= 0) {
     return null;
   }
   const count = installment.installment;
   const amount = Number(installment.amount).toFixed(2).replace('.', ',');
-  const fee = installment.hasFee ? '' : ' sem juros';
+  const fee = installment.hasFee === false ? ' sem juros' : installment.hasFee === true ? ' com juros' : '';
   return `Em até ${count}x de R$ ${amount}${fee}`;
 }
 
@@ -62,7 +70,8 @@ export function extractKabumPage(html, source, observedAt = new Date().toISOStri
   const cardPrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : null;
   const price = pixPrice ?? cardPrice ?? Number(p.price);
 
-  const images = [...new Set((p.medias || []).filter(media => media.type === 'image')
+  const medias = Array.isArray(p.medias) ? p.medias.filter(media => media && typeof media === 'object') : [];
+  const images = [...new Set(medias.filter(media => media.type === 'image')
     .map(media => media.images?.gg || media.images?.g || media.images?.m)
     .filter(url => isAllowedMarketplaceImageUrl('kabum', url)))];
   if (!Number.isFinite(price) || price <= 0 || !images.length) throw new Error('Preço/fotos ausentes; coleta pendente, sem presumir esgotamento.');
@@ -82,16 +91,17 @@ export function extractKabumPage(html, source, observedAt = new Date().toISOStri
   affiliateUrl.search = new URLSearchParams({ awinmid: '17729', awinaffid: '3105840', ued: targetOriginalUrl });
   if (!isAllowedAffiliateUrl('kabum', affiliateUrl.href)) throw new Error('Destino afiliado inválido.');
 
-  const rawRating = Number(p.rating?.average ?? p.rating?.score);
-  const rating = Number.isFinite(rawRating) && rawRating >= 0 && rawRating <= 5 ? Number(rawRating.toFixed(1)) : null;
-  const rawCount = Number(p.rating?.count ?? p.ratingCount);
+  const numeric = value => value === null || value === undefined || String(value).trim() === '' ? NaN : Number(value);
+  const rawRating = numeric(p.rating?.average ?? p.rating?.score);
+  const rating = Number.isFinite(rawRating) && rawRating >= 0 && rawRating <= 5 ? Number(rawRating.toFixed(2)) : null;
+  const rawCount = numeric(p.rating?.count ?? p.ratingCount);
   const reviewsCount = Number.isSafeInteger(rawCount) && rawCount >= 0 ? rawCount : null;
 
-  const brand = String(p.manufacturer?.name || p.brands?.[0]?.name || source.brand || '').trim() || null;
+  const brand = [p.manufacturer?.name, p.brands?.[0]?.name, source.brand].find(value => typeof value === 'string' && value.trim())?.trim() || null;
   const specifications = extractKabumSpecs(p.technicalInformation);
   const installments = formatKabumInstallments(p.installment);
 
-  const videos = (p.medias || [])
+  const videos = medias
     .filter(media => media.type === 'video' && isAllowedMarketplaceVideoUrl('kabum', media.url))
     .slice(0, 1)
     .map(media => {
