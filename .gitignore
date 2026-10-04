@@ -1,32 +1,125 @@
+# ==========================================
+# Variáveis de Ambiente & Segredos Locais
+# ==========================================
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.cert
+*.pfx
+*.p12
+
+# ==========================================
+# Dependências & Gerenciadores de Pacotes
+# ==========================================
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+
+# ==========================================
+# Builds, Frameworks & Caches (Astro / Vercel)
+# ==========================================
 dist/
 .astro/
 .vercel/
-coverage/
-data/catalogo_macro.json
-data/catalogo_macro.json.*.tmp
-data/catalogo_import_20.json
-*.log
-npm-debug.log*
-.DS_Store
-Thumbs.db
+.output/
+build/
+out/
+.cache/
+.parcel-cache/
+.turbo/
 .tempmediaStorage/
-.agents/
 
+# ==========================================
+# Testes, Cobertura & Relatórios
+# ==========================================
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+cypress/videos/
+cypress/screenshots/
 
-# Extras / IDE
+# ==========================================
+# Logs & Diagnósticos
+# ==========================================
+*.log
+*.log.*
+logs/
+*.heapsnapshot
+*.cpuprofile
+
+# ==========================================
+# Sistema Operacional (Windows / macOS / Linux)
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# IDEs & Editores (VS Code, JetBrains, etc.)
+# ==========================================
 .vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+.fleet/
+
+# ==========================================
+# Supabase & Bancos de Dados Locais
+# ==========================================
 supabase/.temp/
-data/chrome-profile/
-data/*.json
-data/*.csv.gz
-data/*.sql
-data/*.lock
-data/*.tmp
+supabase/.branches/
+*.sqlite
+*.sqlite3
+*.db
+
+# ==========================================
+# Dados Locais, Robô, Scrapers & Caches Offline
+# (Não pertencentes à aplicação web pública)
+# ==========================================
+data/
 scratch/
+chrome-profile/
+edge-profile/
+DevToolsActivePort
+scoped_dir*
 dryrun.json
 *dryrun*.json
+*.batch.json
+*.lock
+!package-lock.json
+*.tmp
+*.temp
+*.bak
+*.backup
+abrir-navegador-do-robo.bat
+*.bat
+*.cmd
 
+# ==========================================
+# Agentes Autônomos Locais
+# ==========================================
+.agents/

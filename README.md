@@ -140,3 +140,4 @@ npm run validate:local
 2. **Orçamento Rigoroso**: Mantenha o teto de até 4 funções serverless próprias no deploy da Vercel.
 3. **Redirecionamento Confiável**: Todas as saídas de compra devem passar obrigatoriamente por `/api/out/[id]` e serem validadas pela allowlist de domínios permitidos.
 4. **Registro de Validações**: Acompanhe o roteiro em [docs/ETAPAS_PROCEDURAIS.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/ETAPAS_PROCEDURAIS.md) e documente novos marcos em [docs/VALIDACOES.md](file:///c:/Users/joner/Documents/associados/site-afiliados/docs/VALIDACOES.md).
+5. **Higiene do Repositório**: Arquivos de coleta offline (`data/`, `scratch/`), perfis de navegador, logs, dumps e scripts de automação local (`.bat`/`.cmd`) são estritamente excluídos via `.gitignore`, preservando apenas os artefatos essenciais para a aplicação web.
